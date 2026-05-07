@@ -1,0 +1,160 @@
+{% extends 'base_redesigned.html' %}
+
+{% block title %}Execute Command{% endblock %}
+
+{% block page_title %}Execute Command{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Command Builder -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Select System -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Select Target System</h3>
+
+                <div class="space-y-3">
+                    {% for system in systems | default([]) %}
+                    <div>
+                        <input type="radio" id="system_{{ system.id }}" name="system_id" value="{{ system.id }}"
+                            class="hidden peer" required>
+                        <label for="system_{{ system.id }}"
+                            class="block p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer peer-checked:border-primary peer-checked:bg-primary/5 hover:border-primary transition-all">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="font-medium text-gray-900 dark:text-white">{{ system.hostname }}</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ system.ip_address }}</p>
+                                </div>
+                                <span
+                                    class="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                                    <span>Online</span>
+                                </span>
+                            </div>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Command Input -->
+            <form method="POST" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Command Details</h3>
+
+                <div class="space-y-4">
+                    <!-- Command Selection -->
+                    <div>
+                        <label for="command"
+                            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Command</label>
+                        <input type="text" id="command" name="command" placeholder="e.g., systeminfo, dir, Get-Process"
+                            class="w-full px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+                            required>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter the command to execute on the
+                            target system</p>
+                    </div>
+
+                    <!-- Command Parameters -->
+                    <div>
+                        <label for="parameters"
+                            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Parameters
+                            (optional)</label>
+                        <textarea id="parameters" name="parameters" rows="3"
+                            placeholder="Additional command parameters or arguments..."
+                            class="w-full px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary resize-none"></textarea>
+                    </div>
+
+                    <!-- Command Templates -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quick
+                            Templates</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" @click="document.getElementById('command').value = 'systeminfo'"
+                                class="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
+                                System Info
+                            </button>
+                            <button type="button" @click="document.getElementById('command').value = 'dir'"
+                                class="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
+                                List Directory
+                            </button>
+                            <button type="button" @click="document.getElementById('command').value = 'ping'"
+                                class="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
+                                Ping Test
+                            </button>
+                            <button type="button" @click="document.getElementById('command').value = 'Get-Process'"
+                                class="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
+                                List Processes
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit"
+                        class="w-full bg-gradient-to-r from-primary to-secondary text-white font-medium py-3 rounded-lg hover:shadow-lg transition-all">
+                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1m2 1v2.5M2 7l2-1 2 1m-2 1v2.5">
+                            </path>
+                        </svg>
+                        Execute Command
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Command History Sidebar -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 h-fit">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Commands</h3>
+
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+                {% for cmd in command_history | default([]) %}
+                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">
+                    <p class="font-medium text-gray-900 dark:text-white truncate">{{ cmd.command }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {% if cmd.status == 'completed' %}
+                        <span class="text-green-600">✓ Success</span>
+                        {% elif cmd.status == 'failed' %}
+                        <span class="text-red-600">✗ Failed</span>
+                        {% else %}
+                        <span class="text-amber-600">⟳ {{ cmd.status }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+                {% endfor %}
+
+                {% if not command_history or command_history|length == 0 %}
+                <p class="text-center text-gray-500 dark:text-gray-400 text-sm py-8">No recent commands</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Execution Results -->
+    {% if last_command %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="flex items-start justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Execution Result</h3>
+            <span
+                class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {% if last_command.status == 'completed' %}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400{% elif last_command.status == 'failed' %}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400{% else %}bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400{% endif %}">
+                {% if last_command.status == 'completed' %}✓ Success{% elif last_command.status == 'failed' %}✗ Failed{%
+                else %}⟳ Processing{% endif %}
+            </span>
+        </div>
+
+        {% if last_command.output %}
+        <div
+            class="bg-gray-900 dark:bg-black rounded-lg p-4 font-mono text-sm text-green-400 overflow-x-auto max-h-64 overflow-y-auto">
+            <pre>{{ last_command.output }}</pre>
+        </div>
+        {% endif %}
+
+        {% if last_command.error %}
+        <div
+            class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 font-mono text-sm text-red-700 dark:text-red-400 mt-4">
+            <pre>{{ last_command.error }}</pre>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

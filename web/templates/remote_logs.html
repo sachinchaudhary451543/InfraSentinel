@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs - {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-8 pt-4">
+    <div class="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+                class="text-slate-400 hover:text-indigo-600 transition-colors text-sm font-medium inline-flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i><span>Back to Controls</span>
+            </a>
+            <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight mt-2"
+                style="font-family:'Outfit',sans-serif">
+                System Logs — {{ server.hostname }}
+            </h2>
+            <p class="text-sm text-slate-500 mt-1">Remote command queue + audit trail.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-images mr-1.5"></i>Live Images
+            </a>
+            <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="xl:col-span-1 space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black text-slate-900 tracking-wide uppercase">
+                        <i class="fa-solid fa-paper-plane text-indigo-600 mr-2"></i>Recent Commands
+                    </h3>
+                    <span class="text-xs text-slate-500 font-semibold">{{ commands|length }} shown</span>
+                </div>
+                <div class="space-y-2 max-h-[70vh] overflow-auto custom-scrollbar pr-1">
+                    {% for c in commands %}
+                    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="text-xs font-black text-slate-800 font-mono break-all">{{ c.command }}</div>
+                            <span class="text-[0.6rem] font-black px-2 py-1 rounded-full border
+                                {% if c.status == 'pending' %}bg-amber-50 text-amber-700 border-amber-100
+                                {% elif c.status in ['success','completed'] %}bg-emerald-50 text-emerald-700 border-emerald-100
+                                {% elif c.status == 'failed' %}bg-rose-50 text-rose-700 border-rose-100
+                                {% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
+                                {{ c.status|upper }}
+                            </span>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between text-[0.65rem] text-slate-500 font-semibold">
+                            <span>{{ c.created_at }}</span>
+                            <span>{{ c.executed_at or '—' }}</span>
+                        </div>
+                        {% if c.output %}
+                        <details class="mt-2">
+                            <summary class="text-[0.65rem] font-black text-indigo-600 cursor-pointer">Output</summary>
+                            <pre class="mt-2 text-[0.65rem] bg-white border border-slate-200 rounded-xl p-2 overflow-auto max-h-40">{{ c.output }}</pre>
+                        </details>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-10 text-slate-400">
+                        <i class="fa-solid fa-circle-info text-2xl opacity-50 mb-2"></i>
+                        <div class="text-sm font-bold">No commands yet</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-2 space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black text-slate-900 tracking-wide uppercase">
+                        <i class="fa-solid fa-clipboard-list text-indigo-600 mr-2"></i>Audit Trail
+                    </h3>
+                    <span class="text-xs text-slate-500 font-semibold">Page {{ pagination.page }} / {{ pagination.pages }}</span>
+                </div>
+
+                <div class="divide-y divide-slate-100 max-h-[70vh] overflow-auto custom-scrollbar">
+                    {% for log in logs %}
+                    <div class="py-3 flex items-start gap-3">
+                        <div class="text-[0.7rem] text-slate-400 font-mono w-28 shrink-0">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else '' }}</div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="text-sm font-black text-slate-900 break-words">{{ log.action }}</div>
+                                <div class="text-[0.65rem] text-slate-400 font-semibold whitespace-nowrap">{{ log.user }}</div>
+                            </div>
+                            <div class="text-xs text-slate-600 mt-1 break-words">{{ log.details or '—' }}</div>
+                            <div class="text-[0.65rem] text-slate-400 font-semibold mt-2">Status: {{ log.status or '—' }}</div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="py-10 text-center text-slate-400">
+                        <i class="fa-solid fa-circle-info text-2xl opacity-50 mb-2"></i>
+                        <div class="text-sm font-bold">No audit entries found</div>
+                        <div class="text-xs mt-1">Audit entries appear when remote actions are triggered.</div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if pagination and pagination.pages > 1 %}
+                <div class="mt-4 flex items-center justify-center gap-2">
+                    {% if pagination.has_prev %}
+                    <a href="?page={{ pagination.prev_num }}"
+                        class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-black text-slate-700 hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                        Prev
+                    </a>
+                    {% endif %}
+                    {% if pagination.has_next %}
+                    <a href="?page={{ pagination.next_num }}"
+                        class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-black text-slate-700 hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                        Next
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

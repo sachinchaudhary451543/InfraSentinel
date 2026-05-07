@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ServerMonitor{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon_io/favicon-32x32.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon_io/favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Chart.js and Socket.IO moved to end of body (deferred) to avoid blocking initial render -->
+    <script>
+        // Force Light Mode for Premium Feel
+        document.documentElement.setAttribute('data-theme', 'light');
+    </script>
+    <!-- Compiled Tailwind CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/css/tailwind.prod.min.css') }}">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f8fafc;
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 97%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 90%, 0.8) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 90%, 0.8) 0, transparent 50%);
+            background-attachment: fixed;
+            color: #0f172a;
+            overflow: auto;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* ── THEME DEFAULTS (LIGHT/GLASS) ── */
+        .sidebar {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-item {
+            color: #475569;
+        }
+
+        .nav-item:hover {
+            background: rgba(99, 102, 241, 0.08);
+            color: #0f172a;
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+            color: #4338ca;
+            box-shadow: inset 3px 0 0 0 #6366f1;
+            font-weight: 600;
+        }
+
+        .nav-section-title {
+            color: #64748b;
+        }
+
+        .main-content {
+            background: transparent;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(99, 102, 241, 0.2);
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        .metric-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+            transform: translateY(-3px);
+        }
+
+        .data-table thead th {
+            color: #475569;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .data-table tbody td {
+            color: #1e293b;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .mobile-topbar {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            color: #0f172a;
+        }
+
+        .text-white {
+            color: #ffffff !important;
+        }
+
+        .admin-toggle {
+            color: #475569;
+        }
+
+        .admin-toggle:hover {
+            background: rgba(99, 102, 241, 0.08);
+            color: #0f172a;
+        }
+
+        /* ── Sidebar ── */
+        /* ── Sidebar ── */
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            z-index: 50;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .nav-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0.5rem 0;
+        }
+
+        .nav-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .nav-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .nav-scroll::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.3);
+            border-radius: 4px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1.25rem;
+            margin: 0.125rem 0.5rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            position: relative;
+        }
+
+        .nav-item.active {
+            box-shadow: inset 3px 0 0 0 #6366f1;
+        }
+
+        .nav-item i {
+            width: 20px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .nav-section-title {
+            padding: 1rem 1.25rem 0.4rem 1.25rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* ── Main Content ── */
+        .main-content {
+            margin-left: 260px;
+            min-height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .main-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .main-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.2);
+            border-radius: 4px;
+        }
+
+        /* ── Glass Cards & Metrics ── */
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 1rem 1rem 0 0;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .metric-card.blue::before {
+            background: linear-gradient(90deg, #3b82f6, #6366f1);
+        }
+
+        .metric-card.rose::before {
+            background: linear-gradient(90deg, #f43f5e, #ec4899);
+        }
+
+        .metric-card.emerald::before {
+            background: linear-gradient(90deg, #10b981, #06b6d4);
+        }
+
+        .metric-card.violet::before {
+            background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+        }
+
+        .metric-card.amber::before {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        /* ── Tables ── */
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .data-table thead th {
+            padding: 0.75rem 1rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .data-table tbody tr {
+            transition: background 0.15s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .data-table tbody td {
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        /* ── Status Badges ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .badge-online {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-offline {
+            background: rgba(244, 63, 94, 0.1);
+            color: #e11d48;
+            border: 1px solid rgba(244, 63, 94, 0.2);
+        }
+
+        .badge-unknown {
+            background: rgba(100, 116, 139, 0.1);
+            color: #475569;
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .pulse-dot.green {
+            background: #34d399;
+            box-shadow: 0 0 6px #34d399;
+        }
+
+        .pulse-dot.red {
+            background: #fb7185;
+            box-shadow: 0 0 6px #fb7185;
+        }
+
+        .pulse-dot.gray {
+            background: #94a3b8;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: scale(0.85);
+            }
+        }
+
+        /* ── Animations ── */
+        @keyframes fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-up {
+            animation: fade-up 0.4s ease-out forwards;
+            opacity: 0;
+        }
+
+        .delay-1 {
+            animation-delay: 0.05s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-3 {
+            animation-delay: 0.15s;
+        }
+
+        .delay-4 {
+            animation-delay: 0.2s;
+        }
+
+        /* ── Admin Toggle ── */
+        .admin-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 1.25rem;
+            margin: 0.125rem 0.5rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .admin-toggle:hover {
+            background: rgba(99, 102, 241, 0.1);
+            color: #e2e8f0;
+        }
+
+        .admin-sub {
+            overflow: hidden;
+            max-height: 300px;
+            transition: max-height 0.3s ease;
+        }
+
+        .admin-sub.collapsed {
+            max-height: 0;
+        }
+
+        .admin-sub .nav-item {
+            padding-left: 2.25rem;
+            font-size: 0.8rem;
+        }
+
+        /* ── Mobile ── */
+        .mobile-topbar {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+                min-height: 100vh;
+            }
+
+            .mobile-topbar {
+                display: flex;
+            }
+        }
+
+        /* ── Page header ── */
+        .page-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            background: rgba(10, 14, 26, 0.8);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        /* ── Utility ── */
+        .text-gradient {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ══════════════════════════════════════════════════ */
+        /* LIGHT-MODE OVERRIDES for dark-themed templates    */
+        /* ══════════════════════════════════════════════════ */
+
+        /* Fix text-white appearing on light backgrounds */
+        .main-content .glass-card .text-white,
+        .main-content h2.text-white,
+        .main-content h3.text-white,
+        .main-content h4.text-white,
+        .main-content .font-display.text-white,
+        .main-content label.text-white {
+            color: #0f172a !important;
+        }
+
+        /* Fix dark-themed input fields (transparent bg + white text) */
+        .main-content input[class*="bg-white/"],
+        .main-content input[class*="bg-slate-900"],
+        .main-content input.text-white,
+        .main-content select.text-white {
+            background: #f8fafc !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }
+
+        .main-content input::placeholder {
+            color: #94a3b8 !important;
+        }
+
+        /* Fix glass-card headings that use text-white */
+        .glass-card h3.text-white,
+        .glass-card h4.text-white {
+            color: #1e293b !important;
+        }
+
+        /* Fix dark sub-panels inside glass-cards */
+        .glass-card [class*="bg-slate-800"],
+        .glass-card [class*="bg-slate-900"] {
+            background: #f1f5f9 !important;
+            border-color: #e2e8f0 !important;
+        }
+
+        .glass-card [class*="bg-slate-800"] .text-white,
+        .glass-card [class*="bg-slate-900"] .text-white,
+        .glass-card [class*="bg-slate-800"] h4,
+        .glass-card [class*="bg-slate-900"] h4 {
+            color: #0f172a !important;
+        }
+
+        /* Fix dark-themed buttons that should remain visible */
+        .glass-card button.bg-slate-700,
+        .glass-card [class*="bg-slate-700"] {
+            background: #4f46e5 !important;
+        }
+
+        /* Fix border-white on light bg */
+        .main-content [class*="border-white/"] {
+            border-color: #e2e8f0 !important;
+        }
+
+        /* Fix page-header for light theme */
+        .page-header {
+            background: rgba(255, 255, 255, 0.85) !important;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+        }
+
+        /* Fix flash messages - use proper light-bg readable colors */
+        .main-content [class*="text-rose-300"] {
+            color: #e11d48 !important;
+        }
+
+        .main-content [class*="text-emerald-300"] {
+            color: #059669 !important;
+        }
+
+        .main-content [class*="text-blue-300"] {
+            color: #2563eb !important;
+        }
+
+        .main-content [class*="text-rose-400"] {
+            color: #f43f5e !important;
+        }
+
+        .main-content [class*="text-emerald-400"] {
+            color: #10b981 !important;
+        }
+
+        .main-content [class*="text-blue-400"] {
+            color: #3b82f6 !important;
+        }
+
+        /* Fix remote control terminal/command areas - keep dark */
+        .terminal-output,
+        [class*="terminal"],
+        pre[class*="bg-slate-900"] {
+            background: #0f172a !important;
+            color: #22c55e !important;
+        }
+        /* Notification Panel Animation */
+        @keyframes fadeSlideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        #notifPanel:not(.hidden) {
+            animation: fadeSlideDown 0.2s ease-out;
+        }
+        
+        #notifList::-webkit-scrollbar { width: 4px; }
+        #notifList::-webkit-scrollbar-track { background: transparent; }
+        #notifList::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+    </style>
+</head>
+
+<body class="font-body">
+    <div class="flex min-h-screen">
+
+        <!-- Mobile Top Bar -->
+        <!-- Mobile Header -->
+        <div class="mobile-topbar fixed top-0 left-0 right-0 p-4 items-center justify-between z-40 shadow-sm flex">
+            <div class="flex items-center gap-3">
+                <img src="{{ url_for('static', filename='images/BaffleSol.png') }}" alt="BaffleSol Logo"
+                    class="w-14 h-8 object-contain p-0.5 rounded bg-white/50 backdrop-blur-sm">
+                <span class="font-display font-semibold text-xs tracking-widest uppercase text-slate-600">Server
+                    Monitor</span>
+            </div>
+            <button
+                class="mobile-menu-btn text-xl focus:outline-none text-slate-500 hover:text-slate-900 transition-colors">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Brand -->
+            <div class="p-4 border-b border-black/5 bg-transparent">
+                <div class="flex flex-col items-center gap-1">
+                    <img src="{{ url_for('static', filename='images/BaffleSol.png') }}" alt="BaffleSol Logo"
+                        class="h-6 object-contain rounded bg-white/50 p-1 backdrop-blur-sm shadow-sm border border-slate-200">
+                    <p
+                        class="text-[0.6rem] text-slate-500 font-medium uppercase tracking-widest leading-tight whitespace-nowrap mt-1">
+                        Server Monitor</p>
+                </div>
+            </div>
+
+            <!-- Navigation Scroll Container -->
+            <div class="nav-scroll">
+                <!-- Navigation -->
+                {% if current_user.is_authenticated %}
+                <div class="nav-section-title">Monitoring</div>
+                <a href="{{ url_for('main.dashboard') }}"
+                    class="nav-item {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-grid-2"></i>
+                    <span>Dashboard</span>
+                </a>
+                <div class="nav-section-title">Management</div>
+                <a href="{{ url_for('asset_mgmt.list_employees_assets') }}"
+                    class="nav-item {% if request.endpoint in ['asset_mgmt.list_employees_assets', 'asset_mgmt.employee_asset_detail', 'asset_mgmt.add_employee', 'asset_mgmt.view_audit_logs'] %}active{% endif %}">
+                    <i class="fa-solid fa-laptop-code"></i>
+                    <span>Device Management</span>
+                </a>
+                <a href="{{ url_for('asset_mgmt.system_controls') }}"
+                    class="nav-item {% if request.endpoint in ['asset_mgmt.system_controls','asset_mgmt.remote_control_server','asset_mgmt.remote_control_screenshots','asset_mgmt.remote_control_logs','asset_mgmt.remote_control_productivity'] %}active{% endif %}">
+                    <i class="fa-solid fa-terminal"></i>
+                    <span>Remote Control</span>
+                </a>
+                <a href="{{ url_for('asset_mgmt.productivity_overview') }}"
+                    class="nav-item {% if request.endpoint == 'asset_mgmt.productivity_overview' %}active{% endif %}">
+                    <i class="fa-solid fa-chart-simple"></i>
+                    <span>Productivity</span>
+                </a>
+                <a href="{{ url_for('discovery.discover_domain') }}"
+                    class="nav-item {% if request.endpoint and request.endpoint.startswith('discovery.') %}active{% endif %}">
+                    <i class="fa-solid fa-radar"></i>
+                    <span>Domain Discovery</span>
+                </a>
+                <a href="{{ url_for('smart_analyzer.analyzer_home') }}"
+                    class="nav-item {% if request.endpoint and request.endpoint.startswith('smart_analyzer.') %}active{% endif %}">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Analytics</span>
+                </a>
+                <a href="{{ url_for('agents.list_keys') }}"
+                    class="nav-item {% if request.endpoint == 'agents.list_keys' %}active{% endif %}">
+                    <i class="fa-solid fa-key"></i>
+                    <span>Agent Keys</span>
+                </a>
+                <a href="{{ url_for('agent_mgmt.agent_portal') }}"
+                    class="nav-item {% if request.endpoint and request.endpoint.startswith('agent_mgmt.') %}active{% endif %}">
+                    <i class="fa-solid fa-robot"></i>
+                    <span>Agent Portal</span>
+                </a>
+
+                {% if current_user.is_superadmin %}
+                <div class="nav-section-title">Administration</div>
+                <div class="admin-toggle" onclick="toggleAdmin(this)">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-shield-halved" style="width:20px;text-align:center;font-size:0.9rem"></i>
+                        <span>Admin Panel</span>
+                    </div>
+                    <i class="fa-solid fa-chevron-down text-[0.6rem] transition-transform duration-200"
+                        id="adminChevron"></i>
+                </div>
+
+                <div class="admin-sub" id="adminSub">
+                    <a href="{{ url_for('admin.admin_dashboard') }}"
+                        class="nav-item {% if request.path.startswith('/admin/dashboard') %}active{% endif %}">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>Overview</span>
+                    </a>
+                    <a href="{{ url_for('admin.admin_tenants') }}"
+                        class="nav-item {% if request.path.startswith('/admin/tenants') %}active{% endif %}">
+                        <i class="fa-solid fa-building"></i>
+                        <span>Tenants</span>
+                    </a>
+                    <a href="{{ url_for('admin.admin_users') }}"
+                        class="nav-item {% if request.path.startswith('/admin/users') %}active{% endif %}">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>Users</span>
+                    </a>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div><!-- closes nav-scroll -->
+
+            <!-- User Profile & Theme Toggle -->
+            {% if current_user.is_authenticated %}
+            <div class="p-4 border-t border-black/5 bg-transparent space-y-3">
+                <!-- Theme Toggle Removed -->
+                <!-- User Profile -->
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-indigo-500/20 ring-2 ring-white/50">
+                        {{ current_user.username[0] | upper }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold text-slate-800 truncate">{{ current_user.username }}</p>
+                        <p class="text-[0.65rem] text-slate-500 truncate">
+                            {% if current_user.is_superadmin %}Super Admin{% else %}Tenant Admin{% endif %}
+                        </p>
+                    </div>
+                    <a href="{{ url_for('auth.logout') }}"
+                        class="w-8 h-8 rounded-lg flex items-center justify-center opacity-60 hover:opacity-100 hover:bg-rose-500/10 transition-all"
+                        title="Logout">
+                        <i class="fa-solid fa-right-from-bracket text-sm"></i>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content flex-1 flex flex-col">
+            <!-- Top Action Bar with Notification Bell -->
+            {% if current_user.is_authenticated %}
+            <div style="display:flex;align-items:center;justify-content:flex-end;padding:10px 24px 0;position:relative;z-index:10000;">
+                <!-- Notification Bell -->
+                <div style="position:relative;" id="notifBellWrap">
+                    <button onclick="toggleNotifPanel()" id="notifBellBtn"
+                        style="position:relative;width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:2px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;box-shadow:0 4px 15px rgba(99,102,241,0.35);transition:all 0.2s;">
+                        <i class="fa-solid fa-bell" style="font-size:16px;"></i>
+                        <span id="notifBadge" class="hidden"
+                            style="position:absolute;top:-5px;right:-5px;width:20px;height:20px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:50%;align-items:center;justify-content:center;border:2px solid #fff;">
+                            0
+                        </span>
+                    </button>
+
+                    <!-- Notification Dropdown Panel -->
+                    <div id="notifPanel" class="hidden"
+                        style="position:absolute;right:0;top:52px;width:380px;max-height:480px;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.15),0 0 0 1px rgba(0,0,0,0.05);z-index:10001;overflow:hidden;">
+                        <!-- Header -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <i class="fa-solid fa-bell" style="color:#6366f1;font-size:13px;"></i>
+                                <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin:0;">Notifications</h4>
+                                <span id="notifHeaderCount"
+                                    style="display:none;font-size:10px;background:#e0e7ff;color:#4f46e5;padding:2px 8px;border-radius:10px;font-weight:700;"></span>
+                            </div>
+                            <button onclick="markAllRead()"
+                                style="font-size:11px;color:#6366f1;font-weight:600;background:none;border:none;cursor:pointer;">
+                                Mark all read
+                            </button>
+                        </div>
+                        <!-- Notification Items -->
+                        <div id="notifList" style="overflow-y:auto;max-height:400px;">
+                            <div style="padding:32px;text-align:center;color:#94a3b8;font-size:13px;">
+                                <i class="fa-solid fa-bell-slash" style="font-size:24px;display:block;margin-bottom:8px;color:#cbd5e1;"></i>
+                                No notifications yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="px-6 py-3 md:px-8 md:py-3 flex-1 w-full">
+                <!-- Flash messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-6 space-y-2">
+                    {% for category, message in messages %}
+                    {% if category == 'danger' or category == 'error' %}
+                    <div
+                        class="flex items-center gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm animate-fade-up">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        <span>{{ message }}</span>
+                        <button onclick="this.parentElement.remove()"
+                            class="ml-auto text-rose-400 hover:text-rose-300">&times;</button>
+                    </div>
+                    {% elif category == 'success' %}
+                    <div
+                        class="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm animate-fade-up">
+                        <i class="fa-solid fa-check-circle"></i>
+                        <span>{{ message }}</span>
+                        <button onclick="this.parentElement.remove()"
+                            class="ml-auto text-emerald-400 hover:text-emerald-300">&times;</button>
+                    </div>
+                    {% else %}
+                    <div
+                        class="flex items-center gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm animate-fade-up">
+                        <i class="fa-solid fa-info-circle"></i>
+                        <span>{{ message }}</span>
+                        <button onclick="this.parentElement.remove()"
+                            class="ml-auto text-blue-400 hover:text-blue-300">&times;</button>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ── Theme Toggle ──
+        function initThemeToggle() {
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = document.getElementById('themeIcon');
+            const themeText = document.getElementById('themeText');
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+
+            function updateThemeUI(theme) {
+                if (theme === 'light') {
+                    themeIcon.className = 'fa-solid fa-sun text-lg';
+                    themeText.textContent = 'Light';
+                } else {
+                    themeIcon.className = 'fa-solid fa-moon text-lg';
+                    themeText.textContent = 'Dark';
+                }
+            }
+
+            updateThemeUI(currentTheme);
+
+            if (themeToggle) {
+                themeToggle.addEventListener('click', () => {
+                    const theme = localStorage.getItem('theme') || 'dark';
+                    const newTheme = theme === 'dark' ? 'light' : 'dark';
+
+                    localStorage.setItem('theme', newTheme);
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                    updateThemeUI(newTheme);
+                });
+            }
+        }
+
+        function toggleAdmin(el) {
+            const sub = document.getElementById('adminSub');
+            const chevron = document.getElementById('adminChevron');
+            if (sub) {
+                sub.classList.toggle('collapsed');
+                chevron.style.transform = sub.classList.contains('collapsed') ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize theme toggle
+            // Theme toggle removed
+
+            // Mobile menu
+            const btn = document.querySelector('.mobile-menu-btn');
+            const sidebar = document.querySelector('.sidebar');
+            if (btn) {
+                btn.addEventListener('click', (e) => { e.stopPropagation(); sidebar.classList.toggle('open'); });
+            }
+            document.addEventListener('click', function (e) {
+                if (!e.target.closest('.sidebar') && !e.target.closest('.mobile-menu-btn')) {
+                    sidebar.classList.remove('open');
+                }
+            });
+            sidebar.querySelectorAll('.nav-item').forEach(link => {
+                link.addEventListener('click', () => sidebar.classList.remove('open'));
+            });
+        });
+    </script>
+    
+    <!-- Notification System -->
+    <script>
+        let notifPanelOpen = false;
+        
+        function toggleNotifPanel() {
+            const panel = document.getElementById('notifPanel');
+            notifPanelOpen = !notifPanelOpen;
+            if (notifPanelOpen) {
+                panel.classList.remove('hidden');
+                loadNotifications();
+            } else {
+                panel.classList.add('hidden');
+            }
+        }
+        
+        function loadNotifications() {
+            fetch('/api/notifications')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+                    updateBadge(data.unread_count);
+                    renderNotifList(data.notifications);
+                })
+                .catch(() => {});
+        }
+        
+        function updateBadge(count) {
+            const badge = document.getElementById('notifBadge');
+            const headerCount = document.getElementById('notifHeaderCount');
+            if (count > 0) {
+                badge.classList.remove('hidden');
+                badge.textContent = count > 9 ? '9+' : count;
+                headerCount.classList.remove('hidden');
+                headerCount.textContent = count + ' new';
+            } else {
+                badge.classList.add('hidden');
+                headerCount.classList.add('hidden');
+            }
+        }
+        
+        function renderNotifList(items) {
+            const list = document.getElementById('notifList');
+            if (!items || items.length === 0) {
+                list.innerHTML = `
+                    <div class="p-8 text-center text-sm text-slate-400">
+                        <i class="fa-solid fa-bell-slash text-2xl mb-2 block text-slate-300"></i>
+                        No notifications yet
+                    </div>`;
+                return;
+            }
+            
+            let html = '';
+            items.forEach(n => {
+                const iconMap = {
+                    sync: { icon: 'fa-cloud-arrow-up', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                    error: { icon: 'fa-circle-exclamation', color: 'text-rose-500', bg: 'bg-rose-50' },
+                    alert: { icon: 'fa-triangle-exclamation', color: 'text-amber-500', bg: 'bg-amber-50' }
+                };
+                const style = iconMap[n.category] || iconMap.sync;
+                const readClass = n.is_read ? 'opacity-60' : '';
+                const unreadDot = n.is_read ? '' : '<span class="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>';
+                
+                html += `
+                    <div class="flex items-start gap-3 px-5 py-3 hover:bg-slate-50/80 transition-colors cursor-default ${readClass}">
+                        <div class="w-8 h-8 rounded-lg ${style.bg} flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fa-solid ${style.icon} ${style.color} text-xs"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <p class="text-xs font-semibold text-slate-800 truncate">${n.title}</p>
+                                ${unreadDot}
+                            </div>
+                            <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">${n.message || ''}</p>
+                            <p class="text-[10px] text-slate-400 mt-1 font-medium">${n.time_ago}</p>
+                        </div>
+                    </div>`;
+            });
+            list.innerHTML = html;
+        }
+        
+        function markAllRead() {
+            fetch('/api/notifications/mark_read', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => {
+                    updateBadge(0);
+                    loadNotifications();
+                })
+                .catch(() => {});
+        }
+        
+        // Close panel on outside click
+        document.addEventListener('click', function(e) {
+            const wrap = document.getElementById('notifBellWrap');
+            if (wrap && notifPanelOpen && !wrap.contains(e.target)) {
+                document.getElementById('notifPanel').classList.add('hidden');
+                notifPanelOpen = false;
+            }
+        });
+        
+        // Poll for new notifications every 30 seconds
+        setInterval(() => {
+            fetch('/api/notifications')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) updateBadge(data.unread_count);
+                })
+                .catch(() => {});
+        }, 30000);
+        
+        // Initial load on page ready
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/notifications')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) updateBadge(data.unread_count);
+                })
+                .catch(() => {});
+        });
+    </script>
+    
+    <!-- Load Chart.js synchronously (needed for dashboard charts) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <!-- Defer Socket.IO as it's not critical for initial render -->
+    <script defer src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+</body>
+
+</html>

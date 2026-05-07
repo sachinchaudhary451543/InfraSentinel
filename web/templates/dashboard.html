@@ -1,0 +1,2846 @@
+{% extends "base.html" %}
+
+{% block title %}Infrastructure Monitoring - ServerMonitor{% endblock %}
+
+{% block extra_styles %}
+<style>
+    /* ══════════════════════════════════════════════════════════════
+     NOC THEME PAGE OVERRIDES — dashboard.html only
+     These defeat base.html's light-mode globals for this page.
+  ══════════════════════════════════════════════════════════════ */
+
+    /* Kill the white body background on this page */
+    body {
+        background: #fbfcfd !important;
+        background-image: none !important;
+        color: #0e0e0e !important;
+    }
+
+    /* Kill base metric-card / glass-card white backgrounds inside noc-page */
+    .noc-page .metric-card,
+    .noc-page .glass-card {
+        background: #f2f2f2 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border: 1px solid rgba(56, 189, 248, 0.08) !important;
+        box-shadow: none !important;
+        border-radius: 4px !important;
+    }
+
+    .noc-page .metric-card:hover,
+    .noc-page .glass-card:hover {
+        transform: none !important;
+        box-shadow: none !important;
+        border-color: rgba(56, 189, 248, 0.18) !important;
+    }
+
+    /* Kill base metric-card::before coloured top bar — NOC cards use their own */
+    .noc-page .metric-card::before {
+        display: none !important;
+    }
+
+    /* Kill light-mode !important overrides inside .main-content for noc-page children */
+    .main-content .noc-page .text-white,
+    .main-content .noc-page h2.text-white,
+    .main-content .noc-page h3.text-white,
+    .main-content .noc-page h4.text-white {
+        color: #0d0d0e !important;
+    }
+
+    .main-content .noc-page input,
+    .main-content .noc-page select {
+        background: #e6e3e3 !important;
+        color: #0c0c0d !important;
+        border-color: rgba(56, 189, 248, 0.08) !important;
+    }
+
+    .main-content .noc-page input::placeholder {
+        color: #646363 !important;
+    }
+
+    /* Ensure tables have clean light theme styling */
+    .noc-page .data-table thead th,
+    .noc-page .noc-table thead th {
+        color: #475569 !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+        background: #f8fafc !important;
+    }
+
+    .noc-page .data-table tbody td,
+    .noc-page .noc-table tbody td {
+        color: #0f172a !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+    }
+
+    .noc-page .data-table tbody tr:hover,
+    .noc-page .noc-table tbody tr:hover {
+        background: rgba(34, 211, 238, 0.03) !important;
+    }
+
+    /* Kill base pulse-dot animation conflict — NOC defines its own */
+    .noc-page .pulse-dot {
+        animation: noc-pulse 2s infinite !important;
+    }
+
+    .noc-page .pulse-dot.pulse-online {
+        background: #34d399 !important;
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5) !important;
+    }
+
+    .noc-page .pulse-dot.pulse-idle {
+        background: #fbbf24 !important;
+        box-shadow: none !important;
+        animation: none !important;
+    }
+
+    .noc-page .pulse-dot.pulse-offline {
+        background: #334155 !important;
+        box-shadow: none !important;
+        animation: none !important;
+    }
+
+    /* Kill base border-white/x overrides inside noc-page */
+    .noc-page [class*="border-white/"] {
+        border-color: rgba(148, 163, 184, 0.2) !important;
+    }
+
+    /* Main content padding — let noc-page handle its own */
+    .main-content>div:has(.noc-page) {
+        padding: 0 !important;
+    }
+
+    /* Fallback for browsers without :has() */
+    .noc-page {
+        margin: -24px -32px !important;
+    }
+
+    /* Selection highlights for inventory filtering */
+    .selected-row {
+        background-color: #e0e7ff !important;
+        border-left: 4px solid #6366f1 !important;
+    }
+
+    .server-card[data-selected="true"] {
+        border-color: #6366f1 !important;
+        background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%) !important;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<style>
+    /* ── NOC Light Theme Variables ── */
+    :root {
+        --noc-bg: #fbfcfd;
+        --noc-surface: #ffffff;
+        --noc-surface-2: #f8fafc;
+        --noc-border: rgba(148, 163, 184, 0.2);
+        --noc-border-bright: rgba(56, 189, 248, 0.4);
+        --noc-cyan: #0284c7;
+        --noc-cyan-dim: rgba(2, 132, 199, 0.08);
+        --noc-indigo: #4f46e5;
+        --noc-indigo-dim: rgba(79, 70, 229, 0.08);
+        --noc-emerald: #059669;
+        --noc-emerald-dim: rgba(5, 150, 105, 0.08);
+        --noc-amber: #d97706;
+        --noc-amber-dim: rgba(217, 119, 6, 0.08);
+        --noc-rose: #e11d48;
+        --noc-rose-dim: rgba(225, 29, 72, 0.08);
+        --noc-violet: #7c3aed;
+        --noc-text-primary: #0f172a;
+        --noc-text-secondary: #475569;
+        --noc-text-muted: #64748b;
+        --noc-glow-cyan: 0 4px 12px rgba(2, 132, 199, 0.1);
+        --noc-glow-indigo: 0 4px 12px rgba(79, 70, 229, 0.1);
+        --noc-glow-emerald: 0 4px 12px rgba(5, 150, 105, 0.1);
+    }
+
+    /* ── Scoped to this page only ── */
+    .noc-page {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    .noc-page *,
+    .noc-page *::before,
+    .noc-page *::after {
+        box-sizing: border-box;
+    }
+
+    /* ── Scanline overlay (disabled) ──
+    .noc-scanlines::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: repeating-linear-gradient(0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.03) 2px,
+                rgba(0, 0, 0, 0.03) 4px);
+        pointer-events: none;
+        z-index: 9999;
+    }
+    */
+
+    /* ── NOC Panel ── */
+    .noc-panel {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .noc-panel::before {
+        display: none;
+    }
+
+    .noc-panel-bright {
+        border-color: var(--noc-border-bright);
+        box-shadow: var(--noc-glow-cyan);
+    }
+
+    /* ── Metric Card ── */
+    .noc-metric-card {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        padding: 20px 20px 16px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .noc-metric-card:hover {
+        border-color: var(--noc-border-bright);
+    }
+
+    .noc-metric-card .card-accent {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        border-radius: 0 0 4px 4px;
+    }
+
+    .noc-metric-card .card-glow {
+        position: absolute;
+        top: -20px;
+        right: -20px;
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        filter: blur(25px);
+        opacity: 0.15;
+    }
+
+    /* ── Status Indicators ── */
+    .status-online {
+        color: var(--noc-emerald);
+        text-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+    }
+
+    .status-idle {
+        color: var(--noc-amber);
+    }
+
+    .status-offline {
+        color: var(--noc-text-secondary);
+    }
+
+    .pulse-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .pulse-online {
+        background: var(--noc-emerald);
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+        animation: noc-pulse 2s infinite;
+    }
+
+    .pulse-idle {
+        background: var(--noc-amber);
+    }
+
+    .pulse-offline {
+        background: #334155;
+    }
+
+    @keyframes noc-pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+        }
+
+        70% {
+            box-shadow: 0 0 0 5px rgba(52, 211, 153, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+        }
+    }
+
+    /* ── Tag Badges ── */
+    .noc-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 2px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .badge-online {
+        background: rgba(52, 211, 153, 0.1);
+        color: var(--noc-emerald);
+        border: 1px solid rgba(52, 211, 153, 0.2);
+    }
+
+    .badge-idle {
+        background: rgba(251, 191, 36, 0.1);
+        color: var(--noc-amber);
+        border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+
+    .badge-offline {
+        background: rgba(51, 65, 85, 0.5);
+        color: #64748b;
+        border: 1px solid rgba(51, 65, 85, 0.8);
+    }
+
+    .badge-agent {
+        background: rgba(129, 140, 248, 0.1);
+        color: var(--noc-indigo);
+        border: 1px solid rgba(129, 140, 248, 0.2);
+    }
+
+    .badge-no-agent {
+        background: rgba(51, 65, 85, 0.5);
+        color: #64748b;
+        border: 1px solid rgba(51, 65, 85, 0.8);
+    }
+
+    .badge-hyperv {
+        background: rgba(167, 139, 250, 0.1);
+        color: var(--noc-violet);
+        border: 1px solid rgba(167, 139, 250, 0.2);
+    }
+
+    .badge-light {
+        background: rgba(51, 65, 85, 0.5);
+        color: #94a3b8;
+        border: 1px solid rgba(51, 65, 85, 0.8);
+    }
+
+    /* ── Data Table ── */
+    .noc-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .noc-table thead tr {
+        background: #f1f5f9;
+        border-bottom: 1px solid var(--noc-border);
+    }
+
+    .noc-table thead th {
+        padding: 10px 16px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--noc-text-secondary);
+        white-space: nowrap;
+    }
+
+    .noc-table tbody tr {
+        border-bottom: 1px solid rgba(56, 189, 248, 0.04);
+        transition: background 0.15s;
+        cursor: pointer;
+    }
+
+    .noc-table tbody tr:hover {
+        background: rgba(34, 211, 238, 0.03);
+    }
+
+    .noc-table tbody td {
+        padding: 12px 16px;
+        font-size: 0.75rem;
+        color: var(--noc-text-primary);
+        vertical-align: middle;
+    }
+
+    .noc-table .section-header td {
+        padding: 6px 16px;
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        background: var(--noc-surface-2);
+        border-top: 1px solid var(--noc-border);
+        border-bottom: 1px solid var(--noc-border);
+        cursor: default;
+    }
+
+    /* ── Tab Buttons ── */
+    .noc-tab {
+        padding: 7px 18px;
+        border-radius: 2px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+        cursor: pointer;
+        background: transparent;
+        color: var(--noc-text-secondary);
+    }
+
+    .noc-tab:hover {
+        color: var(--noc-cyan);
+        border-color: var(--noc-border-bright);
+    }
+
+    .noc-tab.active {
+        background: var(--noc-cyan-dim);
+        color: var(--noc-cyan);
+        border-color: rgba(34, 211, 238, 0.25);
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.08);
+    }
+
+    /* ── Buttons ── */
+    .noc-btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 18px;
+        background: var(--noc-cyan-dim);
+        color: var(--noc-cyan);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        border-radius: 2px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+
+    .noc-btn-primary:hover {
+        background: rgba(34, 211, 238, 0.18);
+        box-shadow: 0 0 16px rgba(34, 211, 238, 0.12);
+        border-color: rgba(34, 211, 238, 0.4);
+    }
+
+    .noc-btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 18px;
+        background: transparent;
+        color: var(--noc-text-secondary);
+        border: 1px solid var(--noc-border);
+        border-radius: 2px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .noc-btn-secondary:hover {
+        color: var(--noc-text-primary);
+        border-color: var(--noc-border-bright);
+    }
+
+    .noc-btn-danger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        background: rgba(251, 113, 133, 0.08);
+        color: var(--noc-rose);
+        border: 1px solid rgba(251, 113, 133, 0.15);
+        border-radius: 2px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.65rem;
+        font-family: inherit;
+    }
+
+    .noc-btn-danger:hover {
+        background: rgba(251, 113, 133, 0.15);
+        border-color: rgba(251, 113, 133, 0.3);
+    }
+
+    .noc-btn-console {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 4px 10px;
+        background: var(--noc-indigo-dim);
+        color: var(--noc-indigo);
+        border: 1px solid rgba(129, 140, 248, 0.2);
+        border-radius: 2px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transition: all 0.2s;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+
+    .noc-btn-console:hover {
+        background: rgba(129, 140, 248, 0.18);
+        border-color: rgba(129, 140, 248, 0.35);
+    }
+
+    .noc-btn-enable {
+        padding: 5px 12px;
+        background: var(--noc-cyan-dim);
+        color: var(--noc-cyan);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        border-radius: 2px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+
+    .noc-btn-enable:hover {
+        background: rgba(34, 211, 238, 0.18);
+    }
+
+    /* ── Search / Select ── */
+    .noc-select,
+    .noc-input {
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        color: var(--noc-text-primary);
+        border-radius: 2px;
+        padding: 7px 12px;
+        font-size: 0.7rem;
+        font-family: inherit;
+        font-weight: 600;
+        outline: none;
+        transition: border-color 0.2s;
+        -webkit-appearance: none;
+    }
+
+    .noc-select:focus,
+    .noc-input:focus {
+        border-color: rgba(34, 211, 238, 0.3);
+    }
+
+    .noc-select option {
+        background: var(--noc-surface-2);
+    }
+
+    .noc-input::placeholder {
+        color: var(--noc-text-muted);
+    }
+
+    /* ── Device Icon ── */
+    .device-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+        border: 1px solid;
+    }
+
+    .device-icon-agent {
+        background: var(--noc-indigo-dim);
+        color: var(--noc-indigo);
+        border-color: rgba(129, 140, 248, 0.2);
+    }
+
+    .device-icon-hyperv {
+        background: rgba(167, 139, 250, 0.1);
+        color: var(--noc-violet);
+        border-color: rgba(167, 139, 250, 0.2);
+    }
+
+    .device-icon-azure {
+        background: rgba(56, 189, 248, 0.08);
+        color: #38bdf8;
+        border-color: rgba(56, 189, 248, 0.15);
+    }
+
+    /* ── Server Monitor Card ── */
+    .server-card {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .server-card:hover {
+        border-color: rgba(34, 211, 238, 0.15);
+        box-shadow: 0 0 30px rgba(34, 211, 238, 0.04);
+    }
+
+    .server-card .corner-accent {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 32px;
+        height: 2px;
+        background: var(--noc-cyan);
+        opacity: 0.6;
+    }
+
+    .server-card .corner-accent-v {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 2px;
+        height: 32px;
+        background: var(--noc-cyan);
+        opacity: 0.6;
+    }
+
+    /* ── Chart Containers ── */
+    .chart-panel {
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 3px;
+        padding: 14px;
+        position: relative;
+    }
+
+    .chart-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+    .chart-label {
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--noc-text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .chart-value {
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+
+    /* ── Disk Meter ── */
+    .disk-panel {
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 3px;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .disk-donut-wrap {
+        position: relative;
+        width: 60px;
+        height: 60px;
+        flex-shrink: 0;
+    }
+
+    .disk-donut-wrap canvas {
+        position: absolute;
+        inset: 0;
+    }
+
+    .disk-donut-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--noc-text-primary);
+    }
+
+    /* ── KPI Strip ── */
+    .kpi-strip {
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 3px;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+    }
+
+    .kpi-item {
+        flex: 1;
+        text-align: center;
+        padding: 0 8px;
+    }
+
+    .kpi-item+.kpi-item {
+        border-left: 1px solid var(--noc-border);
+    }
+
+    .kpi-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        display: block;
+        margin-bottom: 4px;
+    }
+
+    .kpi-name {
+        font-size: 0.55rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--noc-text-secondary);
+    }
+
+    /* ── AI Forecast Panel ── */
+    .forecast-panel {
+        background: linear-gradient(135deg, rgba(129, 140, 248, 0.04), rgba(34, 211, 238, 0.03));
+        border: 1px solid rgba(129, 140, 248, 0.12);
+        border-radius: 3px;
+        padding: 14px 16px;
+    }
+
+    .forecast-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .forecast-icon-wrap {
+        width: 28px;
+        height: 28px;
+        background: var(--noc-indigo-dim);
+        border: 1px solid rgba(129, 140, 248, 0.2);
+        border-radius: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        color: var(--noc-indigo);
+        flex-shrink: 0;
+    }
+
+    /* ── VM Pulse ── */
+    .vm-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 2px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: var(--noc-text-primary);
+    }
+
+    /* ── Metric bar mini ── */
+    .mini-bar-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .mini-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .mini-bar-label {
+        font-size: 0.55rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--noc-text-secondary);
+        width: 26px;
+    }
+
+    .mini-bar-track {
+        flex: 1;
+        height: 4px;
+        background: rgba(51, 65, 85, 0.6);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .mini-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.4s;
+    }
+
+    .mini-bar-val {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--noc-text-primary);
+        width: 32px;
+        text-align: right;
+    }
+
+    /* ── Screenshot preview ── */
+    .screenshot-panel {
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .screenshot-header {
+        padding: 8px 12px;
+        font-size: 0.55rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--noc-text-secondary);
+        border-bottom: 1px solid var(--noc-border);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ── Page Header ── */
+    .noc-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 24px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--noc-border);
+    }
+
+    .noc-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--noc-text-primary);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .noc-title-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--noc-cyan-dim);
+        border: 1px solid rgba(34, 211, 238, 0.2);
+        border-radius: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--noc-cyan);
+        font-size: 0.8rem;
+    }
+
+    .noc-subtitle {
+        font-size: 0.62rem;
+        color: var(--noc-text-secondary);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-top: 4px;
+    }
+
+    /* ── Live stream ticker ── */
+    .live-ticker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.6rem;
+        color: var(--noc-text-secondary);
+        font-weight: 600;
+        letter-spacing: 0.06em;
+    }
+
+    .live-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--noc-emerald);
+        border-radius: 50%;
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+        animation: noc-pulse 2s infinite;
+    }
+
+    /* ── Modal ── */
+    .noc-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(4px);
+        z-index: 100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+
+    .noc-modal-backdrop.active {
+        display: flex;
+    }
+
+    .noc-modal {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border-bright);
+        border-radius: 4px;
+        max-width: 680px;
+        width: 100%;
+        max-height: 85vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 0 60px rgba(34, 211, 238, 0.08);
+    }
+
+    .noc-modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--noc-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    .noc-modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .noc-modal-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--noc-text-primary);
+    }
+
+    .noc-close-btn {
+        width: 28px;
+        height: 28px;
+        background: transparent;
+        border: 1px solid var(--noc-border);
+        border-radius: 2px;
+        color: var(--noc-text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: all 0.2s;
+    }
+
+    .noc-close-btn:hover {
+        border-color: var(--noc-border-bright);
+        color: var(--noc-text-primary);
+    }
+
+    /* ── Terminal-style script block ── */
+    .noc-terminal {
+        background: #1e293b;
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        padding: 16px;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 0.7rem;
+        color: #e2e8f0;
+        overflow-x: auto;
+        max-height: 240px;
+        overflow-y: auto;
+    }
+
+    .noc-terminal::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    .noc-terminal::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .noc-terminal::-webkit-scrollbar-thumb {
+        background: rgba(34, 211, 238, 0.2);
+        border-radius: 2px;
+    }
+
+    /* ── Warning notice ── */
+    .noc-notice {
+        padding: 10px 14px;
+        background: rgba(251, 191, 36, 0.06);
+        border: 1px solid rgba(251, 191, 36, 0.15);
+        border-radius: 3px;
+        font-size: 0.65rem;
+        color: #d97706;
+        font-weight: 600;
+    }
+
+    /* ── Empty State ── */
+    .noc-empty {
+        padding: 80px 20px;
+        text-align: center;
+    }
+
+    .noc-empty-icon {
+        width: 64px;
+        height: 64px;
+        background: var(--noc-surface-2);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        font-size: 1.6rem;
+        color: var(--noc-text-muted);
+    }
+
+    .noc-empty h3 {
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--noc-text-primary);
+        margin-bottom: 8px;
+    }
+
+    .noc-empty p {
+        font-size: 0.7rem;
+        color: var(--noc-text-secondary);
+        max-width: 360px;
+        margin: 0 auto;
+        line-height: 1.6;
+    }
+
+    /* ── Global Telemetry Header ── */
+    .telemetry-header {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .telemetry-header::before {
+        display: none;
+    }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    /* ── Inventory table wrapper ── */
+    .noc-table-wrap {
+        background: var(--noc-surface);
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .noc-table-wrap::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .noc-table-wrap::-webkit-scrollbar-thumb {
+        background: rgba(34, 211, 238, 0.2);
+        border-radius: 2px;
+    }
+
+    /* ── Scrollbars global ── */
+    .noc-page ::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .noc-page ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .noc-page ::-webkit-scrollbar-thumb {
+        background: rgba(34, 211, 238, 0.15);
+        border-radius: 2px;
+    }
+
+    /* ── Animations ── */
+    @keyframes noc-fadein {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .noc-fadein {
+        animation: noc-fadein 0.35s ease both;
+    }
+
+    /* ── Responsive grid helpers ── */
+    .noc-grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+    }
+
+    .noc-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+    }
+
+    .noc-grid-12 {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+    }
+
+    @media (max-width: 1280px) {
+        .noc-grid-4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 900px) {
+        .noc-grid-4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .noc-grid-2 {
+            grid-template-columns: 1fr;
+        }
+
+        .noc-grid-12 {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .noc-grid-4 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .noc-page-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+
+    /* ── Override any base page background inside this block ── */
+    .noc-page {
+        background: var(--noc-bg);
+        padding: 24px 28px;
+        min-height: 100%;
+        color: var(--noc-text-primary);
+    }
+</style>
+
+<div class="noc-page noc-scanlines noc-fadein">
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- PAGE HEADER                                             -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="noc-page-header animate-fade-up">
+        <div>
+            <div class="noc-title">
+                <div class="noc-title-icon"><i class="fa-solid fa-radar"></i></div>
+                Infrastructure Monitoring
+            </div>
+            <div class="noc-subtitle">Azure device inventory &amp; real-time agent telemetry</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <div class="live-ticker">
+                <span class="live-dot"></span>
+                <span>LIVE STREAM</span>
+            </div>
+            <div
+                style="display:flex; gap:6px; background:var(--noc-surface); border:1px solid var(--noc-border); border-radius:4px; padding:5px;">
+                <button onclick="switchTab('inventory')" id="tab-btn-inventory" class="noc-tab active">
+                    <i class="fa-solid fa-warehouse" style="margin-right:5px;"></i>Inventory
+                </button>
+                <button onclick="switchTab('live')" id="tab-btn-live" class="noc-tab">
+                    <i class="fa-solid fa-wave-square" style="margin-right:5px;"></i>Live Monitor
+                </button>
+                <a href="{{ url_for('agent_mgmt.agent_portal') }}" class="noc-tab" style="text-decoration:none;">
+                    <i class="fa-solid fa-robot" style="margin-right:5px;"></i>Agent Portal
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- INVENTORY VIEW                                          -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="view-inventory" class="noc-fadein">
+
+        <!-- Summary Cards -->
+        <div class="noc-grid-4" style="margin-bottom:20px;">
+
+            <!-- Total Devices -->
+            <div class="noc-metric-card">
+                <div class="card-glow" style="background:var(--noc-cyan);"></div>
+                <div class="card-accent" style="background:linear-gradient(90deg,var(--noc-cyan),transparent);"></div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <span
+                        style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary);">Total
+                        Devices</span>
+                    <i class="fa-solid fa-server" style="color:var(--noc-cyan); opacity:0.5; font-size:0.8rem;"></i>
+                </div>
+                <div
+                    style="font-size:2.2rem; font-weight:700; color:var(--noc-text-primary); letter-spacing:-0.02em; line-height:1;">
+                    {{ total_systems }}</div>
+                <div
+                    style="font-size:0.55rem; color:var(--noc-text-secondary); margin-top:8px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+                    Registered endpoints</div>
+            </div>
+
+            <!-- Agent Installed -->
+            <div class="noc-metric-card">
+                <div class="card-glow" style="background:var(--noc-indigo);"></div>
+                <div class="card-accent" style="background:linear-gradient(90deg,var(--noc-indigo),transparent);"></div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <span
+                        style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary);">Agent
+                        Installed</span>
+                    <i class="fa-solid fa-microchip"
+                        style="color:var(--noc-indigo); opacity:0.5; font-size:0.8rem;"></i>
+                </div>
+                <div
+                    style="font-size:2.2rem; font-weight:700; color:var(--noc-indigo); letter-spacing:-0.02em; line-height:1;">
+                    {{ agent_count }}</div>
+                <div
+                    style="font-size:0.55rem; color:var(--noc-text-secondary); margin-top:8px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+                    Monitored systems</div>
+            </div>
+
+            <!-- Online Now -->
+            <div class="noc-metric-card">
+                <div class="card-glow" style="background:var(--noc-emerald);"></div>
+                <div class="card-accent" style="background:linear-gradient(90deg,var(--noc-emerald),transparent);">
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <span
+                        style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary);">Online
+                        Now</span>
+                    <i class="fa-solid fa-signal" style="color:var(--noc-emerald); opacity:0.5; font-size:0.8rem;"></i>
+                </div>
+                <div
+                    style="font-size:2.2rem; font-weight:700; color:var(--noc-emerald); letter-spacing:-0.02em; line-height:1; text-shadow:0 0 20px rgba(52,211,153,0.3);">
+                    {{ online_count }}</div>
+                <div
+                    style="font-size:0.55rem; color:var(--noc-text-secondary); margin-top:8px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+                    Active connections</div>
+            </div>
+
+            <!-- No Agent -->
+            <div class="noc-metric-card">
+                <div class="card-glow" style="background:var(--noc-amber);"></div>
+                <div class="card-accent" style="background:linear-gradient(90deg,var(--noc-amber),transparent);"></div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <span
+                        style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary);">No
+                        Agent</span>
+                    <i class="fa-solid fa-triangle-exclamation"
+                        style="color:var(--noc-amber); opacity:0.5; font-size:0.8rem;"></i>
+                </div>
+                <div
+                    style="font-size:2.2rem; font-weight:700; color:var(--noc-amber); letter-spacing:-0.02em; line-height:1;">
+                    {{ total_systems - agent_count }}</div>
+                <div
+                    style="font-size:0.55rem; color:var(--noc-text-secondary); margin-top:8px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">
+                    Unmonitored devices</div>
+            </div>
+
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <select id="invFilterAgent" class="noc-select">
+                    <option value="">All Devices</option>
+                    <option value="installed">Agent Installed</option>
+                    <option value="not_installed">No Agent</option>
+                </select>
+                <div style="position:relative;">
+                    <i class="fa-solid fa-search"
+                        style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--noc-text-secondary); font-size:0.65rem;"></i>
+                    <input type="text" id="invSearch" placeholder="Search devices..." class="noc-input"
+                        style="padding-left:30px; width:220px;">
+                </div>
+            </div>
+            <button onclick="syncAzureInventory()" id="syncBtn" class="noc-btn-primary">
+                <i class="fa-solid fa-rotate" id="syncIcon"></i>
+                Sync Azure Devices
+            </button>
+            <button onclick="showFilteredLive()" class="noc-btn-primary" style="background: #0f2b39;">
+                <i class="fa-solid fa-eye"></i>
+                Show Filtered Live
+            </button>
+        </div>
+
+        <!-- Inventory Table -->
+        <div class="noc-table-wrap" style="overflow-x:auto;">
+            <table class="noc-table">
+                <thead>
+                    <tr>
+                        <th style="width:260px;">Device</th>
+                        <th>OS</th>
+                        <th>Type</th>
+                        <th>Agent</th>
+                        <th>Status</th>
+                        <th>Metrics</th>
+                        <th style="text-align:right; padding-right:20px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryBody">
+
+                    <!-- Agent Systems section header -->
+                    <tr class="section-header">
+                        <td colspan="7" style="color:var(--noc-indigo);">
+                            <i class="fa-solid fa-microchip" style="margin-right:6px;"></i>Agent Systems — Live Data
+                        </td>
+                    </tr>
+
+                    {% for item in inventory if item.type == 'agent' %}
+                    <tr class="inv-row" data-hostname="{{ item.hostname|lower }}" data-agent="installed"
+                        data-server-id="{{ item.id }}" onclick="selectInventoryRow(event, '{{ item.id }}')">
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div
+                                    class="device-icon {% if item.is_hyperv_host %}device-icon-hyperv{% else %}device-icon-agent{% endif %}">
+                                    <i
+                                        class="fa-solid {% if item.is_hyperv_host %}fa-cubes{% else %}fa-server{% endif %}"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; font-size:0.78rem; color:var(--noc-text-primary);">{{
+                                        item.hostname }}</div>
+                                    <div
+                                        style="font-size:0.6rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">
+                                        {{ item.ip }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="color:var(--noc-text-secondary); font-size:0.7rem;">{{ item.os_info }}</td>
+                        <td style="color:var(--noc-text-secondary); font-size:0.7rem;">{{ item.server_type }}</td>
+                        <td>
+                            <span class="noc-badge badge-agent">
+                                <i class="fa-solid fa-check" style="font-size:0.5rem;"></i> v{{ item.agent_version or
+                                '3.0' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% set status = item.status_label %}
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span
+                                    class="pulse-dot {% if status == 'ONLINE' %}pulse-online{% elif status == 'IDLE' %}pulse-idle{% else %}pulse-offline{% endif %}"></span>
+                                <span
+                                    class="noc-badge {% if status == 'ONLINE' %}badge-online{% elif status == 'IDLE' %}badge-idle{% else %}badge-offline{% endif %} inv-status-badge">{{
+                                    status }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if item.is_online and (item.cpu_percent or item.cpu) %}
+                            <div class="mini-bar-wrap">
+                                <div class="mini-bar-row">
+                                    <span class="mini-bar-label">CPU</span>
+                                    <div class="mini-bar-track">
+                                        <div class="mini-bar-fill"
+                                            style="width:{{ (item.cpu or item.cpu_percent)|round(0) }}%; background:var(--noc-indigo);">
+                                        </div>
+                                    </div>
+                                    <span class="mini-bar-val">{{ (item.cpu or item.cpu_percent)|round(1) }}%</span>
+                                </div>
+                                <div class="mini-bar-row">
+                                    <span class="mini-bar-label">RAM</span>
+                                    <div class="mini-bar-track">
+                                        <div class="mini-bar-fill"
+                                            style="width:{{ (item.ram or item.memory_percent)|round(0) }}%; background:var(--noc-emerald);">
+                                        </div>
+                                    </div>
+                                    <span class="mini-bar-val">{{ (item.ram or item.memory_percent)|round(1) }}%</span>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span style="font-size:0.62rem; color:var(--noc-text-muted); font-style:italic;">No
+                                Data</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:right;">
+                            <div style="display:flex; justify-content:flex-end; gap:6px;">
+                                <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=item.id) }}"
+                                    class="noc-btn-console" onclick="event.stopPropagation();">
+                                    <i class="fa-solid fa-terminal"></i> Remote Control
+                                </a>
+                                <button
+                                    onclick="event.stopPropagation(); deleteDevice('{{ item.id }}', '{{ item.hostname }}')"
+                                    class="noc-btn-danger">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    <!-- Azure Devices section header -->
+                    <tr class="section-header">
+                        <td colspan="7" style="color:#38bdf8;">
+                            <i class="fa-solid fa-cloud" style="margin-right:6px;"></i>Azure Devices — Not Monitored
+                        </td>
+                    </tr>
+
+                    {% for item in inventory if item.type == 'azure' %}
+                    <tr class="inv-row" data-hostname="{{ item.hostname|lower }}" data-agent="not_installed"
+                        data-server-id="{{ item.id }}" onclick="selectInventoryRow(event, '{{ item.id }}')">
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div class="device-icon device-icon-azure">
+                                    <i class="fa-solid fa-cloud"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; font-size:0.78rem; color:var(--noc-text-primary);">{{
+                                        item.hostname }}</div>
+                                    <div
+                                        style="font-size:0.6rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">
+                                        Azure: {{ item.azure_device_id[:8] }}...</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="color:var(--noc-text-secondary); font-size:0.7rem;">{{ item.os_info }}</td>
+                        <td style="color:var(--noc-text-secondary); font-size:0.7rem;">Endpoint</td>
+                        <td><span class="noc-badge badge-no-agent"><i class="fa-solid fa-xmark"
+                                    style="font-size:0.5rem;"></i> No Agent</span></td>
+                        <td><span
+                                style="font-size:0.62rem; color:var(--noc-text-muted); font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">NOT
+                                MONITORED</span></td>
+                        <td><span style="font-size:0.62rem; color:var(--noc-text-muted); font-style:italic;">No
+                                Data</span></td>
+                        <td style="text-align:right;">
+                            <button onclick="enableMonitoring('{{ item.id }}', '{{ item.hostname }}')"
+                                class="noc-btn-enable">
+                                Enable Monitoring
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                </tbody>
+            </table>
+
+            {% if not inventory %}
+            <div class="noc-empty">
+                <div class="noc-empty-icon"><i class="fa-solid fa-cloud"></i></div>
+                <h3>No Devices Found</h3>
+                <p>Connect your Azure AD or deploy agents to discover devices in your infrastructure.</p>
+                <button onclick="syncAzureInventory()" class="noc-btn-primary" style="margin-top:20px;">
+                    <i class="fa-solid fa-rotate"></i> Sync from Azure
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- LIVE MONITOR VIEW                                       -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="view-live" class="hidden noc-fadein">
+
+        {% if servers %}
+
+        <!-- Telemetry Header -->
+        <div class="telemetry-header">
+            <div>
+                <div class="noc-title" style="font-size:0.9rem;">
+                    <i class="fa-solid fa-radar" style="color:var(--noc-cyan);"></i>
+                    Global Telemetry Matrix
+                </div>
+                <div class="noc-subtitle" style="margin-top:6px;">Real-time resource streams &amp; predictive AI
+                    analysis</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <select id="historyRange" class="noc-select">
+                    <option value="1h">Last 1 hour</option>
+                    <option value="6h">Last 6 hours</option>
+                    <option value="24h" selected>Last 24 hours</option>
+                    <option value="7d">Last 7 days</option>
+                </select>
+                <button id="applyHistoryBtn" class="noc-btn-primary">
+                    <i class="fa-solid fa-arrows-rotate"></i> Sync Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Selected Server Detail Panel -->
+        <div id="selected-server-panel"
+            style="display:none; margin-bottom:24px; padding:20px; background:var(--noc-surface); border:1px solid var(--noc-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                <div style="flex:1;">
+                    <h3 style="margin:0; font-size:1.1rem; font-weight:600; color:var(--noc-text-primary);"><span
+                            id="selected-server-host">—</span></h3>
+                    <p style="margin:4px 0 0 0; font-size:0.75rem; color:var(--noc-text-secondary);">IP: <span
+                            id="selected-server-ip">—</span></p>
+                </div>
+                <button onclick="clearSelectedServer()"
+                    style="background:transparent; border:1px solid var(--noc-border); color:var(--noc-text-secondary); padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600;">
+                    <i class="fa-solid fa-xmark"></i> Close
+                </button>
+            </div>
+
+            <!-- Quick Metrics Row -->
+            <div
+                style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:16px;">
+                <div
+                    style="background:rgba(129,140,248,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-indigo);">
+                    <div
+                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
+                        CPU</div>
+                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-indigo);" id="sel-cpu">—</div>
+                </div>
+                <div
+                    style="background:rgba(16,185,129,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-emerald);">
+                    <div
+                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
+                        RAM</div>
+                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-emerald);" id="sel-ram">—</div>
+                </div>
+                <div
+                    style="background:rgba(241,165,22,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-amber);">
+                    <div
+                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
+                        Disk</div>
+                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-amber);" id="sel-disk">—</div>
+                </div>
+                <div
+                    style="background:rgba(100,116,139,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-text-secondary);">
+                    <div
+                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
+                        Last Update</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:var(--noc-text-secondary);" id="sel-last">—
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail Chart -->
+            <div style="background:var(--noc-bg); padding:12px; border-radius:4px; border:1px solid var(--noc-border);">
+                <canvas id="selected-chart-canvas" style="max-height:320px;"></canvas>
+            </div>
+        </div>
+
+        <!-- Server Cards Grid -->
+        <div style="display:grid; grid-template-columns:1fr; gap:16px;">
+            {% for server in servers %}
+            <div class="server-card" data-server-id="{{ server.id }}"
+                onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href='{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}'">
+
+                <div class="corner-accent"></div>
+                <div class="corner-accent-v"></div>
+
+                <div style="padding:20px 22px;">
+
+                    <!-- Card Header -->
+                    <div
+                        style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <!-- Server Icon with status ring -->
+                            <div style="position:relative;">
+                                <div
+                                    style="width:48px; height:48px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;
+                {% if server.server_type == 'Host' %}background:rgba(167,139,250,0.1); color:var(--noc-violet); border:1px solid rgba(167,139,250,0.25);
+                {% elif server.monitoring_mode == 'light' %}background:rgba(51,65,85,0.5); color:#64748b; border:1px solid var(--noc-border);
+                {% else %}background:var(--noc-indigo-dim); color:var(--noc-indigo); border:1px solid rgba(129,140,248,0.2);{% endif %}">
+                                    <i
+                                        class="fa-solid {% if server.server_type == 'Host' %}fa-cubes{% elif server.monitoring_mode == 'light' %}fa-laptop{% else %}fa-microchip{% endif %}"></i>
+                                </div>
+                                {% set slabel = server.status_label %}
+                                <div
+                                    style="position:absolute; bottom:-3px; right:-3px; width:14px; height:14px; border-radius:50%; border:2px solid var(--noc-surface); display:flex; align-items:center; justify-content:center;
+                {% if slabel == 'ONLINE' %}background:var(--noc-emerald);{% elif slabel == 'IDLE' %}background:var(--noc-amber);{% else %}background:#334155;{% endif %}">
+                                    {% if slabel == 'ONLINE' %}<div
+                                        style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);animation:noc-pulse 2s infinite;">
+                                    </div>{% endif %}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span
+                                        style="font-size:1rem; font-weight:700; color:var(--noc-text-primary); letter-spacing:0.02em;">{{
+                                        server.hostname }}</span>
+                                    {% if server.server_type == 'Host' %}
+                                    <span class="noc-badge badge-hyperv">Hyper-V</span>
+                                    {% elif server.monitoring_mode == 'light' %}
+                                    <span class="noc-badge badge-light">Light</span>
+                                    {% endif %}
+                                </div>
+                                <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+                                    <i class="fa-solid fa-network-wired"
+                                        style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
+                                    <span
+                                        style="font-size:0.65rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">{{
+                                        server.ip }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+                                class="noc-btn-console" title="Remote Control">
+                                <i class="fa-solid fa-terminal"></i> Remote Control
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row: CPU + RAM -->
+                    <div class="noc-grid-2" style="margin-bottom:14px;">
+                        <!-- CPU Chart -->
+                        <div class="chart-panel">
+                            <div class="chart-header">
+                                <div class="chart-label">
+                                    <i class="fa-solid fa-microchip" style="color:var(--noc-indigo);"></i>
+                                    CPU Utilization
+                                </div>
+                                <span class="chart-value" id="live-cpu-val-{{ server.id }}"
+                                    style="color:var(--noc-indigo);">
+                                    {% if server.cpu_percent %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
+                                </span>
+                            </div>
+                            <div style="height:130px; position:relative;">
+                                <canvas id="chart-cpu-{{ server.id }}"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- RAM Chart -->
+                        <div class="chart-panel">
+                            <div class="chart-header">
+                                <div class="chart-label">
+                                    <i class="fa-solid fa-memory" style="color:var(--noc-emerald);"></i>
+                                    Memory Utilization
+                                </div>
+                                <span class="chart-value" id="live-ram-val-{{ server.id }}"
+                                    style="color:var(--noc-emerald);">
+                                    {% if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
+                                    endif %}
+                                </span>
+                            </div>
+                            <div style="height:130px; position:relative;">
+                                <canvas id="chart-ram-{{ server.id }}"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Row: Disk + KPIs -->
+                    <div class="noc-grid-12" style="margin-bottom:14px; grid-template-columns: 5fr 7fr;">
+                        <!-- Disk -->
+                        <div class="disk-panel">
+                            <div class="disk-donut-wrap">
+                                <canvas id="chart-disk-{{ server.id }}"></canvas>
+                                <div class="disk-donut-label" id="live-disk-val-{{ server.id }}">
+                                    {% if server.disk_percent %}{{ server.disk_percent|round(0) }}%{% else %}—{% endif
+                                    %}
+                                </div>
+                            </div>
+                            <div>
+                                <div
+                                    style="font-size:0.55rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-text-secondary); margin-bottom:4px;">
+                                    Storage</div>
+                                <div style="font-size:0.72rem; font-weight:600; color:var(--noc-text-primary);">Disk
+                                    Utilization</div>
+                                <div style="font-size:0.58rem; color:var(--noc-text-secondary); margin-top:3px;">C:\
+                                    Primary Volume</div>
+                            </div>
+                        </div>
+
+                        <!-- KPIs -->
+                        <div class="kpi-strip">
+                            <div class="kpi-item">
+                                <span class="kpi-value" id="live-vm-count-{{ server.id }}"
+                                    style="color:var(--noc-violet);">{{ server.vms_count }}</span>
+                                <span class="kpi-name">Guests</span>
+                            </div>
+                            <div class="kpi-item">
+                                <span class="kpi-value" id="live-alerts-{{ server.id }}"
+                                    style="color:var(--noc-amber);">0</span>
+                                <span class="kpi-name">Alerts</span>
+                            </div>
+                            <div class="kpi-item" id="productivity-{{ server.id }}">
+                                <span class="kpi-value" id="live-prod-score-{{ server.id }}"
+                                    style="color:var(--noc-cyan);">{{ server.productivity_percent | default(0)
+                                    }}%</span>
+                                <span class="kpi-name">{{ server.productivity_str | default('—') }} Active</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Screenshot Preview -->
+                    {% if server.latest_screenshot_url %}
+                    <div class="screenshot-panel" style="margin-bottom:14px;">
+                        <div class="screenshot-header">
+                            <i class="fa-solid fa-camera"></i> Latest Screen Capture
+                        </div>
+                        <div style="height:80px; overflow:hidden;">
+                            <img src="{{ server.latest_screenshot_url }}"
+                                style="width:100%; height:100%; object-fit:cover; opacity:0.75; transition:opacity 0.2s;"
+                                onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75"
+                                alt="Latest Screenshot">
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- AI Forecast -->
+                    <div class="forecast-panel"
+                        style="margin-bottom:{% if server.vms_count > 0 %}14px{% else %}0{% endif %};">
+                        <div class="forecast-row">
+                            <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
+                                <div class="forecast-icon-wrap"><i class="fa-solid fa-robot"></i></div>
+                                <div style="flex:1;">
+                                    <div
+                                        style="font-size:0.58rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-indigo); margin-bottom:5px;">
+                                        Predictive AI Analysis</div>
+                                    <p id="forecast-recommendation-{{ server.id }}"
+                                        style="font-size:0.68rem; color:var(--noc-text-secondary); line-height:1.6; margin:0; font-weight:500;">
+                                        Synthesizing metrics...</p>
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+                                <span id="forecast-status-{{ server.id }}"
+                                    class="noc-badge badge-agent">Analyzing...</span>
+                                <span style="font-size:0.58rem; color:var(--noc-text-muted); font-weight:500;">Updated:
+                                    <span id="live-last-update-{{ server.id }}"
+                                        style="color:var(--noc-text-secondary);"></span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VM Pulse -->
+                    {% if server.vms_count > 0 %}
+                    <div style="border-top:1px solid var(--noc-border); padding-top:14px;">
+                        <div
+                            style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary); display:flex; align-items:center; gap:6px; margin-bottom:10px;">
+                            <i class="fa-solid fa-server" style="color:var(--noc-violet);"></i> Active Guests
+                        </div>
+                        <div id="vmpulse-{{ server.id }}" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            {% for vm in server.vms %}
+                            <div class="vm-chip">
+                                <span
+                                    class="pulse-dot {% if vm.state|lower == 'running' %}pulse-online{% else %}pulse-offline{% endif %}"></span>
+                                <span>{{ vm.vm_name }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </div><!-- /card padding -->
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+        <!-- Empty State -->
+        <div class="noc-panel" style="padding:0;">
+            <div class="noc-empty">
+                <div class="noc-empty-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+                <h3>No Telemetry Streams</h3>
+                <p>Deploy the monitoring agent to establish a connection. Visit Inventory to enable monitoring on
+                    discovered endpoints.</p>
+                <button onclick="switchTab('inventory')" class="noc-btn-primary" style="margin-top:24px;">
+                    <i class="fa-solid fa-warehouse"></i> Open Inventory
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+    </div><!-- /view-live -->
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- ENABLE MONITORING MODAL                                 -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="installModal" class="noc-modal-backdrop">
+        <div class="noc-modal">
+            <div class="noc-modal-header">
+                <div>
+                    <div class="noc-modal-title" id="modalTitle">Enable Monitoring</div>
+                    <div
+                        style="font-size:0.6rem; color:var(--noc-text-secondary); margin-top:3px; letter-spacing:0.06em; text-transform:uppercase;">
+                        Deploy agent to target endpoint</div>
+                </div>
+                <button onclick="closeInstallModal()" class="noc-close-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="noc-modal-body">
+                <p style="font-size:0.7rem; color:var(--noc-text-secondary); margin-bottom:18px; line-height:1.7;">
+                    Download the installer package or copy the deployment script to run <strong
+                        style="color:var(--noc-text-primary);">as Administrator</strong> on the target machine.
+                </p>
+
+                <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+                    <a href="#" id="downloadInstallerBtn" class="noc-btn-primary"
+                        style="flex:1; justify-content:center; text-decoration:none; min-width:140px;">
+                        <i class="fa-solid fa-file-zipper"></i> Download Installer (.zip)
+                    </a>
+                    <button onclick="copyScript()" class="noc-btn-secondary"
+                        style="flex:1; justify-content:center; min-width:120px;">
+                        <i class="fa-solid fa-copy"></i> Copy Script
+                    </button>
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <div
+                        style="font-size:0.58rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-terminal" style="color:var(--noc-cyan);"></i> Deployment Script Preview
+                    </div>
+                    <pre class="noc-terminal" id="installScript">Loading...</pre>
+                </div>
+
+                <div class="noc-notice">
+                    <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>
+                    <strong>Auto-Detection Enabled:</strong> Once started, the system will automatically register and
+                    show this device online. If using the ZIP, extract all files and run
+                    <strong>RunMeAsAdmin.bat</strong>.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embed Server Data for JS -->
+    <script id="server-data" type="application/json">
+    [
+        {% for server in servers %}
+        {
+            "id": {{ server.id|tojson }},
+            "cpu": {{ server.cpu_percent|float }},
+            "ram": {{ server.memory_percent|float }},
+            "disk": {{ server.disk_percent|float }},
+            "last_seen": {{ (server.last_seen.isoformat() if server.last_seen else '')|tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]
+</script>
+
+    <script>
+        const charts = {};
+        const historyBuffers = {};
+        const MAX_HISTORY = 240;
+        let serverData = [];
+        try {
+            const el = document.getElementById('server-data');
+            serverData = JSON.parse((el && el.textContent) ? el.textContent : '[]');
+        } catch (e) {
+            console.error('Failed to parse server-data JSON:', e);
+            serverData = [];
+        }
+        window.serverData = serverData;
+        let selectedHistoryRange = '24h';
+
+        // Ensure fetch sends session cookies for Flask auth (same-origin)
+        (function () {
+            const _origFetch = window.fetch.bind(window);
+            window.fetch = function (resource, init) {
+                init = init || {};
+                if (!init.credentials) init.credentials = 'same-origin';
+                init.headers = Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, init.headers || {});
+                return _origFetch(resource, init);
+            };
+        })();
+
+        // ═══ EARLY FUNCTION DEFINITIONS (called from HTML inline handlers) ═══
+        function switchTab(tab) {
+            const invView = document.getElementById('view-inventory');
+            const liveView = document.getElementById('view-live');
+            if (invView) invView.classList.add('hidden');
+            if (liveView) liveView.classList.add('hidden');
+
+            ['inventory', 'live'].forEach(t => {
+                const btn = document.getElementById('tab-btn-' + t);
+                if (btn) btn.className = 'noc-tab';
+            });
+
+            const activeView = document.getElementById('view-' + tab);
+            if (activeView) activeView.classList.remove('hidden');
+            const activeBtn = document.getElementById('tab-btn-' + tab);
+            if (activeBtn) activeBtn.className = 'noc-tab active';
+
+            if (tab === 'live') {
+                setTimeout(() => {
+                    if (window.refreshCharts) refreshCharts();
+                    if (window.loadHistoricalDataForAll) loadHistoricalDataForAll();
+                    if (window.refreshForecasts) refreshForecasts();
+                }, 100);
+            }
+        }
+
+        function filterInventory() {
+            const agentFilter = document.getElementById('invFilterAgent');
+            const searchInput = document.getElementById('invSearch');
+            const agentValue = agentFilter ? agentFilter.value : '';
+            const search = searchInput ? (searchInput.value || '').toLowerCase() : '';
+            const rows = document.querySelectorAll('.inv-row');
+
+            rows.forEach(row => {
+                const hostname = row.dataset.hostname || '';
+                const agent = row.dataset.agent || '';
+                const matchSearch = !search || hostname.includes(search);
+                const matchAgent = !agentValue || agent === agentValue;
+                row.style.display = (matchSearch && matchAgent) ? '' : 'none';
+            });
+        }
+
+        function syncAzureInventory() {
+            const btn = document.getElementById('syncBtn');
+            const icon = document.getElementById('syncIcon');
+            if (btn) btn.disabled = true;
+            if (icon) icon.classList.add('fa-spin');
+
+            fetch('/api/v2/inventory/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Synced ${data.synced} devices from Azure AD. Refreshing...`);
+                        setTimeout(() => window.location.reload(), 500);
+                    } else {
+                        alert('Sync failed: ' + (data.error || 'Unknown error'));
+                        if (btn) btn.disabled = false;
+                        if (icon) icon.classList.remove('fa-spin');
+                    }
+                })
+                .catch(err => {
+                    if (icon) icon.classList.remove('fa-spin');
+                    if (btn) btn.disabled = false;
+                    alert('Sync error: ' + err.message);
+                });
+        }
+
+        const formatDateTime = (ts) => {
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        };
+
+        const formatShortTime = (ts) => {
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        };
+
+        // ─── Global Variables for Selection ───
+        let selectedServerId = null;
+        let selectedChart = null;
+
+        // ─── Inventory Selection Functions (Global Scope) ───
+        function selectInventoryRow(evt, serverId) {
+            evt.stopPropagation();
+            document.querySelectorAll('.inv-row').forEach(r => r.classList.remove('selected-row'));
+            const row = evt.currentTarget || evt.target.closest('tr');
+            if (row) row.classList.add('selected-row');
+
+            selectedServerId = serverId;
+
+            const server = window.serverData.find(s => String(s.id) === String(serverId));
+            if (!server) return;
+
+            const panel = document.getElementById('selected-server-panel');
+            if (panel) panel.style.display = '';
+
+            const hostEl = document.getElementById('selected-server-host');
+            if (hostEl) hostEl.innerText = server.hostname || server.host || (`Server ${serverId}`);
+
+            const ipEl = document.getElementById('selected-server-ip');
+            if (ipEl) ipEl.innerText = 'IP: ' + (server.ip || '—');
+
+            const cpuEl = document.getElementById('sel-cpu');
+            if (cpuEl) cpuEl.innerText = (server.cpu || 0).toFixed(1) + '%';
+
+            const ramEl = document.getElementById('sel-ram');
+            if (ramEl) ramEl.innerText = (server.ram || 0).toFixed(1) + '%';
+
+            const diskEl = document.getElementById('sel-disk');
+            if (diskEl) diskEl.innerText = (server.disk || 0).toFixed(1) + '%';
+
+            const lastEl = document.getElementById('sel-last');
+            if (lastEl) lastEl.innerText = formatDateTime(server.last_seen || new Date().toISOString());
+
+            historyBuffers[serverId] = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
+
+            // Initialize selected chart
+            const canvasEl = document.getElementById('selected-chart-canvas');
+            if (canvasEl && !selectedChart) {
+                selectedChart = new Chart(canvasEl, {
+                    type: 'line',
+                    data: {
+                        labels: historyBuffers[serverId].labels,
+                        datasets: [
+                            {
+                                label: 'CPU %',
+                                data: historyBuffers[serverId].liveCpu,
+                                borderColor: '#6366f1',
+                                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                fill: true,
+                                pointRadius: 0,
+                                pointHoverRadius: 4,
+                                pointHoverBackgroundColor: '#6366f1',
+                                pointHoverBorderColor: '#0d1422',
+                                pointHoverBorderWidth: 2
+                            },
+                            {
+                                label: 'RAM %',
+                                data: historyBuffers[serverId].liveRam,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                fill: true,
+                                pointRadius: 0,
+                                pointHoverRadius: 4,
+                                pointHoverBackgroundColor: '#10b981',
+                                pointHoverBorderColor: '#0d1422',
+                                pointHoverBorderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        animation: { duration: 400, easing: 'easeOutQuart' },
+                        interaction: { intersect: false, mode: 'index' },
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { color: '#e2e8f0', font: { size: 12, weight: '700' }, boxWidth: 15, padding: 15 } },
+                            tooltip: {
+                                backgroundColor: '#0d1422',
+                                borderColor: 'rgba(34,211,238,0.2)',
+                                borderWidth: 1,
+                                titleFont: { size: 11, weight: '700' },
+                                bodyFont: { size: 11 },
+                                titleColor: '#64748b',
+                                bodyColor: '#e2e8f0',
+                                padding: 10,
+                                cornerRadius: 3,
+                                displayColors: true,
+                                callbacks: {
+                                    label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                min: 0,
+                                max: 100,
+                                display: true,
+                                grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
+                                ticks: {
+                                    font: { size: 11, weight: '700' },
+                                    color: '#334155',
+                                    stepSize: 25,
+                                    callback: v => v + '%',
+                                    padding: 8
+                                },
+                                border: { display: false }
+                            },
+                            x: {
+                                display: true,
+                                grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
+                                ticks: {
+                                    color: '#334155',
+                                    font: { size: 10, weight: '700' },
+                                    autoSkip: true,
+                                    maxTicksLimit: 8,
+                                    maxRotation: 0
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        function clearSelectedServer() {
+            selectedServerId = null;
+            const panel = document.getElementById('selected-server-panel');
+            if (panel) panel.style.display = 'none';
+            document.querySelectorAll('.inv-row').forEach(r => r.classList.remove('selected-row'));
+            document.querySelectorAll('.server-card').forEach(c => c.removeAttribute('data-selected'));
+        }
+
+        function showFilteredLive() {
+            const rows = Array.from(document.querySelectorAll('.inv-row')).filter(r => r.style.display !== 'none' && r.dataset.agent === 'installed');
+            const ids = rows.map(r => r.dataset.serverId).filter(Boolean);
+            if (!ids.length) {
+                alert('No agent-installed systems match the current filter.');
+                return;
+            }
+
+            if (typeof switchTab !== 'undefined') switchTab('live');
+
+            document.querySelectorAll('.server-card').forEach(c => {
+                c.style.display = ids.includes(c.dataset.serverId) ? '' : 'none';
+                if (ids.includes(c.dataset.serverId)) c.setAttribute('data-selected', 'true');
+                else c.removeAttribute('data-selected');
+            });
+
+            if (typeof startLivePolling !== 'undefined') startLivePolling();
+        }
+
+        let livePollingInterval = null;
+
+        function startLivePolling() {
+            if (livePollingInterval) clearInterval(livePollingInterval);
+            pollLiveMetrics(); // Initial poll
+            livePollingInterval = setInterval(pollLiveMetrics, 5000); // Poll every 5 seconds
+        }
+
+        async function pollLiveMetrics() {
+            const visibleCards = document.querySelectorAll('.server-card:not([style*="display: none"])');
+
+            for (const card of visibleCards) {
+                const serverId = card.dataset.serverId;
+                if (!serverId) continue;
+
+                try {
+                    const res = await fetch(`/api/v2/server/${serverId}/metrics/latest`);
+                    if (!res.ok) continue;
+
+                    const contentType = res.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) continue;
+
+                    const data = await res.json();
+
+                    // Update history buffer
+                    const buf = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
+                    buf.labels.push(new Date().toLocaleTimeString());
+                    buf.liveCpu.push(data.cpu || 0);
+                    buf.liveRam.push(data.ram || 0);
+
+                    // Keep rolling window (max 240 points)
+                    if (buf.labels.length > 240) {
+                        buf.labels.shift();
+                        buf.liveCpu.shift();
+                        buf.liveRam.shift();
+                    }
+
+                    historyBuffers[serverId] = buf;
+
+                    // Update selected chart if this is the selected server
+                    if (selectedServerId === serverId && selectedChart) {
+                        selectedChart.data.labels = buf.labels;
+                        selectedChart.data.datasets[0].data = buf.liveCpu;
+                        selectedChart.data.datasets[1].data = buf.liveRam;
+                        selectedChart.update('none');
+
+                        // Update display elements
+                        const cpuEl = document.getElementById('sel-cpu');
+                        if (cpuEl) cpuEl.innerText = (data.cpu || 0).toFixed(1) + '%';
+
+                        const ramEl = document.getElementById('sel-ram');
+                        if (ramEl) ramEl.innerText = (data.ram || 0).toFixed(1) + '%';
+
+                        const diskEl = document.getElementById('sel-disk');
+                        if (diskEl) diskEl.innerText = (data.disk || 0).toFixed(1) + '%';
+
+                        const lastEl = document.getElementById('sel-last');
+                        if (lastEl) lastEl.innerText = new Date().toLocaleTimeString();
+                    }
+                } catch (err) {
+                    console.error(`Error polling server ${serverId}:`, err);
+                }
+            }
+        }
+
+
+        serverData.forEach(s => {
+            let now = new Date();
+            if (s.last_seen) {
+                now = new Date(s.last_seen + (s.last_seen.includes('+') || s.last_seen.endsWith('Z') ? '' : 'Z'));
+            }
+
+            const lastUpdateEl = document.getElementById('live-last-update-' + s.id);
+            if (lastUpdateEl) {
+                lastUpdateEl.innerText = formatDateTime(now) || 'N/A';
+            }
+
+            historyBuffers[s.id] = {
+                labels: [formatDateTime(now)],
+                liveCpu: [Number(s.cpu || 0)],
+                liveRam: [Number(s.ram || 0)]
+            };
+        });
+
+        function switchTab(tab) {
+            document.getElementById('view-inventory').classList.add('hidden');
+            document.getElementById('view-live').classList.add('hidden');
+
+            // Reset all tab buttons
+            ['inventory', 'live'].forEach(t => {
+                const btn = document.getElementById('tab-btn-' + t);
+                if (btn) {
+                    btn.className = 'noc-tab';
+                }
+            });
+
+            document.getElementById('view-' + tab).classList.remove('hidden');
+            const activeBtn = document.getElementById('tab-btn-' + tab);
+            if (activeBtn) activeBtn.className = 'noc-tab active';
+
+            if (tab === 'live') {
+                refreshCharts();
+                loadHistoricalDataForAll();
+                refreshForecasts();
+            }
+        }
+
+        function filterInventory() {
+            const agentFilter = document.getElementById('invFilterAgent').value;
+            const search = (document.getElementById('invSearch').value || '').toLowerCase();
+            const rows = document.querySelectorAll('.inv-row');
+
+            rows.forEach(row => {
+                const hostname = row.dataset.hostname || '';
+                const agent = row.dataset.agent || '';
+
+                const matchSearch = !search || hostname.includes(search);
+                const matchAgent = !agentFilter || agent === agentFilter;
+
+                row.style.display = (matchSearch && matchAgent) ? '' : 'none';
+            });
+        }
+
+        function syncAzureInventory() {
+            const btn = document.getElementById('syncBtn');
+            const icon = document.getElementById('syncIcon');
+            btn.disabled = true;
+            icon.classList.add('fa-spin');
+
+            fetch('/api/v2/inventory/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`Synced ${data.synced} devices from Azure AD. Refreshing...`);
+                        window.location.reload();
+                    } else {
+                        alert('Sync failed: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(err => alert('Sync error: ' + err.message))
+                .finally(() => {
+                    btn.disabled = false;
+                    icon.classList.remove('fa-spin');
+                });
+        }
+
+        function deleteDevice(serverId, hostname) {
+            if (!confirm(`Are you sure you want to delete the device ${hostname}? This will remove all associated data, metrics, and screenshots.`)) return;
+
+            fetch(`/assets/api/v2/asset/${serverId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Device deleted successfully.');
+                        window.location.reload();
+                    } else {
+                        alert('Failed to delete device: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(err => alert('Error: ' + err.message));
+        }
+
+        function enableMonitoring(serverId, hostname) {
+            document.getElementById('modalTitle').textContent = 'Enable Monitoring: ' + hostname;
+            document.getElementById('installScript').textContent = 'Generating install script...';
+            document.getElementById('downloadInstallerBtn').href = '#';
+            document.getElementById('installModal').classList.add('active');
+
+            fetch(`/api/v2/server/${serverId}/enable-monitoring`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('installScript').textContent = data.install_script;
+                        document.getElementById('downloadInstallerBtn').href = data.download_url || '#';
+                    } else {
+                        document.getElementById('installScript').textContent = 'Error: ' + (data.error || 'Failed to generate script');
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('installScript').textContent = 'Error: ' + err.message;
+                });
+        }
+
+        function closeInstallModal() {
+            document.getElementById('installModal').classList.remove('active');
+        }
+
+        function copyScript() {
+            const script = document.getElementById('installScript').textContent;
+            navigator.clipboard.writeText(script).then(() => {
+                alert('Install script copied to clipboard!');
+            });
+        }
+
+        // ── Real-Time Line Chart Factory ── (NOC dark theme)
+        function createLineChart(canvasId, liveColor, liveDataArray, labelsArray, liveLabel) {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; cannot render line chart');
+                return null;
+            }
+            const el = document.getElementById(canvasId);
+            if (!el) return null;
+            const ctx = el.getContext('2d');
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 130);
+            gradient.addColorStop(0, liveColor + '30');
+            gradient.addColorStop(1, liveColor + '03');
+
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsArray,
+                    datasets: [
+                        {
+                            label: liveLabel,
+                            data: liveDataArray,
+                            borderColor: liveColor,
+                            backgroundColor: gradient,
+                            borderWidth: 1.5,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHoverBackgroundColor: liveColor,
+                            pointHoverBorderColor: '#0d1422',
+                            pointHoverBorderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 400, easing: 'easeOutQuart' },
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
+                            ticks: {
+                                font: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                                color: '#334155',
+                                stepSize: 25,
+                                callback: v => v + '%',
+                                padding: 6
+                            },
+                            border: { display: false }
+                        },
+                        x: {
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
+                            ticks: {
+                                color: '#334155',
+                                font: { size: 8, weight: '700', family: "'JetBrains Mono', monospace" },
+                                autoSkip: true,
+                                maxTicksLimit: 8,
+                                maxRotation: 0,
+                                callback: function (value, index) {
+                                    const raw = this.getLabelForValue(value) || '';
+                                    if (!raw) return '';
+                                    const parts = raw.split(', ');
+                                    if (parts.length >= 2) {
+                                        const datePart = parts[0].substring(0, 5);
+                                        const timePart = parts[1].replace(/:00 /, ' ');
+                                        return datePart + ' ' + timePart;
+                                    }
+                                    return raw;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0d1422',
+                            borderColor: 'rgba(34,211,238,0.2)',
+                            borderWidth: 1,
+                            titleFont: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                            bodyFont: { size: 10, family: "'JetBrains Mono', monospace" },
+                            titleColor: '#64748b',
+                            bodyColor: '#e2e8f0',
+                            padding: 10,
+                            cornerRadius: 3,
+                            displayColors: false,
+                            callbacks: {
+                                title: items => {
+                                    const lbl = items?.[0]?.label || '';
+                                    return lbl ? lbl + ' IST' : '';
+                                },
+                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── Disk Doughnut (NOC dark) ──
+        function createDiskDoughnut(canvasId, val) {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; cannot render doughnut chart');
+                return null;
+            }
+            const el = document.getElementById(canvasId);
+            if (!el) return null;
+            const ctx = el.getContext('2d');
+
+            const color = val > 90 ? '#fb7185' : val > 70 ? '#fbbf24' : '#22d3ee';
+            return new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [val, 100 - val],
+                        backgroundColor: [color, 'rgba(51,65,85,0.3)'],
+                        borderWidth: 0,
+                        borderRadius: 3,
+                        cutout: '80%'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 800 },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                }
+            });
+        }
+
+        function refreshCharts() {
+            Object.values(charts).forEach(chart => {
+                if (chart && typeof chart.resize === 'function') chart.resize();
+            });
+        }
+
+        function initChartsForServer(serverId) {
+            const server = serverData.find(s => s.id === serverId);
+            if (!server) return;
+
+            let buf = historyBuffers[serverId];
+            if (!buf) {
+                buf = { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
+                historyBuffers[serverId] = buf;
+            }
+
+            if (!charts['cpu-' + serverId]) {
+                charts['cpu-' + serverId] = createLineChart('chart-cpu-' + serverId, '#818cf8', buf.liveCpu, buf.labels, 'CPU Live');
+            }
+            if (!charts['ram-' + serverId]) {
+                charts['ram-' + serverId] = createLineChart('chart-ram-' + serverId, '#34d399', buf.liveRam, buf.labels, 'RAM Live');
+            }
+            if (!charts['disk-' + serverId]) {
+                charts['disk-' + serverId] = createDiskDoughnut('chart-disk-' + serverId, server.disk);
+            }
+        }
+
+        async function deleteSystem(serverId, hostname) {
+            if (!serverId) return;
+            const confirmed = confirm(`Delete ${hostname} and all linked agent data? This cannot be undone.`);
+            if (!confirmed) return;
+            try {
+                const res = await fetch(`/api/v2/server/${serverId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Delete failed');
+                }
+                window.location.reload();
+            } catch (e) {
+                alert(`Delete failed: ${e.message || e}`);
+            }
+        }
+
+        function handleDeleteSystemClick(btn) {
+            if (!btn) return;
+            const serverId = Number(btn.dataset.serverId || 0);
+            const hostname = btn.dataset.hostname || 'system';
+            deleteSystem(serverId, hostname);
+        }
+
+        function handleEnableMonitoringClick(btn) {
+            if (!btn) return;
+            const serverId = Number(btn.dataset.serverId || 0);
+            const hostname = btn.dataset.hostname || 'system';
+            enableMonitoring(serverId, hostname);
+        }
+
+        async function loadHistoricalData(serverId, rangeVal) {
+            let limit = 240;
+            if (rangeVal === '1h') limit = 360;
+            else if (rangeVal === '6h') limit = 2160;
+            else if (rangeVal === '24h') limit = 8640;
+            else if (rangeVal === '7d') limit = 60480;
+
+            const endpoint = `/api/v2/metrics/history?server_id=${serverId}&range=${encodeURIComponent(rangeVal)}&limit=${limit}`;
+            const res = await fetch(endpoint);
+            if (!res.ok) throw new Error(`history_${serverId}_${res.status}`);
+            const rows = await res.json();
+            if (!Array.isArray(rows) || rows.length === 0) return;
+
+            const targetPoints = 300;
+            const step = Math.ceil(rows.length / targetPoints);
+            const sampledRows = rows.filter((_, i) => i % step === 0);
+
+            const labels = [];
+            const cpu = [];
+            const ram = [];
+            for (const row of sampledRows) {
+                labels.push(formatDateTime(row.timestamp));
+                cpu.push(Number(row.cpu_util_percent || 0));
+                ram.push(Number(row.ram_util_percent || 0));
+            }
+
+            historyBuffers[serverId] = {
+                labels,
+                liveCpu: [...cpu],
+                liveRam: [...ram]
+            };
+
+            const cpuChart = charts['cpu-' + serverId];
+            const ramChart = charts['ram-' + serverId];
+            if (cpuChart) {
+                cpuChart.data.labels = labels;
+                cpuChart.data.datasets[0].data = [...cpu];
+                cpuChart.update('none');
+            }
+            if (ramChart) {
+                ramChart.data.labels = labels;
+                ramChart.data.datasets[0].data = [...ram];
+                ramChart.update('none');
+            }
+        }
+
+        async function loadHistoricalDataForAll() {
+            const initializedCards = document.querySelectorAll('.server-card[data-initialized="true"]');
+            for (let card of initializedCards) {
+                const serverId = Number(card.dataset.serverId);
+                loadHistoricalData(serverId, selectedHistoryRange).catch(() => null);
+            }
+        }
+
+        async function loadForecast(serverId) {
+            const statusEl = document.getElementById('forecast-status-' + serverId);
+            const recommendationEl = document.getElementById('forecast-recommendation-' + serverId);
+            if (!statusEl || !recommendationEl) return;
+
+            statusEl.textContent = 'Analyzing...';
+            statusEl.className = 'noc-badge badge-agent';
+            recommendationEl.textContent = 'Calculating linear trend from historical metrics...';
+
+            try {
+                const res = await fetch(`/api/v2/server/${serverId}/forecast`);
+                if (!res.ok) throw new Error(`forecast_${res.status}`);
+                const data = await res.json();
+                if (!data.success) {
+                    statusEl.textContent = 'Need More Data';
+                    statusEl.className = 'noc-badge badge-idle';
+                    recommendationEl.textContent = data.message || 'Insufficient historical data for forecasting.';
+                    return;
+                }
+
+                const cpuTrend = (data.cpu?.trend || 'unknown').toUpperCase();
+                const ramTrend = (data.ram?.trend || 'unknown').toUpperCase();
+                statusEl.textContent = `CPU ${cpuTrend} / RAM ${ramTrend}`;
+                statusEl.className = 'noc-badge badge-agent';
+                recommendationEl.textContent = data.recommendation || 'Trend available.';
+            } catch {
+                statusEl.textContent = 'Unavailable';
+                statusEl.className = 'noc-badge badge-offline';
+                recommendationEl.textContent = 'Forecast API unavailable right now.';
+            }
+        }
+
+        async function refreshForecasts() {
+            const initializedCards = document.querySelectorAll('.server-card[data-initialized="true"]');
+            for (let card of initializedCards) {
+                const serverId = Number(card.dataset.serverId);
+                loadForecast(serverId).catch(() => null);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Attach event listeners for filter controls
+            const filterAgentEl = document.getElementById('invFilterAgent');
+            const filterSearchEl = document.getElementById('invSearch');
+
+            if (filterAgentEl) {
+                filterAgentEl.addEventListener('change', filterInventory);
+            }
+            if (filterSearchEl) {
+                filterSearchEl.addEventListener('input', filterInventory);
+            }
+
+            const historyRangeEl = document.getElementById('historyRange');
+            const applyHistoryBtn = document.getElementById('applyHistoryBtn');
+
+            if (historyRangeEl) {
+                selectedHistoryRange = historyRangeEl.value || '24h';
+                historyRangeEl.addEventListener('change', () => {
+                    selectedHistoryRange = historyRangeEl.value || '24h';
+                });
+            }
+
+            if (applyHistoryBtn) {
+                applyHistoryBtn.addEventListener('click', () => {
+                    loadHistoricalDataForAll();
+                    refreshForecasts();
+                });
+            }
+
+            async function loadAlertsForServer(serverId) {
+                try {
+                    const res = await fetch(`/api/v2/server/${serverId}/alerts`);
+                    if (!res.ok) throw new Error(`${res.status}`);
+                    const data = await res.json();
+                    const alertsEl = document.getElementById('live-alerts-' + serverId);
+                    if (alertsEl && data.success) {
+                        alertsEl.innerText = data.alert_count || 0;
+                    }
+                } catch (err) {
+                    // Silently fail
+                }
+            }
+
+            const socket = io();
+            socket.emit('join', {});
+
+            socket.on('metrics_update', (data) => {
+                const sid = data.server_id;
+                const now = formatDateTime(data.timestamp || new Date().toISOString());
+
+                const cpuEl = document.getElementById('live-cpu-val-' + sid);
+                const ramEl = document.getElementById('live-ram-val-' + sid);
+                const diskEl = document.getElementById('live-disk-val-' + sid);
+                const lastUpdateEl = document.getElementById('live-last-update-' + sid);
+
+                if (cpuEl) cpuEl.innerText = parseFloat(data.metrics.cpu).toFixed(1) + '%';
+                if (ramEl) ramEl.innerText = parseFloat(data.metrics.ram).toFixed(1) + '%';
+                if (diskEl) diskEl.innerText = parseFloat(data.metrics.disk).toFixed(1) + '%';
+                if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
+
+                let buf = historyBuffers[sid];
+                if (!buf) {
+                    buf = {
+                        labels: [],
+                        liveCpu: [],
+                        liveRam: [],
+                        baselineCpu: [],
+                        baselineRam: [],
+                        baselinePatternCpu: [],
+                        baselinePatternRam: []
+                    };
+                    historyBuffers[sid] = buf;
+                }
+
+                buf.labels.push(now);
+                buf.liveCpu.push(parseFloat(data.metrics.cpu) || 0);
+                buf.liveRam.push(parseFloat(data.metrics.ram) || 0);
+                const cpuPattern = buf.baselinePatternCpu?.length ? buf.baselinePatternCpu : [parseFloat(data.metrics.cpu) || 0];
+                const ramPattern = buf.baselinePatternRam?.length ? buf.baselinePatternRam : [parseFloat(data.metrics.ram) || 0];
+                buf.baselineCpu.push(cpuPattern[(buf.liveCpu.length - 1) % cpuPattern.length]);
+                buf.baselineRam.push(ramPattern[(buf.liveRam.length - 1) % ramPattern.length]);
+
+                if (buf.labels.length > MAX_HISTORY) {
+                    buf.labels.shift();
+                    buf.liveCpu.shift();
+                    buf.liveRam.shift();
+                    buf.baselineCpu.shift();
+                    buf.baselineRam.shift();
+                }
+
+                if (charts['cpu-' + sid]) {
+                    charts['cpu-' + sid].data.labels = buf.labels;
+                    charts['cpu-' + sid].data.datasets[0].data = buf.liveCpu;
+                    charts['cpu-' + sid].update('none');
+                }
+                if (charts['ram-' + sid]) {
+                    charts['ram-' + sid].data.labels = buf.labels;
+                    charts['ram-' + sid].data.datasets[0].data = buf.liveRam;
+                    charts['ram-' + sid].update('none');
+                }
+
+                if (charts['disk-' + sid]) {
+                    const diskVal = parseFloat(data.metrics.disk) || 0;
+                    const diskColor = diskVal > 90 ? '#fb7185' : diskVal > 70 ? '#fbbf24' : '#22d3ee';
+                    charts['disk-' + sid].data.datasets[0].data = [diskVal, 100 - diskVal];
+                    charts['disk-' + sid].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
+                    charts['disk-' + sid].update('none');
+                }
+
+                if (data.vms && data.vms.length > 0) {
+                    const vmCountEl = document.getElementById('live-vm-count-' + sid);
+                    if (vmCountEl) vmCountEl.innerText = data.vms.length;
+
+                    const pulseEl = document.getElementById('vmpulse-' + sid);
+                    if (pulseEl) {
+                        pulseEl.innerHTML = data.vms.map(vm => {
+                            const isRunning = (vm.state || '').toLowerCase() === 'running';
+                            return `<div class="vm-chip">
+                            <span class="pulse-dot ${isRunning ? 'pulse-online' : 'pulse-offline'}"></span>
+                            <span>${vm.name}</span>
+                        </div>`;
+                        }).join('');
+                    }
+                }
+
+                loadAlertsForServer(sid).catch(() => null);
+
+                if (data.activity) {
+                    const prodEl = document.getElementById('live-prod-score-' + sid);
+                    if (prodEl) {
+                        const idle = parseInt(data.activity.idle || 0);
+                        const app = data.activity.app || '';
+                        if (idle > 300) {
+                            prodEl.innerText = 'IDLE';
+                            prodEl.style.color = 'var(--noc-amber)';
+                        } else if (app) {
+                            const appLower = app.toLowerCase();
+                            const productive = ['excel', 'word', 'outlook', 'teams', 'slack', 'vscode', 'powershell', 'chrome', 'edge', 'terminal', 'code'];
+                            const unproductive = ['netflix', 'youtube', 'facebook', 'instagram', 'spotify', 'steam', 'game', 'tiktok', 'twitter'];
+                            let cat = 'neutral';
+                            if (productive.some(p => appLower.includes(p))) cat = 'productive';
+                            else if (unproductive.some(u => appLower.includes(u))) cat = 'unproductive';
+
+                            if (cat === 'productive') {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-emerald)';
+                            } else if (cat === 'unproductive') {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-rose)';
+                            } else {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-text-secondary)';
+                            }
+                        }
+                    }
+                }
+
+                if (data.status) {
+                    const invRows = document.querySelectorAll(`.inv-row[data-hostname]`);
+                    invRows.forEach(row => {
+                        const link = row.querySelector(`a[href*="/${sid}"]`);
+                        if (!link) return;
+                        const statusSpan = row.querySelector('.inv-status-badge');
+                        if (statusSpan) statusSpan.textContent = data.status;
+                    });
+                }
+            });
+
+            // ── Wait for Chart.js (loaded with defer) before initializing charts ──
+            // Chart.js uses `defer` in base.html so it may not be ready when
+            // DOMContentLoaded fires. Poll every 100ms until it appears (max 4s).
+            function initChartsWhenReady(serverId, retries) {
+                retries = retries === undefined ? 0 : retries;
+                if (typeof Chart !== 'undefined') {
+                    initChartsForServer(serverId);
+                } else if (retries < 40) {
+                    setTimeout(function () { initChartsWhenReady(serverId, retries + 1); }, 100);
+                } else {
+                    console.warn('Chart.js did not load in time for server', serverId);
+                }
+            }
+
+            // ── Lazy Loading Intersection Observer ──
+            const cardObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const card = entry.target;
+                        const serverId = Number(card.dataset.serverId);
+                        if (!card.dataset.initialized && serverId) {
+                            card.dataset.initialized = 'true';
+                            initChartsWhenReady(serverId);
+                            loadAlertsForServer(serverId).catch(() => null);
+                            loadHistoricalData(serverId, selectedHistoryRange).catch(() => null);
+                            loadForecast(serverId).catch(() => null);
+                        }
+                    }
+                });
+            }, { rootMargin: '400px' });
+
+            document.querySelectorAll('.server-card').forEach(card => cardObserver.observe(card));
+        });
+    </script>
+
+</div><!-- /noc-page -->
+{% endblock %}

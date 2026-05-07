@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Configure Azure - {{ tenant.name }}{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div>
+        <div class="flex items-center gap-3 mb-2">
+            <a href="{{ url_for('tenants.list_tenants') }}" class="text-slate-400 hover:text-indigo-600 transition-colors tooltip" title="Back to Tenants">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <h2 class="text-3xl font-bold text-slate-900 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+                Azure Configuration
+            </h2>
+        </div>
+        <p class="text-slate-500 text-sm ml-7">Configure Microsoft Entra ID for <span class="font-bold text-indigo-600">{{ tenant.name }}</span></p>
+    </div>
+</div>
+
+<div class="max-w-2xl">
+    <form method="POST" class="space-y-6">
+        
+        <!-- App Registration Details Card -->
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-6 md:p-8 relative overflow-hidden group">
+            <div class="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 absolute top-0 left-0 right-0"></div>
+
+            <h3 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+                <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <i class="fa-brands fa-microsoft"></i>
+                </div>
+                App Registration Details
+            </h3>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Azure Tenant ID</label>
+                    <input type="text" name="azure_tenant_id" value="{{ tenant.azure_tenant_id or '' }}"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Client ID</label>
+                    <input type="text" name="azure_client_id" value="{{ tenant.azure_client_id or '' }}"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        placeholder="Application (client) ID">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Client Secret</label>
+                    <input type="password" name="azure_client_secret" value="{{ tenant.azure_client_secret or '' }}"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        placeholder="••••••••••••••••••••">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Polling Interval (Minutes)</label>
+                    <input type="number" name="polling_interval_minutes" value="{{ tenant.polling_interval_minutes or 60 }}"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        placeholder="60">
+                    <p class="text-[0.65rem] text-slate-500 mt-1.5"><i class="fa-solid fa-info-circle mr-1"></i>Frequency of central infrastructure health checks.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SharePoint Configuration Card -->
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-6 md:p-8 relative overflow-hidden group">
+            <h3 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+                <div class="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
+                    <i class="fa-solid fa-cloud"></i>
+                </div>
+                SharePoint Configuration
+            </h3>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">SharePoint Site URL</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-link text-slate-400"></i>
+                        </div>
+                        <input type="text" name="sharepoint_site_url" id="spSiteUrl" value="{{ tenant.sharepoint_site_url or '' }}"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium"
+                            placeholder="https://yourtenant.sharepoint.com/sites/YourSite">
+                    </div>
+                </div>
+
+                <div class="mt-4 p-5 border border-slate-100 rounded-2xl bg-slate-50 shadow-sm">
+                    <div class="flex items-center justify-between mb-5 border-b border-slate-200 pb-5">
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-900">Automated Cloud Archiving</h4>
+                            <p class="text-xs font-medium text-slate-500 mt-1">Automatically sync metrics, logs, and snapshots</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sharepoint_auto_sync" class="sr-only peer" {% if tenant.sharepoint_auto_sync %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-slate-300 outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                    </div>
+
+                    <div class="mb-5">
+                        <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Sync Interval (Minutes)</label>
+                        <input type="number" name="sharepoint_sync_interval_minutes" value="{{ tenant.sharepoint_sync_interval_minutes or 60 }}"
+                            class="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium">
+                    </div>
+                    
+                    <div class="mb-5 bg-slate-100 rounded-xl p-3 border border-slate-200">
+                        <h5 class="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Sync History
+                        </h5>
+                        <ul class="text-xs font-medium text-slate-600 space-y-1">
+                            {% if tenant.last_sharepoint_sync_timestamp %}
+                                <li class="flex justify-between items-center">
+                                    <span>Latest Sync</span>
+                                    <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">{{ tenant.last_sharepoint_sync_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+                                </li>
+                            {% else %}
+                                <li class="text-slate-400 italic">No syncs completed yet</li>
+                            {% endif %}
+                            
+                            {% if tenant.previous_sharepoint_sync_timestamp %}
+                                <li class="flex justify-between items-center mt-2 border-t border-slate-200 pt-1">
+                                    <span>Previous Sync</span>
+                                    <span class="text-slate-500">{{ tenant.previous_sharepoint_sync_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="button" onclick="triggerManualSync()" id="manualSyncBtn"
+                            class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up text-teal-500"></i>
+                            <span id="syncBtnText">Start Manual Sync Now</span>
+                        </button>
+                        
+                        <!-- Progress Section (Hidden by default) -->
+                        <div id="syncProgressContainer" class="hidden mt-4">
+                            <div class="flex justify-between text-xs font-bold text-slate-600 mb-2">
+                                <span id="syncStatusText">Syncing to SharePoint...</span>
+                                <span id="syncPercentText">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-2">
+                                <div id="syncProgressBar" class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            
+                            <!-- Success Details -->
+                            <p id="syncDetails" class="text-[11px] text-slate-500 mt-2 font-mono hidden"></p>
+                            
+                            <!-- Error Alert -->
+                            <div id="syncErrorBox" class="hidden mt-3 p-3 bg-rose-50 border border-rose-100 rounded-lg flex items-start gap-2 text-rose-600">
+                                <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+                                <div>
+                                    <h5 class="text-xs font-bold">Sync Error</h5>
+                                    <p id="syncErrorMessage" class="text-xs mt-1 leading-relaxed"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+        async function triggerManualSync() {
+            const btn = document.getElementById('manualSyncBtn');
+            const container = document.getElementById('syncProgressContainer');
+            const bar = document.getElementById('syncProgressBar');
+            const status = document.getElementById('syncStatusText');
+            const percent = document.getElementById('syncPercentText');
+            const details = document.getElementById('syncDetails');
+            const errorBox = document.getElementById('syncErrorBox');
+            const errorMessage = document.getElementById('syncErrorMessage');
+            
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            container.classList.remove('hidden');
+            errorBox.classList.add('hidden');
+            details.classList.remove('hidden');
+            
+            // Reset colors
+            errorBox.classList.remove('bg-yellow-50', 'border-yellow-200', 'text-yellow-700');
+            errorBox.classList.add('bg-rose-50', 'border-rose-100', 'text-rose-600');
+            
+            bar.classList.remove('bg-rose-500', 'bg-yellow-500');
+            bar.classList.add('bg-teal-500');
+            status.classList.remove('text-rose-600', 'text-emerald-600', 'text-yellow-600');
+            status.classList.add('text-slate-600');
+            
+            bar.style.width = '10%';
+            percent.textContent = '10%';
+            details.textContent = 'Authenticating with Microsoft Graph...';
+            
+            try {
+                // Simulate progress updates while fetch runs
+                let progress = 10;
+                const interval = setInterval(() => {
+                    if (progress < 90) {
+                        progress += Math.floor(Math.random() * 15);
+                        if (progress > 90) progress = 90;
+                        bar.style.width = progress + '%';
+                        percent.textContent = progress + '%';
+                        
+                        const msgs = ['Uploading metrics...', 'Syncing logs...', 'Updating device snapshots...', 'Processing employees...'];
+                        details.textContent = msgs[Math.floor(Math.random() * msgs.length)];
+                    }
+                }, 800);
+                
+                const response = await fetch("{{ url_for('asset_mgmt.manual_sharepoint_sync') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tenant_id: {{ tenant.id }} })
+                });
+                
+                clearInterval(interval);
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    bar.style.width = '100%';
+                    percent.textContent = '100%';
+                    details.textContent = `Synced: ${data.metrics} metrics, ${data.activity} activity logs, ${data.screenshots} screenshots, ${data.logs} system logs, ${data.vms} VMs, ${data.employees} employees.`;
+                    
+                    if (data.error) {
+                        status.textContent = 'Sync Completed With Warnings';
+                        status.classList.replace('text-slate-600', 'text-yellow-600');
+                        bar.classList.replace('bg-teal-500', 'bg-yellow-500');
+                        errorBox.classList.remove('hidden');
+                        errorBox.classList.replace('bg-rose-50', 'bg-yellow-50');
+                        errorBox.classList.replace('border-rose-100', 'border-yellow-200');
+                        errorBox.classList.replace('text-rose-600', 'text-yellow-700');
+                        errorMessage.textContent = "Some data types failed to sync: " + data.error;
+                    } else {
+                        status.textContent = 'Sync Completed Successfully!';
+                        status.classList.replace('text-slate-600', 'text-emerald-600');
+                    }
+                } else {
+                    bar.classList.replace('bg-teal-500', 'bg-rose-500');
+                    status.textContent = 'Sync Failed';
+                    status.classList.replace('text-slate-600', 'text-rose-600');
+                    details.classList.add('hidden');
+                    errorBox.classList.remove('hidden');
+                    errorMessage.textContent = data.error || 'An unknown error occurred during sync.';
+                }
+            } catch (err) {
+                bar.classList.replace('bg-teal-500', 'bg-rose-500');
+                status.textContent = 'Connection Error';
+                status.classList.replace('text-slate-600', 'text-rose-600');
+                details.classList.add('hidden');
+                errorBox.classList.remove('hidden');
+                errorMessage.textContent = err.message || 'Could not connect to the server.';
+            } finally {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }, 3000);
+            }
+        }
+        </script>
+
+        <button type="submit"
+            class="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01]">
+            <i class="fa-solid fa-floppy-disk"></i> Save Configuration
+        </button>
+    </form>
+</div>
+{% endblock %}

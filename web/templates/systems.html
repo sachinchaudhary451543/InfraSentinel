@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Systems - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <h2 class="font-display text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">Infrastructure Inventory</h2>
+        <p class="text-slate-500 text-sm mt-1">Physical servers, Hyper-V hosts, and monitored endpoints</p>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+        <div class="relative">
+            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="text" id="searchInput" placeholder="Search systems..."
+                class="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 w-56 transition-all shadow-sm">
+        </div>
+        <select id="statusFilter"
+            class="bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all shadow-sm">
+            <option value="">All Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+        </select>
+        <select id="osFilter"
+            class="bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all shadow-sm">
+            <option value="">All OS</option>
+            <option value="windows">Windows</option>
+            <option value="linux">Linux</option>
+        </select>
+        <span class="text-[0.65rem] text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+            <span id="systemCount">{{ servers|length }}</span> total
+        </span>
+    </div>
+</div>
+
+{% if servers %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" id="systemsGrid">
+    {% for server in servers %}
+    {% set diff = (now - server.last_seen).total_seconds() if server.last_seen and now is defined else 999 %}
+    {% set status = 'online' if server.last_seen and diff < 90 else ('offline' if server.last_seen
+        else 'unknown' ) %} {% set os_type='windows' if server.os_info and 'windows' in server.os_info|lower else
+        ('linux' if server.os_info and 'linux' in server.os_info|lower else ('macos' if server.os_info and 'mac' in
+        server.os_info|lower else 'unknown' )) %}    <div
+        class="glass-card animate-fade-up system-card cursor-pointer hover:border-indigo-500/40 group border-slate-200 shadow-sm"
+        onclick="window.location.href='{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}'" data-hostname="{{ server.hostname|lower }}"
+        data-ip="{{ server.ip|lower if server.ip else '' }}" data-status="{{ status }}" data-os="{{ os_type }}">
+        <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center transition-colors group-hover:bg-indigo-600/10">
+                    <i class="fa-solid fa-display text-indigo-600"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-semibold text-slate-900">{{ server.hostname }}</h3>
+                        {% if server.is_hyperv_host %}
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-bold border border-indigo-100 uppercase tracking-tighter">Host</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-slate-500 font-mono">{{ server.ip or 'No IP' }}</p>
+                </div>
+            </div>
+            {% if status == 'online' %}
+            <span class="badge badge-online"><span class="pulse-dot green"></span>Online</span>
+            {% elif status == 'offline' %}
+            <span class="badge badge-offline"><span class="pulse-dot red"></span>Offline</span>
+            {% else %}
+            <span class="badge badge-unknown"><span class="pulse-dot gray"></span>Unknown</span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                <p class="text-[0.6rem] text-slate-400 uppercase tracking-wider font-semibold">OS</p>
+                <p class="text-xs text-slate-700 mt-0.5 truncate">{{ server.os_info or 'Unknown' }}</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                <p class="text-[0.6rem] text-slate-400 uppercase tracking-wider font-semibold">{% if server.is_hyperv_host %}Guest Inventory{% else %}Workload{% endif %}</p>
+                <p class="text-xs text-slate-700 mt-0.5 font-bold">
+                    {{ server.vm_count or 0 }} Guest VMs
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[0.65rem] text-slate-500 mb-4 px-1">
+            <span>Last Seen: {% if server.last_seen %}{{ server.last_seen.strftime('%m/%d %H:%M') }}{% else %}Never{% endif %}</span>
+        </div>
+
+        {% if server.recent_user_logins %}
+        <div class="border-t border-slate-100 pt-3">
+            <p class="text-[0.6rem] text-slate-400 uppercase tracking-wider font-semibold mb-2">Recent Users</p>
+            <div class="flex flex-wrap gap-1.5">
+                {% for login in server.recent_user_logins[:3] %}
+                <span
+                    class="text-[0.65rem] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    {{ login.email.split('@')[0] }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="glass-card text-center py-20 animate-fade-up border-slate-200">
+    <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-50 flex items-center justify-center">
+        <i class="fa-solid fa-server text-3xl text-slate-300"></i>
+    </div>
+    <h3 class="text-lg font-semibold text-slate-900 mb-2" style="font-family:'Outfit',sans-serif">No systems registered</h3>
+    <p class="text-slate-500 text-sm max-w-md mx-auto">Deploy the ServerMonitor agent on your servers to start
+        monitoring. Systems will automatically appear here once they begin reporting metrics.</p>
+</div>
+{% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Debounce utility to reduce INP impact
+        function debounce(fn, delay = 150) {
+            let timeoutId;
+            return function (...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => fn(...args), delay);
+            };
+        }
+
+        const search = document.getElementById('searchInput');
+        const grid = document.getElementById('systemsGrid');
+
+        function filterAndSort() {
+            const q = (search?.value || '').toLowerCase();
+            const status = (statusFilter?.value || '').toLowerCase();
+            const os = (osFilter?.value || '').toLowerCase();
+            const cards = document.querySelectorAll('.system-card');
+
+            const visibleCards = [];
+
+            cards.forEach(card => {
+                const h = card.dataset.hostname || '';
+                const ip = card.dataset.ip || '';
+                const cardStatus = card.dataset.status || '';
+                const cardOs = card.dataset.os || '';
+
+                const searchMatch = !q || h.includes(q) || ip.includes(q);
+                const statusMatch = !status || cardStatus === status;
+                const osMatch = !os || cardOs.includes(os);
+
+                if (searchMatch && statusMatch && osMatch) {
+                    card.style.display = '';
+                    visibleCards.push({ card, status: cardStatus });
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Sort: online systems first
+            visibleCards.sort((a, b) => {
+                const aOnline = a.status === 'online' ? 0 : 1;
+                const bOnline = b.status === 'online' ? 0 : 1;
+                return aOnline - bOnline;
+            });
+
+            // Update DOM order
+            visibleCards.forEach(({ card }) => grid.appendChild(card));
+
+            // Update count
+            const countEl = document.getElementById('systemCount');
+            if (countEl) countEl.textContent = visibleCards.length;
+        }
+
+        const debouncedFilter = debounce(filterAndSort, 150);
+        if (search) search.addEventListener('input', debouncedFilter);
+        
+        const statusSelect = document.getElementById('statusFilter');
+        const osSelect = document.getElementById('osFilter');
+        if (statusSelect) statusSelect.addEventListener('change', filterAndSort);
+        if (osSelect) osSelect.addEventListener('change', filterAndSort);
+
+        // Initial sort: online systems on top
+        filterAndSort();
+    });
+</script>
+{% endblock %}

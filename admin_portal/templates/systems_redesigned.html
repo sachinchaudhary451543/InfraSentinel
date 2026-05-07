@@ -1,0 +1,139 @@
+{% extends 'base_redesigned.html' %}
+
+{% block page_title %}Systems{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Systems Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Managed Systems</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Monitor and manage all connected systems</p>
+        </div>
+        <a href="{{ url_for('discovery.discover_domain') }}"
+            class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 font-medium flex items-center space-x-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <span>Add System</span>
+        </a>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="flex flex-col md:flex-row gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg">
+        <input type="search" placeholder="Search systems..."
+            class="flex-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary">
+
+        <select
+            class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary">
+            <option value="">All Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="error">Error</option>
+        </select>
+
+        <select
+            class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary">
+            <option value="">Sort By</option>
+            <option value="name">Name</option>
+            <option value="status">Status</option>
+            <option value="cpu">CPU Usage</option>
+            <option value="memory">Memory Usage</option>
+        </select>
+    </div>
+
+    <!-- Systems Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for system in systems | default([]) %}
+        <div
+            class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg p-6 transition-all cursor-pointer group">
+            <a href="{{ url_for('systems.system_detail', system_id=system.id) if system.id else '#' }}" class="block">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary">{{
+                            system.hostname }}</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ system.ip_address }}</p>
+                    </div>
+                    <span
+                        class="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span>Online</span>
+                    </span>
+                </div>
+
+                <!-- Metrics Mini Chart -->
+                <div class="space-y-3 mb-4">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600 dark:text-gray-400">CPU</span>
+                            <span class="font-medium text-gray-900 dark:text-white">{{ system.cpu_usage | default(0)
+                                }}%</span>
+                        </div>
+                        <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full transition-all"
+                                style="width: {{ system.cpu_usage | default(0) }}%"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600 dark:text-gray-400">Memory</span>
+                            <span class="font-medium text-gray-900 dark:text-white">{{ system.memory_usage | default(0)
+                                }}%</span>
+                        </div>
+                        <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-purple-500 h-2 rounded-full transition-all"
+                                style="width: {{ system.memory_usage | default(0) }}%"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-600 dark:text-gray-400">Disk</span>
+                            <span class="font-medium text-gray-900 dark:text-white">{{ system.disk_usage | default(0)
+                                }}%</span>
+                        </div>
+                        <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-amber-500 h-2 rounded-full transition-all"
+                                style="width: {{ system.disk_usage | default(0) }}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Info -->
+                <div class="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between text-sm">
+                    <span class="text-gray-600 dark:text-gray-400">Last Update: <span class="font-medium">{{
+                            system.last_update | default('Just now') }}</span></span>
+                    <svg class="w-5 h-5 text-gray-400 group-hover:text-primary translate-x-0 group-hover:translate-x-1 transition-all"
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+
+        {% if not systems or systems|length == 0 %}
+        <div class="col-span-full bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+            <svg class="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z">
+                </path>
+            </svg>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Systems Found</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-6">Start by adding your first system or discovering systems on
+                your domain.</p>
+            <a href="{{ url_for('discovery.discover_domain') }}"
+                class="inline-flex items-center space-x-2 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 font-medium">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                <span>Discover Systems</span>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

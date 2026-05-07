@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Tenants - ServerMonitor{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div>
+        <h2 class="text-3xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">
+            <i class="fa-solid fa-city text-indigo-500 mr-2"></i>Tenant Management
+        </h2>
+        <p class="text-slate-500 text-sm mt-1">Manage multi-tenant organizations, Azure integrations, and device
+            monitoring</p>
+    </div>
+    <a href="{{ url_for('tenants.add_tenant') }}"
+        class="flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.02]">
+        <i class="fa-solid fa-plus"></i>
+        <span>Add Tenant</span>
+    </a>
+</div>
+
+{% if tenants_data %}
+
+<!-- Summary Stats Bar -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Organizations</span>
+            <i class="fa-solid fa-building text-indigo-300"></i>
+        </div>
+        <div class="text-3xl font-black text-slate-900">{{ tenants_data|length }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Total Devices</span>
+            <i class="fa-solid fa-server text-violet-300"></i>
+        </div>
+        <div class="text-3xl font-black text-violet-600">{{ tenants_data|sum(attribute='total_devices') }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Agents Active</span>
+            <i class="fa-solid fa-microchip text-emerald-300"></i>
+        </div>
+        <div class="text-3xl font-black text-emerald-600">{{ tenants_data|sum(attribute='agent_installed') }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Online Now</span>
+            <i class="fa-solid fa-signal text-sky-300"></i>
+        </div>
+        <div class="text-3xl font-black text-sky-600">{{ tenants_data|sum(attribute='online_now') }}</div>
+    </div>
+</div>
+
+<!-- Tenant Cards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+    {% for item in tenants_data %}
+    <div
+        class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_40px_rgba(99,102,241,0.1)] transition-all duration-300 overflow-hidden group relative">
+
+        <!-- Gradient accent top bar -->
+        <div class="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
+
+        <!-- Background glow -->
+        <div
+            class="absolute -right-16 -top-16 w-48 h-48 bg-gradient-to-br from-indigo-100 to-violet-100 rounded-full blur-3xl opacity-0 group-hover:opacity-60 transition-opacity duration-500">
+        </div>
+
+        <div class="p-6 relative z-10">
+            <!-- Header -->
+            <div class="flex items-start gap-4 mb-6">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white transform group-hover:rotate-3 group-hover:scale-105 transition-transform duration-300">
+                    <i class="fa-solid fa-city text-2xl"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-xl font-bold text-slate-900 truncate" style="font-family:'Outfit',sans-serif">{{
+                        item.tenant.name }}</h3>
+                    <div class="flex items-center gap-3 mt-1.5">
+                        <span class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 font-mono">ID: {{
+                            item.tenant.id }}</span>
+                        {% if item.tenant.azure_display_name %}
+                        <span
+                            class="text-[0.6rem] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold border border-indigo-100">{{
+                            item.tenant.azure_display_name }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Stats Grid -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                    <div class="text-2xl font-black text-slate-900">{{ item.total_devices }}</div>
+                    <div class="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Devices</div>
+                </div>
+                <div class="bg-emerald-50 rounded-xl p-3 text-center border border-emerald-100">
+                    <div class="text-2xl font-black text-emerald-600">{{ item.agent_installed }}</div>
+                    <div class="text-[0.6rem] font-bold text-emerald-500 uppercase tracking-wider mt-0.5">Agents</div>
+                </div>
+                <div class="bg-sky-50 rounded-xl p-3 text-center border border-sky-100">
+                    <div class="text-2xl font-black text-sky-600">{{ item.online_now }}</div>
+                    <div class="text-[0.6rem] font-bold text-sky-500 uppercase tracking-wider mt-0.5">Online</div>
+                </div>
+            </div>
+
+            <!-- Integrations -->
+            <div class="space-y-2.5 mb-6">
+                <!-- Azure AD -->
+                <div
+                    class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 border border-slate-100 hover:bg-white transition-colors">
+                    <div class="flex items-center gap-2.5">
+                        <div
+                            class="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 text-xs">
+                            <i class="fa-brands fa-microsoft"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-slate-700">Azure AD</span>
+                    </div>
+                    {% if item.tenant.azure_registered %}
+                    <span
+                        class="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[0.65rem] font-bold rounded-full border border-emerald-100 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Connected
+                    </span>
+                    {% else %}
+                    <span
+                        class="px-2.5 py-1 bg-slate-100 text-slate-500 text-[0.65rem] font-bold rounded-full border border-slate-200">Not
+                        Connected</span>
+                    {% endif %}
+                </div>
+
+                <!-- SharePoint -->
+                <div
+                    class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 border border-slate-100 hover:bg-white transition-colors">
+                    <div class="flex items-center gap-2.5">
+                        <div
+                            class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center text-teal-600 text-xs">
+                            <i class="fa-solid fa-cloud"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-slate-700">SharePoint</span>
+                    </div>
+                    {% if item.tenant.sharepoint_connected %}
+                    <span
+                        class="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[0.65rem] font-bold rounded-full border border-emerald-100 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
+                    </span>
+                    {% else %}
+                    <span
+                        class="px-2.5 py-1 bg-slate-100 text-slate-500 text-[0.65rem] font-bold rounded-full border border-slate-200">Inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Last Activity -->
+            <div class="flex items-center justify-between text-[0.65rem] text-slate-400 mb-5 px-1">
+                <span class="flex items-center gap-1.5">
+                    <i class="fa-regular fa-clock"></i>
+                    Last Activity:
+                    {% if item.last_activity %}
+                    <span class="font-bold text-slate-600 font-mono last-activity-ts"
+                        data-ts="{{ item.last_activity.isoformat() }}">{{ item.last_activity.strftime('%d/%m/%Y %H:%M')
+                        }}</span>
+                    {% else %}
+                    <span class="text-slate-400">No data yet</span>
+                    {% endif %}
+                </span>
+                {% if item.tenant.polling_interval_minutes %}
+                <span class="flex items-center gap-1"><i class="fa-solid fa-rotate"></i> Every {{
+                    item.tenant.polling_interval_minutes }}m</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Action Footer -->
+        <div class="px-6 pb-6 pt-0 relative z-10">
+            <div class="flex gap-2">
+                <a href="{{ url_for('tenants.manage_tenant_azure', tenant_id=item.tenant.id) }}"
+                    class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all shadow-md shadow-indigo-500/15 hover:shadow-lg hover:-translate-y-0.5">
+                    <i class="fa-solid fa-sliders"></i> Configure
+                </a>
+                <a href="{{ url_for('main.dashboard') }}"
+                    class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all border border-slate-200 hover:border-slate-300"
+                    title="View Dashboard">
+                    <i class="fa-solid fa-chart-line"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<!-- Empty State -->
+<div class="bg-white rounded-3xl border border-slate-100 shadow-sm text-center py-24 px-8">
+    <div
+        class="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-indigo-50 to-violet-50 flex items-center justify-center border border-indigo-100 shadow-inner">
+        <i class="fa-solid fa-city text-4xl text-indigo-300"></i>
+    </div>
+    <h3 class="text-2xl font-bold text-slate-900 mb-3" style="font-family:'Outfit',sans-serif">No tenants configured
+    </h3>
+    <p class="text-slate-500 text-sm max-w-md mx-auto mb-8 leading-relaxed">Create your first tenant to start managing
+        multi-tenant infrastructure, Azure integrations, and device monitoring across your organization.</p>
+    <a href="{{ url_for('tenants.add_tenant') }}"
+        class="inline-flex items-center gap-2 px-8 py-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+        <i class="fa-solid fa-plus"></i> Create First Tenant
+    </a>
+</div>
+{% endif %}
+
+<script>
+    // Convert last-activity timestamps to local timezone
+    document.querySelectorAll('.last-activity-ts').forEach(el => {
+        const ts = el.dataset.ts;
+        if (ts) {
+            const d = new Date(ts + (ts.includes('+') || ts.endsWith('Z') ? '' : 'Z'));
+            if (!isNaN(d.getTime())) {
+                el.textContent = d.toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', hour12: true
+                });
+            }
+        }
+    });
+</script>
+{% endblock %}

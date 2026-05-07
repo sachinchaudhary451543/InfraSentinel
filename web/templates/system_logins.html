@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}{{ server.hostname }} - Logins{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <div class="flex items-center gap-3 mb-2">
+            <a href="{{ url_for('systems.system_details', system_id=server.id) }}" class="text-slate-500 hover:text-indigo-400 transition-colors">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <h2 class="font-display text-2xl font-bold text-white" style="font-family:'Outfit',sans-serif">System Logins</h2>
+        </div>
+        <p class="text-slate-500 text-sm">Login history for <span class="text-indigo-400 font-medium">{{ server.hostname }}</span></p>
+    </div>
+    <span class="text-[0.65rem] text-slate-500 bg-white/5 px-3 py-2 rounded-xl border border-white/5">
+        {{ logins|length }} login(s)
+    </span>
+</div>
+
+<div class="glass-card animate-fade-up">
+    {% if logins %}
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Employee ID</th>
+                    <th>Device Type</th>
+                    <th>IP Address</th>
+                    <th>Login Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for login in logins %}
+                <tr>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[0.6rem] font-bold">
+                                {{ login.employee_email[0]|upper }}
+                            </div>
+                            <span class="font-medium text-white text-xs">{{ login.employee_email }}</span>
+                        </div>
+                    </td>
+                    <td>{{ login.employee_id or '-' }}</td>
+                    <td><span class="text-xs px-2 py-1 rounded-md bg-white/5 text-slate-400">{{ login.device_type or 'unknown' }}</span></td>
+                    <td>{{ login.ip_address or 'Unknown' }}</td>
+                    <td class="text-xs text-slate-500 local-time" data-timestamp="{{ login.login_timestamp.isoformat() if login.login_timestamp else '' }}">
+                        {% if login.login_timestamp %}{{ login.login_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}N/A{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-16">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white/5 flex items-center justify-center">
+            <i class="fa-solid fa-clock-rotate-left text-2xl text-slate-600"></i>
+        </div>
+        <p class="text-slate-500 text-sm">No login records for this system</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.local-time').forEach(el => {
+            const ts = el.dataset.timestamp;
+            if (ts) {
+                const date = new Date(ts);
+                el.innerText = date.toLocaleString();
+            }
+        });
+    });
+</script>
+{% endblock %}

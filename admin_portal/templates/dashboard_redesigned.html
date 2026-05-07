@@ -1,0 +1,284 @@
+{% extends 'base_redesigned.html' %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- System Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Total Systems -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-primary">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Total Systems</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2 fade-in">{{ system_count |
+                        default(0) }}</p>
+                </div>
+                <div class="p-3 bg-primary/10 rounded-lg">
+                    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-xs text-green-600 dark:text-green-400 mt-4">
+                <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd"
+                        d="M12 7a1 1 0 110-2h.01a1 1 0 110 2H12zm-2 2a1 1 0 11-2 0 1 1 0 012 0zm-2-6a1 1 0 11-2 0 1 1 0 012 0z"
+                        clip-rule="evenodd"></path>
+                </svg>
+                {{ online_count | default(0) }} online
+            </p>
+        </div>
+
+        <!-- Active Agents -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-green-500">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Active Agents</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2 fade-in">{{ agent_count | default(0)
+                        }}</p>
+                </div>
+                <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 000 4m0 2v2m0-6h.01M9 20h6a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-xs text-green-600 dark:text-green-400 mt-4">Connected and communicating</p>
+        </div>
+
+        <!-- Pending Commands -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-amber-500">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Pending Commands</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2 fade-in">{{ pending_commands |
+                        default(0) }}</p>
+                </div>
+                <div class="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-xs text-amber-600 dark:text-amber-400 mt-4">Waiting for execution</p>
+        </div>
+
+        <!-- System Health -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-blue-500">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">System Health</p>
+                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2 fade-in">
+                        {{ health_score | default(0) }}%
+                    </p>
+                </div>
+                <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div class="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full"
+                    style="width: {{ health_score | default(0) }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics and Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- CPU & Memory Metrics -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Resource Usage</h3>
+            <canvas id="metricsChart" height="80"></canvas>
+            <script>
+                const ctx = document.getElementById('metricsChart');
+                if (ctx) {
+                    new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['CPU', 'Memory', 'Disk'],
+                            datasets: [{
+                                data: [{{ cpu_usage | default(0)
+                            }}, {{ memory_usage | default(0) }}, { { disk_usage | default (0) } }],
+                backgroundColor: ['#3B82F6', '#8B5CF6', '#EC4899'],
+                    borderColor: ['#1E40AF', '#5B21B6', '#831843'],
+                        borderWidth: 2
+                            }]
+                        },
+                options: {
+                    responsive: true,
+                        maintainAspectRatio: false,
+                            plugins: {
+                        legend: {
+                            position: 'bottom',
+                                labels: {
+                                usePointStyle: true,
+                                    padding: 20,
+                                        font: { size: 12 }
+                            }
+                        }
+                    }
+                }
+                    });
+                }
+            </script>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h3>
+            <div class="space-y-3 max-h-64 overflow-y-auto">
+                {% for activity in recent_activities | default([]) %}
+                <div class="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <div class="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ activity.description }}
+                        </p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ activity.timestamp | default('Just now')
+                            }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not recent_activities or recent_activities|length == 0 %}
+                <p class="text-center text-gray-500 dark:text-gray-400 text-sm py-4">No recent activity</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Systems Status Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">System Status</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            System</th>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Status</th>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            CPU</th>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Memory</th>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Disk</th>
+                        <th
+                            class="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for system in systems | default([]) %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{{ system.hostname }}
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            <span class="inline-flex items-center space-x-1">
+                                <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                                <span class="text-green-600 dark:text-green-400">Online</span>
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full"
+                                        style="width: {{ system.cpu_usage | default(0) }}%"></div>
+                                </div>
+                                <span>{{ system.cpu_usage | default(0) }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div class="bg-purple-500 h-2 rounded-full"
+                                        style="width: {{ system.memory_usage | default(0) }}%"></div>
+                                </div>
+                                <span>{{ system.memory_usage | default(0) }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div class="bg-amber-500 h-2 rounded-full"
+                                        style="width: {{ system.disk_usage | default(0) }}%"></div>
+                                </div>
+                                <span>{{ system.disk_usage | default(0) }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            <a href="{{ url_for('systems.system_detail', system_id=system.id) if system.id else '#' }}"
+                                class="text-primary hover:text-primary/80 font-medium">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if not systems or systems|length == 0 %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <p class="mb-2">No systems registered yet</p>
+                            <a href="{{ url_for('systems.list_agents') if 'systems' in url_for('index') else '#' }}"
+                                class="text-primary hover:underline text-sm">Register a system</a>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <a href="{{ url_for('systems.execute_command') if 'execute_command' in url_for('index') else '#' }}"
+            class="bg-gradient-to-br from-primary to-primary/80 text-white rounded-lg shadow p-6 hover:shadow-lg text-center">
+            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <h4 class="font-semibold mb-1">Execute Command</h4>
+            <p class="text-sm text-white/80">Run commands on agents</p>
+        </a>
+
+        <a href="{{ url_for('agents.list_agents') if 'list_agents' in url_for('index') else '#' }}"
+            class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow p-6 hover:shadow-lg text-center">
+            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 000 4m0 2v2m0-6h.01M9 20h6a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z">
+                </path>
+            </svg>
+            <h4 class="font-semibold mb-1">Manage Agents</h4>
+            <p class="text-sm text-white/80">View agent status</p>
+        </a>
+
+        <a href="{{ url_for('systems.list_agents') if 'list_agents' in url_for('index') else '#' }}"
+            class="bg-gradient-to-br from-secondary to-secondary/80 text-white rounded-lg shadow p-6 hover:shadow-lg text-center">
+            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                </path>
+            </svg>
+            <h4 class="font-semibold mb-1">View Metrics</h4>
+            <p class="text-sm text-white/80">Monitor performance</p>
+        </a>
+    </div>
+</div>
+
+{% endblock %}

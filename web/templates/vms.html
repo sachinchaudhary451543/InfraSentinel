@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Virtual Machines - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <h2 class="font-display text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">Virtual Machines</h2>
+        <p class="text-slate-500 text-sm mt-1">Inventory of VMs managed by your registered hosts</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <span class="text-[0.65rem] text-slate-500 bg-slate-100 px-3 py-2 rounded-xl border border-slate-200">
+            <span id="vmCount">{{ vms|length }}</span> total VMs
+        </span>
+    </div>
+</div>
+
+{% if vms %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+    {% for vm in vms %}
+    <div class="glass-card animate-fade-up">
+        <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-layer-group text-violet-600"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-900">{{ vm.vm_name }}</h3>
+                    <p class="text-[0.65rem] text-slate-500">Host: {{ vm.host_server.hostname if vm.host_server else 'Unknown' }}</p>
+                </div>
+            </div>
+            <span class="badge {% if vm.state|lower == 'running' %}badge-online{% else %}badge-offline{% endif %}">
+                {{ vm.state or 'Unknown' }}
+            </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                <p class="text-[0.6rem] text-slate-400 uppercase tracking-wider font-semibold">CPU Usage</p>
+                <p class="text-xs text-slate-700 mt-0.5">{{ vm.cpu_usage }}%</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                <p class="text-[0.6rem] text-slate-400 uppercase tracking-wider font-semibold">Memory</p>
+                <p class="text-xs text-slate-700 mt-0.5">{{ (vm.memory_assigned / 1024)|round(1) if vm.memory_assigned else 0 }} GB</p>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[0.65rem] text-slate-500 border-t border-slate-100 pt-3">
+            <span>Uptime: {{ vm.uptime or 'N/A' }}</span>
+            <span class="truncate ml-2" title="{{ vm.path }}">Path: .../{{ vm.path.split('\\')[-1] if vm.path else 'N/A' }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="glass-card text-center py-20 animate-fade-up">
+    <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-50 flex items-center justify-center">
+        <i class="fa-solid fa-box-open text-3xl text-slate-300"></i>
+    </div>
+    <h3 class="text-lg font-semibold text-slate-800 mb-2" style="font-family:'Outfit',sans-serif">No Virtual Machines Found</h3>
+    <p class="text-slate-500 text-sm max-w-md mx-auto">Virtual machines will appear here once as host server (with the ServerMonitor agent) reports its VM inventory.</p>
+</div>
+{% endif %}
+{% endblock %}

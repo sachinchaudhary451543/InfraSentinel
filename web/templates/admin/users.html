@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Users - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div>
+        <h2 class="text-3xl font-bold text-slate-900 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+            <i class="fa-solid fa-users-gear text-indigo-500"></i>Manage Users
+        </h2>
+        <p class="text-slate-500 text-sm mt-1">Platform user accounts and access control</p>
+    </div>
+</div>
+
+<div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] overflow-hidden mb-8">
+    <div class="p-6 border-b border-slate-100 bg-slate-50/50">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-user-plus text-indigo-500"></i> Create New User
+        </h3>
+    </div>
+    <div class="p-6">
+        <form method="POST" action="{{ url_for('admin.admin_create_user') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Username</label>
+                <input type="text" name="username" placeholder="johndoe" required
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Password</label>
+                <input type="password" name="password" placeholder="••••••••" required
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Tenant Assignment</label>
+                <select name="tenant_id"
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium appearance-none">
+                    <option value="" disabled selected>Select Tenant</option>
+                    {% for t in tenants %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button type="submit"
+                    class="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.02]">
+                    <i class="fa-solid fa-plus"></i> Add User
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] overflow-hidden">
+    {% if users %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead>
+                <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest">
+                    <th class="py-4 px-6">User Identity</th>
+                    <th class="py-4 px-6">Assigned Tenant</th>
+                    <th class="py-4 px-6">System Role</th>
+                    <th class="py-4 px-6">Created On</th>
+                    <th class="py-4 px-6 text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+                {% for u in users %}
+                <tr class="hover:bg-slate-50/50 transition-colors group">
+                    <td class="py-4 px-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm border border-indigo-100/50">
+                                {{ u.username[0]|upper }}
+                            </div>
+                            <div class="font-bold text-slate-900 text-base" style="font-family:'Outfit',sans-serif">{{ u.username }}</div>
+                        </div>
+                    </td>
+                    <td class="py-4 px-6">
+                        {% if u.tenant %}
+                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <i class="fa-solid fa-building text-slate-400"></i>
+                            {{ u.tenant.name }}
+                        </div>
+                        {% else %}
+                        <span class="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">Global / Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-4 px-6">
+                        {% if u.is_superadmin %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100">
+                            <i class="fa-solid fa-crown"></i> Super Admin
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            <i class="fa-solid fa-user-shield"></i> Tenant Admin
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="py-4 px-6 text-xs font-medium text-slate-500">
+                        {% if u.created_at %}
+                        <div class="flex items-center gap-1.5">
+                            <i class="fa-regular fa-calendar text-slate-400"></i>
+                            {{ u.created_at.strftime('%Y-%m-%d') }}
+                        </div>
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                    <td class="py-4 px-6 text-right">
+                        {% if not u.is_superadmin %}
+                        <form method="POST" action="{{ url_for('admin.admin_delete_user', user_id=u.id) }}"
+                            class="inline opacity-0 group-hover:opacity-100 transition-opacity" onsubmit="return confirm('Are you sure you want to permanently delete user {{ u.username }}?')">
+                            <button type="submit" class="w-8 h-8 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors tooltip" title="Delete User">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-20">
+        <div class="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4 border border-slate-100">
+            <i class="fa-solid fa-users text-2xl text-slate-300"></i>
+        </div>
+        <h3 class="text-slate-900 font-bold mb-1">No Users Found</h3>
+        <p class="text-slate-500 text-sm">Create a user to grant access to the platform.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

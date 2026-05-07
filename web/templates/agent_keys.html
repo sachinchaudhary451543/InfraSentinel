@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Keys - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div>
+        <h2 class="text-3xl font-bold text-slate-900 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+            <i class="fa-solid fa-key text-indigo-500"></i>Agent Keys
+        </h2>
+        <p class="text-slate-500 text-sm mt-1">Manage API keys for server agent authentication</p>
+    </div>
+    <form method="POST" action="{{ url_for('agents.list_keys') }}">
+        <button type="submit"
+            class="flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.02]">
+            <i class="fa-solid fa-plus"></i>
+            <span>Generate Key</span>
+        </button>
+    </form>
+</div>
+
+<div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] overflow-hidden">
+    {% if keys %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead>
+                <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest">
+                    <th class="py-4 px-6">Key</th>
+                    <th class="py-4 px-6">Description</th>
+                    <th class="py-4 px-6">Tenant</th>
+                    <th class="py-4 px-6">Status</th>
+                    <th class="py-4 px-6">Created</th>
+                    <th class="py-4 px-6 text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+                {% for key in keys %}
+                <tr class="hover:bg-slate-50/50 transition-colors group">
+                    <td class="py-4 px-6">
+                        <div class="flex items-center gap-2">
+                            <code class="text-xs bg-slate-50 px-2 py-1 rounded-md text-emerald-600 border border-emerald-100/50 font-mono font-bold">{{ key.key[:16] }}...</code>
+                            <button onclick="navigator.clipboard.writeText('{{ key.key }}')"
+                                class="text-slate-400 hover:text-indigo-600 transition-colors w-6 h-6 flex items-center justify-center rounded-md hover:bg-indigo-50 tooltip" title="Copy to clipboard">
+                                <i class="fa-solid fa-copy text-xs"></i>
+                            </button>
+                        </div>
+                    </td>
+                    <td class="py-4 px-6 text-slate-700 font-medium">{{ key.description or 'No description' }}</td>
+                    <td class="py-4 px-6">
+                        <span class="text-xs font-bold px-2 py-1 rounded-md bg-slate-50 text-slate-500 border border-slate-200">
+                            {{ key.tenant_id }}
+                        </span>
+                    </td>
+                    <td class="py-4 px-6">
+                        {% if key.is_active %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.65rem] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.65rem] font-bold bg-slate-50 text-slate-500 border border-slate-200">
+                            Disabled
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="py-4 px-6 text-xs font-bold text-slate-400">
+                        {% if key.created_at %}
+                        <div class="flex items-center gap-1.5">
+                            <i class="fa-regular fa-calendar"></i>
+                            {{ key.created_at.strftime('%Y-%m-%d') }}
+                        </div>
+                        {% else %}N/A{% endif %}
+                    </td>
+                    <td class="py-4 px-6 text-right">
+                        <a href="{{ url_for('agents.deactivate_key', key_id=key.id) }}"
+                            onclick="return confirm('Deactivate this key?')"
+                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100 tooltip" title="Deactivate Key">
+                            <i class="fa-solid fa-power-off"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-20">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+            <i class="fa-solid fa-key text-2xl text-slate-300"></i>
+        </div>
+        <h3 class="text-slate-900 font-bold mb-1">No agent keys created yet</h3>
+        <p class="text-slate-500 text-sm">Generate a key to deploy monitoring agents</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

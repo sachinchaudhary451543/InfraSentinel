@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage Users</h2>
+    <table class="table table-bordered table-striped mt-3">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Tenant</th>
+                <th>Superadmin</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.tenant_id }}</td>
+                <td>{{ 'Yes' if user.is_superadmin else 'No' }}</td>
+                <td>
+                    <a href="{{ url_for('users.edit_user', user_id=user.id) }}" class="btn btn-sm btn-warning">Edit</a>
+                    <form action="{{ url_for('users.delete_user', user_id=user.id) }}" method="post"
+                        style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-danger"
+                            onclick="return confirm('Are you sure you want to delete this user?');">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="{{ url_for('users.add_user') }}" class="btn btn-primary">Add User</a>
+</div>
+{% endblock %}

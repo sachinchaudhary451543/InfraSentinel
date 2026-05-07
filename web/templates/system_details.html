@@ -1,0 +1,1117 @@
+{% extends "base.html" %}
+
+{% block title %}System Details - {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-6 animate-fade-up">
+    <div class="flex items-center gap-3 mb-2">
+        <a href="{{ url_for('systems.list_systems') }}" class="text-slate-400 hover:text-indigo-600 transition-colors">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h2 class="font-display text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">{{
+            server.hostname }}</h2>
+    </div>
+    <p class="text-slate-600 text-sm font-medium">
+        <span id="server-ip" class="bg-slate-100 px-2 py-0.5 rounded">IP: {{ server.ip or 'N/A' }}</span>
+        <span class="mx-2 text-slate-300">|</span>
+        <span id="server-os" class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">OS: {{ server.os_info or 'Unknown'
+            }}</span>
+        <span class="mx-2 text-slate-300">|</span>
+        <span id="server-status">Status: <span class="badge badge-unknown">Unknown</span></span>
+    </p>
+</div>
+
+<!-- Metric Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="metric-card bg-white border border-slate-200 shadow-sm animate-fade-up">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+                <i class="fa-solid fa-microchip text-blue-600"></i>
+            </div>
+            <div>
+                <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider">CPU Usage</p>
+                <p class="text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif" id="cpu-value">
+                    {{ (latest_metrics.cpu_util_percent|round(1)) if latest_metrics else '--' }}%
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="metric-card bg-white border border-slate-200 shadow-sm animate-fade-up">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <i class="fa-solid fa-memory text-emerald-600"></i>
+            </div>
+            <div>
+                <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider">RAM Usage</p>
+                <p class="text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif" id="ram-value">
+                    {{ (latest_metrics.ram_util_percent|round(1)) if latest_metrics else '--' }}%
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="metric-card bg-white border border-slate-200 shadow-sm animate-fade-up">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-violet-50 flex items-center justify-center">
+                <i class="fa-solid fa-hard-drive text-violet-600"></i>
+            </div>
+            <div>
+                <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider">Disk Usage</p>
+                <p class="text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif" id="disk-value">
+                    {{ (latest_metrics.ssd_util_percent|round(1)) if latest_metrics else '--' }}%
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="metric-card bg-white border border-slate-200 shadow-sm animate-fade-up">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+                <i class="fa-solid fa-signal text-amber-600"></i>
+            </div>
+            <div>
+                <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider">Agent Status</p>
+                <div id="agent-status">
+                    <span class="badge badge-unknown"><i class="fa-solid fa-circle text-[6px] mr-1"></i>Waiting</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+    <div class="glass-card shadow-sm border-slate-200 animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-indigo-500"></i> CPU Timeline
+            </h3>
+            <div class="flex items-center gap-2">
+                <select id="timeRangeSelector" onchange="changeTimeRange()"
+                    class="text-[0.65rem] font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none text-slate-600 focus:ring-1 focus:ring-indigo-500">
+                    <option value="live">Live (Real-time)</option>
+                    <option value="1h">Last 1 Hour</option>
+                    <option value="6h">Last 6 Hours</option>
+                    <option value="12h">Last 12 Hours</option>
+                    <option value="24h">Last 24 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                </select>
+            </div>
+        </div>
+        <div style="position:relative; width:100%; height:280px;">
+            <canvas id="detailsCpuChart"></canvas>
+        </div>
+    </div>
+    <div class="glass-card shadow-sm border-slate-200 animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-chart-area text-emerald-500"></i> RAM Timeline
+            </h3>
+            <span class="text-[0.6rem] text-slate-400 font-bold uppercase tracking-widest"
+                id="last-update-time">Syncing...</span>
+        </div>
+        <div style="position:relative; width:100%; height:280px;">
+            <canvas id="detailsRamChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Guest VMs Section -->
+<div class="glass-card mb-8 border-slate-200 shadow-sm animate-fade-up bg-white">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+                <i class="fa-solid fa-layer-group text-violet-600"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-900">Hyper-V Guest Workload</h3>
+                <p class="text-xs text-slate-500">Real-time status of virtual machines on this host</p>
+            </div>
+        </div>
+        <div id="vm-count-badge"
+            class="px-3 py-1 bg-violet-50 text-violet-600 text-xs font-bold rounded-lg border border-violet-100">
+            Scanning...
+        </div>
+    </div>
+
+    <div id="vm-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% if vms %}
+        {% for vm in vms %}
+        <div
+            class="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all group">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <i
+                        class="fa-solid fa-desktop text-[0.6rem] {{ 'text-emerald-500' if vm.state == 'Running' else 'text-slate-400' }}"></i>
+                    <span class="text-xs font-bold text-slate-900 truncate max-w-[120px]">{{ vm.vm_name }}</span>
+                </div>
+                <span
+                    class="text-[0.6rem] font-black px-2 py-0.5 rounded-md {{ 'bg-emerald-500/10 text-emerald-600' if vm.state == 'Running' else 'bg-slate-200 text-slate-500' }} uppercase tracking-tight">
+                    {{ vm.state }}
+                </span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="text-[0.65rem] text-slate-500 font-medium">Syncing via Agent</div>
+                <div
+                    class="w-1.5 h-1.5 rounded-full {{ 'bg-emerald-500 animate-pulse' if vm.state == 'Running' else 'bg-slate-300' }}">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="col-span-full py-8 text-center text-slate-400 text-xs font-medium">
+            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Waiting for agent data...
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- AI Health Forecasting -->
+<div class="glass-card mb-8 border-slate-200 shadow-sm animate-fade-up bg-white overflow-hidden relative">
+    <div class="absolute top-0 right-0 p-4 opacity-5">
+        <i class="fa-solid fa-brain-circuit text-8xl text-indigo-600"></i>
+    </div>
+    <div class="flex items-center gap-3 mb-6">
+        <div
+            class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <div>
+            <h3 class="text-sm font-bold text-slate-900">AI Health Forecasting</h3>
+            <p class="text-xs text-slate-500">Predictive analytics for proactive failure prevention</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider mb-2">Predicted Critical Point
+            </p>
+            <div id="forecast-critical-time" class="text-lg font-bold text-slate-900">Calculating...</div>
+            <p class="text-[10px] text-slate-400 mt-1">Estimated time until 95% threshold reached</p>
+        </div>
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider mb-2">Health Trend</p>
+            <div id="forecast-trend" class="flex items-center gap-2">
+                <span class="text-lg font-bold text-slate-900">Analyzing</span>
+                <i class="fa-solid fa-arrows-to-circle text-slate-400"></i>
+            </div>
+            <p id="forecast-trend-desc" class="text-[10px] text-slate-400 mt-1">Based on last 24h performance</p>
+        </div>
+        <div class="p-4 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-100">
+            <p class="text-[0.65rem] opacity-70 font-bold uppercase tracking-wider mb-2">AI Recommendation</p>
+            <div id="forecast-recommendation" class="text-xs font-medium leading-relaxed">
+                Analyzing historical metrics to generate proactive maintenance steps.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Productivity Snapshots (Screenshot Gallery) -->
+<div class="glass-card mb-8 border-slate-200 shadow-sm animate-fade-up bg-white">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center">
+                <i class="fa-solid fa-camera text-rose-600"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-900">Productivity Snapshots</h3>
+                <p class="text-xs text-slate-500">Visual audit trail of employee activity</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="loadScreenshots()"
+                class="text-[0.65rem] font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none text-slate-600 hover:bg-slate-100 transition-colors">
+                <i class="fa-solid fa-refresh mr-1"></i> Refresh
+            </button>
+            <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <span class="text-[0.65rem] font-bold text-slate-500 uppercase">Bot Capture</span>
+                <div class="relative inline-flex items-center">
+                    <input type="checkbox" id="screenshot-toggle" class="sr-only peer"
+                        onchange="toggleScreenshotCapturing()" {{ 'checked' if server.screenshot_enabled else '' }}>
+                    <div
+                        class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500">
+                    </div>
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <div id="screenshot-gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div class="col-span-full py-12 text-center text-slate-400">
+            <i class="fa-solid fa-spinner fa-spin text-xl mb-3"></i>
+            <p class="text-xs font-medium">Loading snapshots from SharePoint...</p>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Lightbox Modal ══ -->
+<div id="lightboxModal"
+    class="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm hidden flex items-center justify-center p-4"
+    onclick="if(event.target===this) closeLightbox()">
+    <div class="relative max-w-4xl w-full flex flex-col items-center">
+        <!-- Toolbar -->
+        <div class="flex items-center justify-between w-full mb-3 px-2">
+            <div class="flex items-center gap-3">
+                <button onclick="lightboxNav(-1)"
+                    class="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <span id="lightboxCounter" class="text-white/70 text-sm font-medium"></span>
+                <button onclick="lightboxNav(1)"
+                    class="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="flex items-center gap-2">
+                <a id="lightboxDownload" href="#" download
+                    class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-download"></i> Download
+                </a>
+                <button onclick="closeLightbox()"
+                    class="w-9 h-9 bg-white/10 hover:bg-rose-500 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+        <!-- Image -->
+        <div class="relative w-full flex items-center justify-center" style="max-height:78vh;">
+            <img id="lightboxImg" src="" alt="Screenshot"
+                class="max-h-[78vh] max-w-full rounded-xl shadow-2xl object-contain transition-opacity duration-200"
+                style="opacity:0;">
+            <div id="lightboxSpinner"
+                class="absolute inset-0 flex items-center justify-center">
+                <div class="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+            </div>
+        </div>
+        <!-- Caption -->
+        <div class="mt-3 text-center">
+            <p id="lightboxFilename" class="text-white font-medium text-sm"></p>
+            <p id="lightboxMeta" class="text-white/50 text-xs mt-0.5"></p>
+        </div>
+    </div>
+</div>
+
+<!-- Infrastructure Monitoring Settings (ISV Mode) -->
+<div class="glass-card mb-8 border-slate-200 shadow-sm animate-fade-up bg-white">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <i class="fa-solid fa-server text-indigo-600"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-900">Infrastructure Monitoring</h3>
+                <p class="text-xs text-slate-500">Enable central polling and role-based discovery for this server</p>
+            </div>
+        </div>
+    </div>
+
+    <form action="{{ url_for('systems.update_monitoring', system_id=server.id) }}" method="POST"
+        class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div>
+                <p class="text-xs font-bold text-slate-800">Active Polling</p>
+                <p class="text-[10px] text-slate-500">Enable central health checks</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="monitoring_active" class="sr-only peer" {{ 'checked' if
+                    server.monitoring_active else '' }}>
+                <div
+                    class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                </div>
+            </label>
+        </div>
+
+        <div class="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div>
+                <p class="text-xs font-bold text-slate-800">Hyper-V Host</p>
+                <p class="text-[10px] text-slate-500">Enable VM discovery</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="is_hyperv_host" class="sr-only peer" {{ 'checked' if server.is_hyperv_host
+                    else '' }}>
+                <div
+                    class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600">
+                </div>
+            </label>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <label class="block text-xs font-bold text-slate-800 mb-1">Drives to Monitor</label>
+            <input type="text" name="monitoring_drives" value="{{ server.monitoring_drives or 'C' }}"
+                class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:ring-1 focus:ring-indigo-500 outline-none"
+                placeholder="C,D,E">
+        </div>
+
+        <div class="md:col-span-3">
+            <button type="submit"
+                class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm">
+                Save Monitoring Configuration
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Device Actions + User Activity -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+    <div class="glass-card shadow-sm border-slate-200 animate-fade-up">
+        <h3 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-indigo-500"></i> Device Actions
+        </h3>
+        <div class="grid grid-cols-2 gap-3">
+            <button onclick="deviceAction('restart')"
+                class="flex items-center gap-2 px-4 py-3 bg-white hover:bg-amber-50 text-amber-600 rounded-xl border border-slate-200 hover:border-amber-200 transition-all text-sm font-bold shadow-sm">
+                <i class="fa-solid fa-rotate-right"></i> Restart
+            </button>
+            <button onclick="deviceAction('shutdown')"
+                class="flex items-center gap-2 px-4 py-3 bg-white hover:bg-rose-50 text-rose-600 rounded-xl border border-slate-200 hover:border-rose-200 transition-all text-sm font-bold shadow-sm">
+                <i class="fa-solid fa-power-off"></i> Shutdown
+            </button>
+            <button onclick="deviceAction('lock')"
+                class="flex items-center gap-2 px-4 py-3 bg-white hover:bg-blue-50 text-blue-600 rounded-xl border border-slate-200 hover:border-blue-200 transition-all text-sm font-bold shadow-sm">
+                <i class="fa-solid fa-lock"></i> Lock
+            </button>
+            <button onclick="deviceAction('logoff')"
+                class="flex items-center gap-2 px-4 py-3 bg-white hover:bg-violet-50 text-violet-600 rounded-xl border border-slate-200 hover:border-violet-200 transition-all text-sm font-bold shadow-sm">
+                <i class="fa-solid fa-right-from-bracket"></i> Logoff User
+            </button>
+        </div>
+        <div id="actionStatus" class="mt-3 text-sm hidden font-bold"></div>
+    </div>
+
+    <div class="glass-card shadow-sm border-slate-200 animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-clock text-emerald-500"></i> User Activity
+            </h3>
+            <button onclick="loadActivity()"
+                class="text-xs text-slate-500 hover:text-indigo-600 bg-slate-100 px-2.5 py-1.5 rounded-lg transition-colors font-bold border border-slate-200">
+                <i class="fa-solid fa-refresh mr-1"></i>Refresh
+            </button>
+        </div>
+        <div id="activityList" class="space-y-2 max-h-52 overflow-y-auto text-sm custom-scrollbar">
+            <div class="text-slate-400 text-center py-4 text-xs font-bold">
+                <i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading activity...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Login History -->
+<div class="glass-card mb-8 border-slate-200 shadow-sm animate-fade-up bg-white">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <i class="fa-solid fa-history text-emerald-600"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-900">Login History</h3>
+                <p class="text-xs text-slate-500">View all employee logins for this device</p>
+            </div>
+        </div>
+        <a href="{{ url_for('systems.system_logins', system_id=server.id) }}"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-all">
+            View Full History <i class="fa-solid fa-arrow-right text-[0.6rem]"></i>
+        </a>
+    </div>
+</div>
+
+<!-- Remote Terminal -->
+<div class="glass-card mb-8 border-slate-200 shadow-lg animate-fade-up" id="terminal-section"
+    data-server-id="{{ server.id }}">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
+                <i class="fa-solid fa-terminal text-green-400"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-slate-900">Remote Terminal</h3>
+                <p class="text-xs text-slate-500">Execute commands on {{ server.hostname }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="ws-status"
+                class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-bold">
+                <i class="fa-solid fa-plug mr-1"></i>Connecting...
+            </span>
+            <button onclick="clearTerminal()"
+                class="text-xs text-slate-500 hover:text-indigo-600 bg-slate-100 px-2.5 py-1.5 rounded-lg transition-colors font-bold border border-slate-200"
+                title="Clear output">
+                <i class="fa-solid fa-eraser mr-1"></i>Clear
+            </button>
+        </div>
+    </div>
+
+    <!-- Command Input -->
+    <div class="flex gap-2 mb-3">
+        <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-green-600 font-mono text-sm font-bold">$</span>
+            <input type="text" id="cmdInput"
+                class="w-full pl-8 pr-4 py-2.5 bg-slate-900 text-green-400 font-mono text-sm rounded-xl border border-slate-800 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 focus:outline-none placeholder-slate-700"
+                placeholder="Enter command..." autocomplete="off" disabled>
+        </div>
+        <div class="relative">
+            <button onclick="toggleHistory()" id="historyBtn"
+                class="h-full px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl border border-slate-200 transition-colors shadow-sm"
+                title="Command history" disabled>
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </button>
+            <div id="historyDropdown"
+                class="hidden absolute right-0 top-full mt-1 w-80 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-2xl z-50">
+                <div
+                    class="p-2 text-[0.6rem] text-slate-500 border-b border-slate-100 font-bold uppercase tracking-wider">
+                    Recent Commands</div>
+                <div id="historyList"></div>
+            </div>
+        </div>
+        <button onclick="executeCommand()" id="runBtn"
+            class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center gap-2"
+            disabled>
+            <i class="fa-solid fa-play text-xs" id="runIcon"></i>
+            <span id="runText">Run</span>
+        </button>
+    </div>
+
+    <!-- Offline Warning -->
+    <div id="offlineBanner"
+        class="mb-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center gap-2 font-bold"
+        style="display:none;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Agent is offline. Command execution is unavailable until the agent reconnects.</span>
+    </div>
+
+    <!-- Terminal Output -->
+    <div id="terminalOutput"
+        class="rounded-xl border border-slate-800 p-4 font-mono text-sm leading-relaxed overflow-y-auto shadow-inner"
+        style="height:360px; min-height:200px; background:#0f172a;">
+        <div class="text-slate-500 select-none">
+            <span class="text-green-500 font-bold">ServerMonitor</span> <span class="text-slate-600">v2.1</span> —
+            Remote
+            Terminal<br>
+            <span class="text-slate-600">Type a command and press Run or Enter to execute.</span><br>
+            <span class="text-slate-700">─────────────────────────────────────────────</span>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript: Charts, WebSocket, Terminal Logic -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const SERVER_ID = parseInt(document.getElementById('terminal-section').dataset.serverId, 10);
+        let agentOnline = false;
+        let commandRunning = false;
+
+        // ── Fetch Server Details ──
+        async function fetchServerDetails() {
+            try {
+                const res = await fetch(`/api/v2/server/${SERVER_ID}`);
+                if (res.ok) {
+                    const details = await res.json();
+                    document.getElementById('server-ip').innerText = `IP: ${details.ip || 'Unknown'}`;
+                    document.getElementById('server-os').innerText = `OS: ${details.os_info || 'Unknown'}`;
+                    const statusEl = document.getElementById('server-status');
+                    if (details.is_online) {
+                        statusEl.innerHTML = 'Status: <span class="badge badge-online"><span class="pulse-dot green"></span>Online</span>';
+                        setAgentOnline(true);
+                    } else {
+                        statusEl.innerHTML = 'Status: <span class="badge badge-offline"><span class="pulse-dot red"></span>Offline</span>';
+                        setAgentOnline(false);
+                    }
+                }
+            } catch (e) { console.error('[SERVER]', e); }
+        }
+        fetchServerDetails();
+        setInterval(fetchServerDetails, 60000);
+
+        // ── Charts ──
+        const MAX_POINTS = 100;
+        let cpuChart = null, ramChart = null;
+
+        function initializeCharts() {
+            if (cpuChart !== null || ramChart !== null) return;
+            const cpuEl = document.getElementById('detailsCpuChart');
+            const ramEl = document.getElementById('detailsRamChart');
+            if (!cpuEl || !ramEl) return;
+
+            const opts = {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                animation: { duration: 600, easing: 'easeOutQuart' },
+                scales: {
+                    y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false }, border: { display: false } },
+                    x: {
+                        grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 9 },
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            maxRotation: 0,
+                            minRotation: 0
+                        },
+                        border: { display: false }
+                    }
+                },
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(255,255,255,0.95)', borderColor: 'rgba(0,0,0,0.1)', borderWidth: 1, titleColor: '#0f172a', bodyColor: '#475569', padding: 10, cornerRadius: 8 } }
+            };
+
+            cpuChart = new Chart(cpuEl.getContext('2d'), {
+                type: 'line', data: {
+                    labels: [], datasets: [{
+                        label: 'CPU %', data: [], borderColor: '#6366f1',
+                        backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 280); g.addColorStop(0, 'rgba(99,102,241,0.15)'); g.addColorStop(1, 'rgba(99,102,241,0)'); return g; },
+                        borderWidth: 2.5, tension: 0.3, fill: true, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#6366f1', pointBorderColor: '#0f1529', pointBorderWidth: 2
+                    }]
+                }, options: opts
+            });
+
+            ramChart = new Chart(ramEl.getContext('2d'), {
+                type: 'line', data: {
+                    labels: [], datasets: [{
+                        label: 'RAM %', data: [], borderColor: '#10b981',
+                        backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 280); g.addColorStop(0, 'rgba(16,185,129,0.15)'); g.addColorStop(1, 'rgba(16,185,129,0)'); return g; },
+                        borderWidth: 2.5, tension: 0.3, fill: true, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#10b981', pointBorderColor: '#0f1529', pointBorderWidth: 2
+                    }]
+                }, options: opts
+            });
+        }
+        setTimeout(() => { try { initializeCharts(); } catch (e) { } }, 100);
+
+        // ── WebSocket ──
+        const socket = io({ transports: ['websocket', 'polling'] });
+        const wsStatus = document.getElementById('ws-status');
+        socket.on('connect', () => {
+            wsStatus.className = 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            wsStatus.innerHTML = '<i class="fa-solid fa-plug mr-1"></i>Connected';
+
+            // Join secure tenant room
+            socket.emit('join', {});
+        });
+        socket.on('disconnect', () => {
+            wsStatus.className = 'text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20';
+            wsStatus.innerHTML = '<i class="fa-solid fa-plug-circle-xmark mr-1"></i>Disconnected';
+        });
+
+        // ── Metrics Fetch ──
+        let currentRange = 'live';
+        let refreshInterval = null;
+
+        async function fetchMetrics() {
+            try {
+                let url = `/api/v2/metrics?server_id=${SERVER_ID}&limit=${MAX_POINTS}`;
+                if (currentRange !== 'live') {
+                    url = `/api/v2/metrics/history?server_id=${SERVER_ID}&range=${currentRange}`;
+                }
+
+                const res = await fetch(url);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data) return;
+
+                if (!cpuChart || !ramChart) {
+                    initializeCharts();
+                    setTimeout(() => updateChartsWithData(data), 200);
+                    return;
+                }
+                updateChartsWithData(data);
+
+                // Update Last Sync UI
+                const syncEl = document.getElementById('last-update-time');
+                if (syncEl) {
+                    syncEl.innerText = `Last Updated: ${new Date().toLocaleTimeString()}`;
+                }
+
+            } catch (e) { console.error('[API]', e); }
+        }
+
+        window.changeTimeRange = function () {
+            const selector = document.getElementById('timeRangeSelector');
+            currentRange = selector.value;
+
+            // Clear current data while loading
+            if (cpuChart && ramChart) {
+                cpuChart.data.labels = []; cpuChart.data.datasets[0].data = []; cpuChart.update('none');
+                ramChart.data.labels = []; ramChart.data.datasets[0].data = []; ramChart.update('none');
+            }
+
+            fetchMetrics();
+            fetchForecasting(); // Re-calculate forecast based on range if applicable
+
+            // Adjust polling interval - slow down for historical view
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (currentRange === 'live') {
+                refreshInterval = setInterval(fetchMetrics, 15000);
+            } else {
+                refreshInterval = setInterval(fetchMetrics, 60000); // 1 minute for historical
+            }
+        };
+
+        function updateChartsWithData(data) {
+            if (!cpuChart || !ramChart) return;
+            if (data.length === 0) return;
+
+            const latest = data[data.length - 1];
+            const cpuEl = document.getElementById('cpu-value');
+            const ramEl = document.getElementById('ram-value');
+            const diskEl = document.getElementById('disk-value');
+            if (cpuEl) cpuEl.innerText = `${(latest.cpu_util_percent || 0).toFixed(1)}%`;
+            if (ramEl) ramEl.innerText = `${(latest.ram_util_percent || 0).toFixed(1)}%`;
+            if (diskEl) diskEl.innerText = `${(latest.ssd_util_percent || 0).toFixed(1)}%`;
+
+            setAgentOnline(true);
+            lastMetricTime = Date.now();
+
+            // Dynamic formatting based on range
+            const labels = data.map(d => {
+                const date = new Date(d.timestamp);
+                // Convert UTC to IST (UTC+5:30)
+                const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+                const options = { hour: '2-digit', minute: '2-digit', hour12: true };
+
+                if (currentRange === '7d') {
+                    options.month = 'short';
+                    options.day = 'numeric';
+                } else if (currentRange === 'live' || currentRange === '1h') {
+                    options.second = '2-digit';
+                } else if (currentRange === '24h') {
+                    options.day = 'numeric';
+                    options.month = 'short';
+                }
+
+                return new Intl.DateTimeFormat('en-IN', options).format(istDate);
+            });
+
+            cpuChart.data.labels = labels;
+            cpuChart.data.datasets[0].data = data.map(d => parseFloat(d.cpu_util_percent) || 0);
+            cpuChart.update('none');
+
+            ramChart.data.labels = labels;
+            ramChart.data.datasets[0].data = data.map(d => parseFloat(d.ram_util_percent) || 0);
+            ramChart.update('none');
+        }
+
+        // ── Real AI Forecasting API ──
+        async function fetchForecasting() {
+            const critEl = document.getElementById('forecast-critical-time');
+            const trendEl = document.getElementById('forecast-trend');
+            const recEl = document.getElementById('forecast-recommendation');
+
+            try {
+                const res = await fetch(`/api/v2/server/${SERVER_ID}/forecast`);
+                if (!res.ok) throw new Error('API failed');
+
+                const data = await res.json();
+                if (!data.success) {
+                    critEl.innerText = data.message || "Insufficient Data";
+                    return;
+                }
+
+                // Prediction UI
+                if (data.cpu.prediction && data.cpu.prediction !== "None") {
+                    if (data.cpu.prediction === "Already Critical") {
+                        critEl.innerHTML = '<span class="text-rose-600">CRITICAL NOW</span>';
+                    } else {
+                        const predDate = new Date(data.cpu.prediction);
+                        critEl.innerText = `CPU Hit Alert: ${predDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                        critEl.classList.add('text-amber-600');
+                    }
+                } else if (data.ram.prediction && data.ram.prediction !== "None") {
+                    const predDate = new Date(data.ram.prediction);
+                    critEl.innerText = `RAM Hit Alert: ${predDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                    critEl.classList.add('text-amber-600');
+                } else {
+                    critEl.innerText = "No Critical Risk Found";
+                    critEl.className = "text-lg font-bold text-emerald-600";
+                }
+
+                // Trend UI
+                const trend = data.cpu.trend;
+                if (trend === 'increasing') {
+                    trendEl.innerHTML = '<span class="text-lg font-bold text-rose-600">Increasing</span><i class="fa-solid fa-arrow-trend-up text-rose-500"></i>';
+                } else if (trend === 'decreasing') {
+                    trendEl.innerHTML = '<span class="text-lg font-bold text-emerald-600">Improving</span><i class="fa-solid fa-arrow-trend-down text-emerald-500"></i>';
+                } else {
+                    trendEl.innerHTML = '<span class="text-lg font-bold text-slate-600">Stable</span><i class="fa-solid fa-check-circle text-emerald-500"></i>';
+                }
+
+                // Recommendation
+                recEl.innerText = data.recommendation;
+
+            } catch (e) {
+                console.error('[FORECAST]', e);
+                critEl.innerText = "Forecasting currently unavailable";
+            }
+        }
+
+        setTimeout(() => {
+            fetchMetrics();
+            fetchForecasting();
+            refreshInterval = setInterval(fetchMetrics, 15000);
+            setInterval(fetchForecasting, 300000); // 5 min
+        }, 300);
+
+        // ── Live WebSocket Metrics ──
+        let lastMetricTime = Date.now();
+        socket.on('metrics_update', (data) => {
+            try {
+                if (data.server_id !== SERVER_ID) return;
+
+                lastMetricTime = Date.now();
+                setAgentOnline(true);
+
+                const m = data.metrics;
+                const cpuEl = document.getElementById('cpu-value');
+                const ramEl = document.getElementById('ram-value');
+                const diskEl = document.getElementById('disk-value');
+                if (cpuEl) cpuEl.innerText = `${m.cpu.toFixed(1)}%`;
+                if (ramEl) ramEl.innerText = `${m.ram.toFixed(1)}%`;
+                if (diskEl) diskEl.innerText = `${m.disk.toFixed(1)}%`;
+
+                if (cpuChart && ramChart) {
+                    const date = new Date(data.timestamp);
+                    // Convert UTC to IST (UTC+5:30)
+                    const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+                    const t = istDate.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                    cpuChart.data.labels.push(t); cpuChart.data.datasets[0].data.push(parseFloat(m.cpu) || 0);
+                    while (cpuChart.data.labels.length > MAX_POINTS) { cpuChart.data.labels.shift(); cpuChart.data.datasets[0].data.shift(); }
+                    cpuChart.update('none');
+                    ramChart.data.labels.push(t); ramChart.data.datasets[0].data.push(parseFloat(m.ram) || 0);
+                    while (ramChart.data.labels.length > MAX_POINTS) { ramChart.data.labels.shift(); ramChart.data.datasets[0].data.shift(); }
+                    ramChart.update('none');
+                }
+
+                // Update Guest VMs
+                updateVmGrid(data.vms || []);
+            } catch (e) { console.error('[METRICS]', e); }
+        });
+
+        function updateVmGrid(vms) {
+            const grid = document.getElementById('vm-grid');
+            const count = document.getElementById('vm-count-badge');
+            if (!grid) return;
+
+            count.innerText = `${vms.length} Guests Active`;
+            if (vms.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-8 text-center text-slate-400 text-xs font-medium">No guest VMs detected on this host.</div>';
+                return;
+            }
+
+            grid.innerHTML = vms.map(vm => `
+                <div class="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all group">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-desktop text-[0.6rem] ${vm.state === 'Running' ? 'text-emerald-500' : 'text-slate-400'}"></i>
+                            <span class="text-xs font-bold text-slate-900 truncate max-w-[120px]">${vm.name}</span>
+                        </div>
+                        <span class="text-[0.6rem] font-black px-2 py-0.5 rounded-md ${vm.state === 'Running' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200 text-slate-500'} uppercase tracking-tight">
+                            ${vm.state}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                         <div class="text-[0.65rem] text-slate-500 font-medium">Auto-Discovery Sync</div>
+                         <div class="w-1.5 h-1.5 rounded-full ${vm.state === 'Running' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // lastMetricTime check removed to respect persistent agent status requested by user
+
+        // ── Agent Status ──
+        function setAgentOnline(online) {
+            agentOnline = online;
+            const statusEl = document.getElementById('agent-status');
+            const cmdInput = document.getElementById('cmdInput');
+            const runBtn = document.getElementById('runBtn');
+            const historyBtn = document.getElementById('historyBtn');
+            const offlineBanner = document.getElementById('offlineBanner');
+            if (online) {
+                statusEl.innerHTML = '<span class="badge badge-online"><span class="pulse-dot green"></span>Online</span>';
+                cmdInput.disabled = false; cmdInput.placeholder = 'Enter command...';
+                runBtn.disabled = false; historyBtn.disabled = false;
+                offlineBanner.style.display = 'none';
+            } else {
+                statusEl.innerHTML = '<span class="badge badge-offline"><span class="pulse-dot red"></span>Offline</span>';
+                cmdInput.disabled = true; cmdInput.placeholder = 'Agent offline — commands unavailable';
+                runBtn.disabled = true; historyBtn.disabled = true;
+                offlineBanner.style.display = 'flex';
+            }
+        }
+
+        // ── Terminal Output ──
+        const terminal = document.getElementById('terminalOutput');
+        function appendToTerminal(html) { const d = document.createElement('div'); d.innerHTML = html; terminal.appendChild(d); terminal.scrollTop = terminal.scrollHeight; }
+        function clearTerminal() {
+            terminal.innerHTML = '<div class="text-slate-600 select-none"><span class="text-green-500">ServerMonitor</span> <span class="text-slate-700">v2.0</span> — Remote Terminal<br><span class="text-slate-700">Terminal cleared.</span><br><span class="text-slate-700">─────────────────────────────────────────────</span></div>';
+        }
+        window.clearTerminal = clearTerminal;
+
+        // ── Command Execution ──
+        const cmdInput = document.getElementById('cmdInput');
+        const runBtn = document.getElementById('runBtn');
+        const runIcon = document.getElementById('runIcon');
+        const runText = document.getElementById('runText');
+        cmdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !cmdInput.disabled && !commandRunning) executeCommand(); });
+
+        async function executeCommand() {
+            const cmd = cmdInput.value.trim();
+            if (!cmd || commandRunning) return;
+            const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            appendToTerminal(`<div class="mt-2"><span class="text-slate-600 text-xs">[${now}]</span> <span class="text-green-400">$</span> <span class="text-white">${escapeHtml(cmd)}</span></div>`);
+            commandRunning = true;
+            runIcon.className = 'fa-solid fa-spinner fa-spin text-xs';
+            runText.innerText = 'Running...';
+            runBtn.disabled = true; cmdInput.disabled = true;
+            appendToTerminal('<div id="cmdSpinner" class="text-amber-400 animate-pulse"><i class="fa-solid fa-paper-plane fa-fade"></i> Sending to server...</div>');
+            try {
+                const res = await fetch('/api/v2/commands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ server_id: SERVER_ID, command: cmd }) });
+                const data = await res.json();
+                if (!res.ok) { document.getElementById('cmdSpinner')?.remove(); appendToTerminal(`<div class="text-rose-400"><i class="fa-solid fa-xmark mr-1"></i>Error: ${escapeHtml(data.error || 'Request failed')}</div>`); resetCommandState(); return; }
+
+                const spinner = document.getElementById('cmdSpinner');
+                if (spinner) spinner.innerHTML = '<i class="fa-solid fa-server fa-fade"></i> Queued on server...';
+
+                window._pendingCommandId = data.command_id;
+                window._cmdTimeout = setTimeout(() => { if (commandRunning) { document.getElementById('cmdSpinner')?.remove(); appendToTerminal('<div class="text-amber-400"><i class="fa-solid fa-clock mr-1"></i>Command timed out (120s).</div>'); resetCommandState(); } }, 120000);
+            } catch (e) { document.getElementById('cmdSpinner')?.remove(); appendToTerminal(`<div class="text-rose-400"><i class="fa-solid fa-xmark mr-1"></i>Network error: ${escapeHtml(e.message)}</div>`); resetCommandState(); }
+            cmdInput.value = '';
+        }
+        window.executeCommand = executeCommand;
+
+        function resetCommandState() {
+            commandRunning = false; runIcon.className = 'fa-solid fa-play text-xs'; runText.innerText = 'Run';
+            if (agentOnline) { runBtn.disabled = false; cmdInput.disabled = false; }
+            cmdInput.focus(); clearTimeout(window._cmdTimeout);
+        }
+
+        // ── WebSocket Command Results ──
+        socket.on('command_started', (data) => {
+            if (data.server_id !== SERVER_ID) return;
+            const spinner = document.getElementById('cmdSpinner');
+            if (spinner) spinner.innerHTML = '<i class="fa-solid fa-microchip fa-fade"></i> Agent processing...';
+        });
+        socket.on('command_result', (data) => {
+            if (data.server_id !== SERVER_ID) return;
+            document.getElementById('cmdSpinner')?.remove();
+            const ts = data.executed_at ? new Date(data.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            if (data.status === 'completed') {
+                appendToTerminal(`<div class="mt-1"><span class="text-slate-600 text-xs">[${ts}]</span> <span class="text-emerald-400 text-xs"><i class="fa-solid fa-check mr-1"></i>Completed</span></div>`);
+            } else {
+                appendToTerminal(`<div class="mt-1"><span class="text-slate-600 text-xs">[${ts}]</span> <span class="text-rose-400 text-xs"><i class="fa-solid fa-xmark mr-1"></i>Failed</span></div>`);
+            }
+            if (data.output && data.output.trim()) {
+                const lines = data.output.split('\n');
+                let h = '<div class="mt-1 pl-2 border-l-2 border-white/5">';
+                for (const line of lines) { h += `<div class="${data.status === 'failed' ? 'text-rose-300' : 'text-slate-300'}">${escapeHtml(line)}</div>`; }
+                h += '</div>'; appendToTerminal(h);
+            } else { appendToTerminal('<div class="text-slate-600 italic text-xs ml-2">(no output)</div>'); }
+            resetCommandState(); loadCommandHistory();
+        });
+
+        // ── Command History ──
+        async function loadCommandHistory() {
+            try {
+                const res = await fetch(`/api/v2/commands/history/${SERVER_ID}`);
+                if (!res.ok) return;
+                const cmds = await res.json();
+                const list = document.getElementById('historyList');
+                list.innerHTML = '';
+                if (cmds.length === 0) { list.innerHTML = '<div class="p-3 text-slate-600 text-xs text-center">No command history</div>'; return; }
+                cmds.forEach(c => {
+                    const sc = c.status === 'completed' ? 'text-emerald-400' : c.status === 'failed' ? 'text-rose-400' : 'text-amber-400';
+                    const si = c.status === 'completed' ? 'fa-check-circle' : c.status === 'failed' ? 'fa-times-circle' : 'fa-clock';
+                    const d = document.createElement('div');
+                    d.className = 'px-3 py-2 hover:bg-white/5 cursor-pointer flex items-center gap-2 text-xs transition-colors';
+                    d.innerHTML = `<i class="fa-solid ${si} ${sc}"></i><span class="text-slate-300 font-mono truncate flex-1">${escapeHtml(c.command)}</span><span class="text-slate-600 whitespace-nowrap">${c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>`;
+                    d.addEventListener('click', () => { cmdInput.value = c.command; document.getElementById('historyDropdown').classList.add('hidden'); cmdInput.focus(); });
+                    list.appendChild(d);
+                });
+            } catch (e) { }
+        }
+        loadCommandHistory();
+        function toggleHistory() { document.getElementById('historyDropdown').classList.toggle('hidden'); }
+        window.toggleHistory = toggleHistory;
+        document.addEventListener('click', (e) => { const dd = document.getElementById('historyDropdown'); const btn = document.getElementById('historyBtn'); if (!dd.contains(e.target) && !btn.contains(e.target)) dd.classList.add('hidden'); });
+
+        // ── Utility ──
+        function escapeHtml(text) { const d = document.createElement('div'); d.appendChild(document.createTextNode(text)); return d.innerHTML; }
+
+        // ── Device Actions ──
+        async function deviceAction(action) {
+            const names = { restart: 'Restart', shutdown: 'Shutdown', lock: 'Lock', logoff: 'Logoff' };
+            if (!confirm(`Are you sure you want to ${names[action]} this device?`)) return;
+            const statusEl = document.getElementById('actionStatus');
+            statusEl.classList.remove('hidden');
+            statusEl.className = 'mt-3 text-sm p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300';
+            statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending action...';
+            try {
+                const res = await fetch('/api/v2/device/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ server_id: SERVER_ID, action }) });
+                const data = await res.json();
+                if (res.ok) {
+                    statusEl.className = 'mt-3 text-sm p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300';
+                    statusEl.innerHTML = '<i class="fa-solid fa-check mr-1"></i> ' + names[action] + ' command queued';
+                } else {
+                    statusEl.className = 'mt-3 text-sm p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300';
+                    statusEl.innerHTML = '<i class="fa-solid fa-xmark mr-1"></i> ' + (data.error || 'Action failed');
+                }
+            } catch (e) {
+                statusEl.className = 'mt-3 text-sm p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300';
+                statusEl.innerHTML = '<i class="fa-solid fa-xmark mr-1"></i> Network error';
+            }
+            setTimeout(() => { statusEl.classList.add('hidden'); }, 5000);
+        }
+        window.deviceAction = deviceAction;
+
+        // ── Activity ──
+        async function loadActivity() {
+            const list = document.getElementById('activityList');
+            try {
+                const res = await fetch('/api/v2/device/activity/' + SERVER_ID);
+                if (!res.ok) { list.innerHTML = '<div class="text-slate-600 text-center py-4">Failed to load</div>'; return; }
+                const data = await res.json();
+                if (data.length === 0) { list.innerHTML = '<div class="text-slate-600 text-center py-4"><i class="fa-solid fa-clock mr-1"></i>No activity recorded yet</div>'; return; }
+                list.innerHTML = '';
+                data.forEach(a => {
+                    const login = a.login_time ? new Date(a.login_time).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                    const logout = a.logout_time ? new Date(a.logout_time).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Active';
+                    const activeHrs = a.active_minutes ? (a.active_minutes / 60).toFixed(1) + 'h' : '—';
+                    const idleHrs = a.idle_minutes ? (a.idle_minutes / 60).toFixed(1) + 'h' : '—';
+                    const typeIcon = a.session_type === 'rdp' ? 'fa-desktop' : 'fa-user';
+                    list.innerHTML += `
+                    <div class="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <div class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center"><i class="fa-solid ${typeIcon} text-indigo-600 text-xs"></i></div>
+                        <div class="flex-1 min-w-0">
+                            <span class="font-bold text-slate-900 text-xs">${escapeHtml(a.session_user || 'Unknown')}</span>
+                            <span class="text-slate-500 text-[0.6rem] ml-1 font-bold">(${a.session_type || 'interactive'})</span>
+                            <div class="text-[0.6rem] text-slate-500 mt-0.5 font-medium">
+                                <i class="fa-solid fa-right-to-bracket mr-1"></i>${login}
+                                → <i class="fa-solid fa-right-from-bracket mr-1"></i>${logout}
+                                &nbsp;| Active: ${activeHrs} &nbsp; Idle: ${idleHrs}
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            } catch (e) { list.innerHTML = '<div class="text-rose-400 text-center py-4">Error loading activity</div>'; }
+        }
+        window.loadActivity = loadActivity;
+        loadActivity();
+
+        // ── Screenshot Gallery ──
+        let galleryShots = [];
+        let lightboxIdx = 0;
+
+        async function loadScreenshots() {
+            const gallery = document.getElementById('screenshot-gallery');
+            try {
+                const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots?page=1&per_page=12`);
+                const data = await res.json();
+                const shots = (data && data.screenshots) ? data.screenshots : [];
+
+                if (!shots || shots.length === 0) {
+                    gallery.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400"><i class="fa-solid fa-camera-viewfinder text-3xl mb-3 opacity-20"></i><p class="text-xs font-medium">No screenshots found for this system.</p><p class="text-[10px] opacity-70">Ensure "Bot Capture" is enabled above.</p></div>';
+                    return;
+                }
+
+                galleryShots = shots;
+
+                gallery.innerHTML = shots.map((s, idx) => {
+                    const imgUrl = s.thumb_url || s.image_url || s.sharepoint_url || `/api/screenshot/${s.id}`;
+                    return `
+                    <div class="group relative aspect-video rounded-xl border border-slate-100 bg-slate-50 overflow-hidden cursor-pointer hover:shadow-lg transition-all" onclick="openLightbox(${idx})">
+                        <img src="${imgUrl}" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" onerror="this.src='https://placehold.co/600x400/f8fafc/64748b?text=Snapshot+Unavailable'">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                            <p class="text-[8px] text-white font-bold truncate"><i class="fa-solid fa-user mr-1"></i>${escapeHtml(s.active_user)}</p>
+                            <p class="text-[8px] text-slate-300 font-medium">${new Date(s.captured_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                        <div class="absolute top-2 right-2 px-1.5 py-0.5 bg-black/40 backdrop-blur-md rounded text-[7px] text-white font-black uppercase tracking-tighter">
+                            ${s.file_size_kb}KB
+                        </div>
+                    </div>
+                `}).join('');
+            } catch (e) {
+                gallery.innerHTML = '<div class="col-span-full py-12 text-center text-rose-400 text-xs font-bold">Failed to load screenshots</div>';
+            }
+        }
+        window.loadScreenshots = loadScreenshots;
+        loadScreenshots();
+
+        // ── Lightbox Logic ──
+        window.openLightbox = function (idx) {
+            lightboxIdx = idx;
+            showLightboxItem(idx);
+            document.getElementById('lightboxModal').classList.remove('hidden');
+            document.getElementById('lightboxModal').classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeLightbox = function () {
+            document.getElementById('lightboxModal').classList.add('hidden');
+            document.getElementById('lightboxModal').classList.remove('flex');
+            document.body.style.overflow = '';
+        };
+
+        window.lightboxNav = function (dir) {
+            const next = lightboxIdx + dir;
+            if (next < 0 || next >= galleryShots.length) return;
+            lightboxIdx = next;
+            showLightboxItem(next);
+        };
+
+        function showLightboxItem(idx) {
+            const s = galleryShots[idx];
+            if (!s) return;
+
+            const img = document.getElementById('lightboxImg');
+            img.style.opacity = '0';
+            document.getElementById('lightboxSpinner').style.display = 'flex';
+
+            const url = s.image_url || s.sharepoint_url || `/api/screenshot/${s.id}`;
+            img.onload = () => {
+                img.style.opacity = '1';
+                document.getElementById('lightboxSpinner').style.display = 'none';
+            };
+            img.onerror = () => {
+                img.src = 'https://placehold.co/1280x720/1e293b/64748b?text=Image+Unavailable';
+            };
+            img.src = url;
+
+            document.getElementById('lightboxDownload').href = url;
+            document.getElementById('lightboxDownload').download = s.filename || 'screenshot.png';
+            document.getElementById('lightboxFilename').textContent = s.filename || 'Screenshot';
+            const metaStr = `${new Date(s.captured_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}${s.active_user ? ' · ' + s.active_user : ''}${s.file_size_kb ? ' · ' + s.file_size_kb + ' KB' : ''}`;
+            document.getElementById('lightboxMeta').textContent = metaStr;
+            document.getElementById('lightboxCounter').textContent = `${idx + 1} / ${galleryShots.length}`;
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function (e) {
+            if (document.getElementById('lightboxModal').classList.contains('hidden')) return;
+            if (e.key === 'Escape')      closeLightbox();
+            if (e.key === 'ArrowLeft')   lightboxNav(-1);
+            if (e.key === 'ArrowRight')  lightboxNav(1);
+        });
+
+        async function toggleScreenshotCapturing() {
+            const enabled = document.getElementById('screenshot-toggle').checked;
+            try {
+                const res = await fetch(`/api/v2/systems/update/${SERVER_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ screenshot_enabled: enabled })
+                });
+                if (!res.ok) throw new Error('Toggle failed');
+
+                // Show brief success alert
+                const alert = document.createElement('div');
+                alert.className = 'fixed bottom-5 right-5 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-2xl z-50 animate-fade-up';
+                alert.innerHTML = `<i class="fa-solid fa-check-circle text-emerald-400 mr-2"></i> Screenshot capturing ${enabled ? 'Enabled' : 'Disabled'}`;
+                document.body.appendChild(alert);
+                setTimeout(() => alert.remove(), 3000);
+            } catch (e) {
+                document.getElementById('screenshot-toggle').checked = !enabled;
+                alert('Failed to update screenshot settings');
+            }
+        }
+        window.toggleScreenshotCapturing = toggleScreenshotCapturing;
+    });
+</script>
+{% endblock %}

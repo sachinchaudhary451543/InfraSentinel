@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <h2 class="font-display text-2xl font-bold text-white" style="font-family:'Outfit',sans-serif">Smart Analytics</h2>
+        <p class="text-slate-500 text-sm mt-1">AI-powered server health analysis and recommendations</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+    <!-- Analyze Current Metrics -->
+    <div class="glass-card animate-fade-up delay-1">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-chart-line text-indigo-400"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-white">Live Metrics Analysis</h3>
+                <p class="text-xs text-slate-500">Analyze current server performance</p>
+            </div>
+        </div>
+        <button onclick="analyzeMetrics()" id="analyzeBtn"
+            class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-500/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Analyze Now</span>
+        </button>
+    </div>
+
+    <!-- Upload CSV -->
+    <div class="glass-card animate-fade-up delay-2">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-file-csv text-cyan-400"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-white">Upload & Analyze</h3>
+                <p class="text-xs text-slate-500">Upload CSV metrics for batch analysis</p>
+            </div>
+        </div>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <label class="w-full flex flex-col items-center justify-center px-4 py-6 rounded-xl border-2 border-dashed border-white/10 hover:border-indigo-500/30 cursor-pointer transition-all bg-white/[0.02] mb-3">
+                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-500 mb-2"></i>
+                <span class="text-xs text-slate-500" id="fileLabel">Drop CSV file or click to browse</span>
+                <input type="file" name="file" accept=".csv" class="hidden" id="csvFile" onchange="document.getElementById('fileLabel').textContent = this.files[0]?.name || 'No file selected'">
+            </label>
+            <button type="button" onclick="uploadAnalyze()"
+                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all">
+                <i class="fa-solid fa-upload"></i>
+                <span>Upload & Analyze</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+<div id="analysisResults" class="hidden glass-card animate-fade-up mb-8">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">Analysis Results</h3>
+        <button onclick="document.getElementById('analysisResults').classList.add('hidden')" class="text-slate-500 hover:text-slate-300">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    <div id="analysisContent" class="prose prose-invert prose-sm max-w-none text-slate-300 text-sm leading-relaxed"></div>
+</div>
+
+<!-- Loading -->
+<div id="analysisLoading" class="hidden glass-card animate-fade-up text-center py-12">
+    <i class="fa-solid fa-spinner fa-spin text-3xl text-indigo-400 mb-4"></i>
+    <p class="text-sm text-slate-400">Analyzing metrics... This may take a moment</p>
+</div>
+
+<script>
+async function analyzeMetrics() {
+    const btn = document.getElementById('analyzeBtn');
+    const loading = document.getElementById('analysisLoading');
+    const results = document.getElementById('analysisResults');
+
+    btn.disabled = true; btn.classList.add('opacity-70');
+    loading.classList.remove('hidden');
+    results.classList.add('hidden');
+
+    try {
+        const resp = await fetch('/smart-analyzer/analyze-current-metrics');
+        const data = await resp.json();
+        document.getElementById('analysisContent').innerHTML = data.html || data.analysis || '<p class="text-slate-500">No analysis data returned</p>';
+        results.classList.remove('hidden');
+    } catch (e) {
+        document.getElementById('analysisContent').innerHTML = '<p class="text-rose-400">Error: ' + e.message + '</p>';
+        results.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+        btn.disabled = false; btn.classList.remove('opacity-70');
+    }
+}
+
+async function uploadAnalyze() {
+    const file = document.getElementById('csvFile').files[0];
+    if (!file) { alert('Please select a CSV file first'); return; }
+
+    const loading = document.getElementById('analysisLoading');
+    const results = document.getElementById('analysisResults');
+    loading.classList.remove('hidden');
+    results.classList.add('hidden');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('/smart-analyzer/upload-analyze', { method: 'POST', body: formData });
+        const data = await resp.json();
+        document.getElementById('analysisContent').innerHTML = data.html || data.analysis || '<p class="text-slate-500">No analysis data</p>';
+        results.classList.remove('hidden');
+    } catch (e) {
+        document.getElementById('analysisContent').innerHTML = '<p class="text-rose-400">Upload error: ' + e.message + '</p>';
+        results.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

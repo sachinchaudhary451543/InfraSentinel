@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Edit User</h2>
+    <form method="post">
+        <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input type="text" class="form-control" id="username" name="username" value="{{ user.username }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="tenant_id" class="form-label">Tenant</label>
+            <select class="form-select" id="tenant_id" name="tenant_id" required>
+                {% for tenant in tenants %}
+                <option value="{{ tenant.id }}" {% if tenant.id==user.tenant_id %}selected{% endif %}>{{ tenant.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="is_superadmin" name="is_superadmin" {% if
+                user.is_superadmin %}checked{% endif %}>
+            <label class="form-check-label" for="is_superadmin">Superadmin</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{{ url_for('users.manage_users') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

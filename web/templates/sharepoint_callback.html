@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}SharePoint Connection - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="min-h-[60vh] flex flex-col items-center justify-center py-12">
+    <div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-8 md:p-12 text-center max-w-md w-full relative overflow-hidden">
+        
+        <!-- Top decorative bar -->
+        <div class="h-1.5 absolute top-0 left-0 right-0 {% if success %}bg-gradient-to-r from-emerald-400 to-teal-500{% else %}bg-gradient-to-r from-rose-400 to-red-500{% endif %}"></div>
+
+        {% if success %}
+        <div class="w-20 h-20 mx-auto rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center text-3xl mb-6 shadow-sm border border-emerald-100">
+            <i class="fa-solid fa-check"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2" style="font-family:'Outfit',sans-serif">Connection Successful</h2>
+        <p class="text-slate-500 text-sm mb-8">SharePoint authorization has been completed successfully for tenant <span class="font-bold text-slate-700">#{{ tenant_id }}</span>.</p>
+        
+        <a href="{{ url_for('tenants.manage_tenant_azure', tenant_id=tenant_id) }}" 
+           class="inline-flex w-full items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5">
+            <i class="fa-solid fa-arrow-left"></i> Return to Configuration
+        </a>
+        {% else %}
+        <div class="w-20 h-20 mx-auto rounded-full bg-rose-50 text-rose-500 flex items-center justify-center text-3xl mb-6 shadow-sm border border-rose-100">
+            <i class="fa-solid fa-xmark"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2" style="font-family:'Outfit',sans-serif">Connection Failed</h2>
+        <p class="text-slate-500 text-sm mb-8">SharePoint authorization could not be completed. Please verify your Azure AD settings and try again.</p>
+        
+        <button onclick="window.history.back()" 
+           class="inline-flex w-full items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold text-white bg-slate-800 hover:bg-slate-700 shadow-lg transition-all hover:-translate-y-0.5">
+            <i class="fa-solid fa-rotate-left"></i> Go Back
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

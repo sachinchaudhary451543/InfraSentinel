@@ -1,0 +1,1348 @@
+{% extends "base.html" %}
+
+{% block title %}Remote Control - {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-6 pt-4 cursor-default">
+    <!-- Header -->
+    <div class="mb-6">
+        <a href="{{ url_for('main.dashboard') }}?tab=live"
+            class="text-slate-400 hover:text-indigo-400 transition-colors text-sm font-medium mb-4 inline-block">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Back to Live Monitoring
+        </a>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-indigo-500"></i> Remote Control Session
+                </h2>
+                <div
+                    class="flex items-center gap-3 mt-2 text-sm text-slate-600 font-medium bg-white w-fit px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                    <i class="fa-solid fa-server text-slate-400"></i>
+                    <span class="text-slate-900 font-bold">{{ server.hostname }}</span>
+                    &bull; <span class="font-mono text-indigo-600">{{ server.ip }}</span>
+                    &bull;
+                    {% if is_online %}
+                    <span class="badge badge-online py-0.5"><span class="pulse-dot green"></span>Online</span>
+                    {% else %}
+                    <span class="badge badge-offline py-0.5"><span class="pulse-dot red"></span>Offline</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Panel: System Status & Actions -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Real-time Metrics -->
+            <div class="glass-card shadow-sm border-slate-200">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+                    <h5 class="text-slate-900 font-bold text-base tracking-wide flex items-center">
+                        <i class="fa-solid fa-chart-line text-indigo-500 mr-2"></i> System Metrics
+                    </h5>
+                </div>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <!-- CPU -->
+                    <div
+                        class="bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-xl p-4 border border-indigo-200 shadow-sm">
+                        <div class="text-[0.65rem] font-bold text-indigo-700 uppercase tracking-widest mb-2"><i
+                                class="fa-solid fa-microchip mr-1"></i>CPU</div>
+                        <div class="text-2xl font-black text-indigo-900 mb-2">{{ cpu_percent }}<span
+                                class="text-sm">%</span></div>
+                        <div class="h-2 bg-white rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 transition-all" data-value="{{ cpu_percent }}"></div>
+                        </div>
+                    </div>
+                    <!-- RAM -->
+                    <div
+                        class="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-4 border border-emerald-200 shadow-sm">
+                        <div class="text-[0.65rem] font-bold text-emerald-700 uppercase tracking-widest mb-2"><i
+                                class="fa-solid fa-memory mr-1"></i>RAM</div>
+                        <div class="text-2xl font-black text-emerald-900 mb-2">{{ memory_percent }}<span
+                                class="text-sm">%</span></div>
+                        <div class="h-2 bg-white rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-500 transition-all" data-value="{{ memory_percent }}"></div>
+                        </div>
+                    </div>
+                    <!-- Disk -->
+                    <div
+                        class="bg-gradient-to-br from-violet-50 to-violet-100/50 rounded-xl p-4 border border-violet-200 shadow-sm">
+                        <div class="text-[0.65rem] font-bold text-violet-700 uppercase tracking-widest mb-2"><i
+                                class="fa-solid fa-hard-drive mr-1"></i>Disk</div>
+                        <div class="text-2xl font-black text-violet-900 mb-2">{{ disk_percent }}<span
+                                class="text-sm">%</span></div>
+                        <div class="h-2 bg-white rounded-full overflow-hidden">
+                            <div class="h-full bg-violet-500 transition-all" data-value="{{ disk_percent }}"></div>
+                        </div>
+                    </div>
+                    <!-- Status -->
+                    <div
+                        class="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <div class="text-[0.65rem] font-bold text-slate-700 uppercase tracking-widest mb-2"><i
+                                class="fa-solid fa-pulse mr-1"></i>Status</div>
+                        {% if is_online %}
+                        <div class="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Online
+                        </div>
+                        {% else %}
+                        <div class="text-sm font-bold text-slate-500 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                            Offline
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Remote Actions -->
+            <div class="glass-card shadow-sm border-slate-200 mt-6">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+                    <h5 class="text-slate-900 font-bold text-base tracking-wide flex items-center">
+                        <i class="fa-solid fa-bolt text-amber-500 mr-2"></i> Administrative Modules
+                    </h5>
+                </div>
+
+                <!-- Top row: RDP + Software (2 cols on laptop, 1 on mobile) -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+                    <!-- RDP -->
+                    <div
+                        class="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 shadow-sm relative overflow-hidden group">
+                        <div
+                            class="absolute -right-4 -top-4 text-indigo-500/5 text-7xl group-hover:scale-110 transition-transform duration-500">
+                            <i class="fa-solid fa-network-wired"></i>
+                        </div>
+                        <div
+                            class="relative z-10 w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-4">
+                            <i class="fa-solid fa-computer text-indigo-600"></i>
+                        </div>
+                        <h6 class="text-base font-bold text-slate-900 mb-1">RDP Gateway</h6>
+                        <p class="text-xs text-slate-600 mb-6 leading-relaxed">Securely negotiate a Remote Desktop
+                            Protocol session tunnel to assume direct desktop control.</p>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button id="rdpBtn" onclick="initiateRDP('{{ server.id }}')"
+                                class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all text-sm font-bold flex items-center gap-2">
+                                <i class="fa-solid fa-desktop"></i> Initialize connection
+                            </button>
+                            <button id="copyRdpBtn" onclick="copyRDPCommand()"
+                                class="w-10 h-10 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-colors flex items-center justify-center"
+                                style="display:none;" title="Copy RDP Command">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Software -->
+                    <div
+                        class="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 shadow-sm relative overflow-hidden group">
+                        <div
+                            class="absolute -right-4 -top-4 text-emerald-500/5 text-7xl group-hover:scale-110 transition-transform duration-500">
+                            <i class="fa-solid fa-box-open"></i>
+                        </div>
+                        <div
+                            class="relative z-10 w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4">
+                            <i class="fa-solid fa-layer-group text-emerald-600"></i>
+                        </div>
+                        <h6 class="text-base font-bold text-slate-900 mb-1">Package Deployment</h6>
+                        <p class="text-xs text-slate-600 mb-4 leading-relaxed">Remotely provision or remove standard
+                            software payloads synchronously.</p>
+
+                        <div class="flex flex-col gap-3 relative z-10">
+                            <div class="relative w-full">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-cube text-slate-400 text-xs"></i>
+                                </div>
+                                <input type="text" id="softwareName"
+                                    class="w-full bg-white border border-slate-200 text-sm text-slate-800 rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder-slate-400 font-mono"
+                                    placeholder="Package name (e.g. 7-Zip)" value="7-Zip">
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="deploySoftware('{{ server.id }}', 'install')"
+                                    class="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-download"></i> Install
+                                </button>
+                                <button onclick="deploySoftware('{{ server.id }}', 'uninstall')"
+                                    class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 hover:bg-rose-50 text-rose-600 rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-trash-can"></i> Uninstall
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terminal Command Section (Full width) -->
+                <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-sm mb-5">
+                    <div
+                        class="relative z-10 w-10 h-10 rounded-xl bg-slate-700/50 flex items-center justify-center mb-4">
+                        <i class="fa-solid fa-terminal text-slate-300"></i>
+                    </div>
+                    <h6 class="text-base font-bold text-white mb-1">Terminal Command</h6>
+                    <p class="text-xs text-slate-400 mb-4 leading-relaxed">Execute PowerShell commands directly on the
+                        remote system (runs asynchronously).</p>
+
+                    <div class="flex gap-3">
+                        <div class="flex-1 relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-code text-slate-500 text-xs"></i>
+                            </div>
+                            <input type="text" id="terminalCommandInput"
+                                class="w-full bg-slate-800 border border-slate-700 text-sm text-slate-200 rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-slate-600 font-mono"
+                                placeholder="Enter PowerShell command...">
+                        </div>
+                        <button id="executeTerminalBtn" onclick="executeTerminalCommand('{{ server.id }}')"
+                            class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-play"></i> Execute
+                        </button>
+                    </div>
+
+                    <!-- Terminal Output Box -->
+                    <div id="terminalOutputBox" class="hidden mt-4 bg-black rounded-lg border border-slate-700 overflow-hidden">
+                        <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-slate-400 text-xs"></i>
+                                <span class="text-xs font-semibold text-slate-300 uppercase tracking-widest">Output</span>
+                            </div>
+                            <div id="termStatus" class="text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+                                Pending
+                            </div>
+                        </div>
+                        <div class="p-3">
+                            <pre id="termOut" class="text-xs text-green-400 font-mono whitespace-pre-wrap break-words max-h-64 overflow-y-auto custom-scrollbar">Waiting for agent...</pre>
+                        </div>
+                        <div id="termErrors" class="hidden p-3 bg-red-950/30 border-t border-red-900/50">
+                            <p class="text-[0.65rem] font-bold text-red-500 uppercase tracking-widest mb-1">Standard Error</p>
+                            <pre id="termErrText" class="text-xs text-red-400 font-mono whitespace-pre-wrap break-words max-h-32 overflow-y-auto custom-scrollbar"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Repair (Full width, responsive layout) -->
+                <div
+                    class="bg-gradient-to-br from-teal-50 to-teal-100/50 border border-teal-200 rounded-2xl p-6 shadow-sm relative overflow-hidden group">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                        <div class="max-w-lg">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center shrink-0 border border-teal-200">
+                                    <i class="fa-solid fa-screwdriver-wrench text-teal-600 text-base"></i>
+                                </div>
+                                <h6 class="text-lg font-bold text-slate-900">System Diagnostics & Repair</h6>
+                            </div>
+                            <p class="text-sm text-slate-600 leading-relaxed">Trigger elevated maintenance scripts
+                                remotely to correct localized operating system anomalies without user interruption.</p>
+                        </div>
+
+                        <div class="flex flex-wrap lg:flex-nowrap gap-2 lg:gap-3 shrink-0">
+                            <button onclick="executeRepair('{{ server.id }}', 'sfc')"
+                                class="px-4 py-2.5 bg-white border border-slate-200 hover:border-teal-500/50 hover:bg-teal-50 hover:text-teal-700 text-slate-600 rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-sm">
+                                <i class="fa-solid fa-shield-virus"></i> SFC Scan
+                            </button>
+                            <button onclick="executeRepair('{{ server.id }}', 'disk_check')"
+                                class="px-4 py-2.5 bg-white border border-slate-200 hover:border-amber-500/50 hover:bg-amber-50 hover:text-amber-700 text-slate-600 rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-sm">
+                                <i class="fa-solid fa-hdd"></i> Disk Check
+                            </button>
+                            <button onclick="executeRepair('{{ server.id }}', 'windows_update')"
+                                class="px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-500/50 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-sm">
+                                <i class="fa-brands fa-windows"></i> Updates
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tenant Management (Full width, redesigned) -->
+                <div
+                    class="bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-2xl p-6 shadow-sm relative overflow-hidden group">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                        <div class="max-w-lg">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0 border border-purple-300">
+                                    <i class="fa-solid fa-sliders text-purple-600 text-base"></i>
+                                </div>
+                                <h6 class="text-lg font-bold text-slate-900">Tenant Management & Configuration</h6>
+                            </div>
+                            <p class="text-sm text-slate-600 leading-relaxed">Access tenant-wide configuration, Azure
+                                integration settings, SharePoint document library setup, and organizational policies.
+                                Manage billing, licenses, and security policies.</p>
+                        </div>
+
+                        <a href="{{ url_for('tenants.manage_tenant_azure', tenant_id=server.tenant_id) }}"
+                            class="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-sm font-bold flex items-center justify-center gap-2 whitespace-nowrap shadow-sm shrink-0">
+                            <i class="fa-solid fa-gear"></i> Manage Settings
+                        </a>
+                    </div>
+                </div>
+
+                <!-- SharePoint Status Alert -->
+                {% if not sharepoint_configured %}
+                <div
+                    class="md:col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm flex items-start gap-4 mt-4 animate-pulse">
+                    <div class="text-amber-600 text-xl flex-shrink-0 pt-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="flex-grow">
+                        <p class="text-sm font-semibold text-amber-900">SharePoint Not Configured</p>
+                        <p class="text-xs text-amber-700 mt-1">Screenshots are disabled. Configure SharePoint in <a
+                                href="{{ url_for('tenants.manage_tenant_azure', tenant_id=server.tenant_id) }}"
+                                class="underline font-bold hover:text-amber-900">Tenant Settings</a> to enable
+                            automatic screenshot capture and sync.</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Screenshot Config (Full width, improved UI) -->
+                <div
+                    class="bg-gradient-to-br from-indigo-50 to-indigo-100/50 border border-indigo-200 rounded-2xl p-6 shadow-sm relative overflow-hidden group">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                        <div class="max-w-lg">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-300">
+                                    <i class="fa-solid fa-camera text-indigo-600 text-base"></i>
+                                </div>
+                                <h6 class="text-lg font-bold text-slate-900">Automated Screenshots</h6>
+                            </div>
+                            <p class="text-sm text-slate-600 leading-relaxed">Enable background screenshot capture at
+                                configurable intervals. Screenshots are securely uploaded directly to SharePoint
+                                Document Library.</p>
+                        </div>
+
+                        <div
+                            class="flex flex-wrap lg:flex-nowrap items-center gap-4 bg-white p-4 rounded-lg border border-slate-200 shadow-sm shrink-0">
+                            <div class="flex items-center gap-3">
+                                <label for="screenshotToggle" class="text-sm font-bold text-slate-700">Capture</label>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="screenshotToggle" class="sr-only peer" {% if
+                                        server.screenshot_enabled %}checked{% endif %}>
+                                    <div
+                                        class="w-11 h-6 bg-slate-200 outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="h-7 w-px bg-slate-300 hidden lg:block"></div>
+                            <div class="flex items-center gap-3 min-w-max">
+                                <label class="text-sm font-bold text-slate-700">Every</label>
+                                <div class="relative">
+                                    <input type="number" id="screenshotInterval"
+                                        value="{{ server.screenshot_interval_minutes or 10 }}" min="5" max="1440"
+                                        class="w-20 bg-slate-50 border border-slate-300 text-slate-800 text-sm font-mono rounded-lg px-3 py-2 text-center focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                                </div>
+                                <span class="text-sm text-slate-600 font-medium">min</span>
+                            </div>
+                            <button onclick="saveScreenshotConfig('{{ server.id }}')" id="saveScreenshotBtn"
+                                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-sm gap-2"
+                                title="Save Configuration">
+                                <i class="fa-solid fa-save"></i> Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Commands & Agent Management -->
+    <div class="space-y-6">
+        <!-- Agent Status & Recovery -->
+        {% if not is_online %}
+        <div class="glass-card shadow-sm border-t-4 border-t-rose-500">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h5 class="text-slate-900 font-bold text-sm tracking-wide flex items-center">
+                    <i class="fa-solid fa-circle-exclamation text-rose-500 mr-2"></i> Agent Offline
+                </h5>
+            </div>
+            <div class="space-y-3">
+                <p class="text-xs text-slate-600 leading-relaxed">This system has not reported metrics in the last
+                    60 seconds. The agent may be stopped, disconnected, or experiencing network issues.</p>
+                <div class="grid grid-cols-2 gap-2 text-[0.65rem] text-slate-500 py-2 bg-slate-50 rounded-lg px-3">
+                    <div><strong>Last Seen:</strong> {{ server.last_seen.strftime('%Y-%m-%d %H:%M:%S') if
+                        server.last_seen else 'Never' }}</div>
+                    <div><strong>Status:</strong> <span class="text-rose-600 font-bold">OFFLINE</span></div>
+                </div>
+                <div class="space-y-2">
+                    <button onclick="triggerAgentRestart('{{ server.id }}')"
+                        class="w-full px-3 py-2.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i> Trigger Agent Restart
+                    </button>
+                    <button onclick="showAgentTroubleshooting()"
+                        class="w-full px-3 py-2.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-circle-info"></i> Troubleshooting Guide
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        <!-- Pending -->
+        <div class="glass-card shadow-sm border-t-4 border-t-amber-500">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h5 class="text-slate-900 font-bold text-sm tracking-wide flex items-center">
+                    <i class="fa-solid fa-hourglass-half text-amber-500 mr-2"></i> Pending Operations
+                </h5>
+                <span class="text-xs bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded font-black">{{ pending_count
+                    }}</span>
+            </div>
+            {% if pending_count > 0 %}
+            <div class="space-y-3">
+                {% for cmd in recent_commands %}
+                {% if cmd.status == 'pending' %}
+                <div class="bg-slate-50 border border-amber-500/20 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                    <div class="flex justify-between items-start mb-2 pl-2">
+                        <p class="text-sm font-bold text-slate-800 font-mono tracking-tight">{{ cmd.command }}</p>
+                    </div>
+                    <p class="text-[0.65rem] text-slate-500 pl-2 flex items-center"><i
+                            class="fa-regular fa-clock mr-1"></i> Dispatched: {{ cmd.created_at }}</p>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6">
+                <div
+                    class="w-12 h-12 mx-auto rounded-full bg-emerald-50 border border-emerald-500/10 flex items-center justify-center mb-3">
+                    <i class="fa-solid fa-check text-emerald-600 text-lg"></i>
+                </div>
+                <p class="text-sm font-medium text-slate-800">All Clear</p>
+                <p class="text-xs text-slate-500 mt-1">No suspended operations</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- History -->
+        <div class="glass-card shadow-sm max-h-[500px] flex flex-col border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0">
+                <h5 class="text-slate-900 font-bold text-sm tracking-wide">
+                    <i class="fa-solid fa-clock-rotate-left text-slate-400 mr-2"></i> Audit Log
+                </h5>
+                <a href="{{ url_for('asset_mgmt.server_audit_gallery', server_id=server.id) }}"
+                    class="text-[0.65rem] text-indigo-600 hover:text-indigo-400 transition-colors uppercase font-bold tracking-widest">View
+                    All</a>
+            </div>
+            <div id="auditLogContainer" class="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
+                {% for cmd in recent_commands[:15] %}
+                <div
+                    class="bg-slate-50 border border-slate-100 rounded-xl p-3 hover:bg-white transition-colors group shadow-sm">
+                    <div class="flex justify-between items-start mb-2 gap-3">
+                        <p class="text-xs font-bold text-slate-800 font-mono break-all leading-tight">{{ cmd.command
+                            }}</p>
+                        <span class="badge text-[0.6rem] px-1.5 py-0.5 shrink-0
+                                {% if cmd.status == 'failed' %}badge-offline
+                                {% elif cmd.status == 'success' %}badge-online
+                                {% elif cmd.status == 'pending' %}badge-warning
+                                {% else %}badge-unknown{% endif %}">
+                            <i
+                                class="fa-solid {% if cmd.status == 'success' %}fa-check{% elif cmd.status == 'failed' %}fa-xmark{% elif cmd.status == 'pending' %}fa-spinner fa-spin{% else %}fa-circle{% endif %} mr-1 opacity-70"></i>
+                            {{ cmd.status | upper }}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <p class="text-[0.6rem] text-slate-500 font-medium whitespace-nowrap"><i
+                                class="fa-solid fa-user-shield mr-1 opacity-50"></i> {{ cmd.requested_by }}</p>
+                        <p class="text-[0.6rem] text-slate-400 whitespace-nowrap">{{ cmd.created_at }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not recent_commands %}
+                <div class="text-center py-5">
+                    <p class="text-xs text-slate-400">No recent commands execution logs</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Screenshot Gallery Panel (Full Width) ══ -->
+<div id="screenshotGalleryPanel" class="mt-6 mb-6">
+    <div class="glass-card shadow-sm border-slate-200 p-0 overflow-hidden">
+
+        <!-- Header -->
+        <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+            <h5 class="text-slate-900 font-bold text-base flex items-center gap-2">
+                <i class="fa-solid fa-images text-indigo-500"></i> Screenshot Gallery
+                <span id="galleryTotalBadge"
+                    class="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold hidden"></span>
+            </h5>
+            <div class="flex items-center gap-2">
+                <button onclick="galleryLoadPage(galleryState.page - 1)" id="galleryPrevBtn"
+                    class="w-8 h-8 bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-lg text-xs flex items-center justify-center disabled:opacity-30 transition-colors"
+                    disabled>
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <span id="galleryPageInfo" class="text-xs text-slate-500 font-medium min-w-[60px] text-center">—</span>
+                <button onclick="galleryLoadPage(galleryState.page + 1)" id="galleryNextBtn"
+                    class="w-8 h-8 bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-lg text-xs flex items-center justify-center disabled:opacity-30 transition-colors"
+                    disabled>
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+                <button onclick="galleryRefresh()"
+                    class="ml-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-rotate-right"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        {% if server.screenshot_enabled %}
+
+        <!-- Date filter tabs -->
+        <div id="galleryDateTabs"
+            class="flex gap-1 overflow-x-auto px-6 py-3 border-b border-slate-100 bg-slate-50 scrollbar-thin"
+            style="scrollbar-width:thin;">
+            <button onclick="gallerySelectDate('')" id="dateTab-all"
+                class="gallery-date-tab shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-indigo-600 text-white shadow-sm">
+                All Dates
+            </button>
+            <!-- Populated dynamically -->
+        </div>
+
+        <!-- Grid -->
+        <div id="galleryGrid"
+            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-6">
+            <!-- Cards injected by JS -->
+        </div>
+
+        <!-- Loading / Empty states -->
+        <div id="galleryLoading" class="hidden flex-col items-center justify-center py-16 gap-3 text-slate-400">
+            <div class="w-8 h-8 border-3 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+            <span class="text-sm">Loading screenshots…</span>
+        </div>
+        <div id="galleryEmpty" class="hidden text-center py-16 px-6">
+            <i class="fa-solid fa-camera text-slate-200 text-5xl mb-4"></i>
+            <p class="text-base font-bold text-slate-500">No screenshots found</p>
+            <p class="text-sm text-slate-400 mt-1">Try a different date or wait for the agent to capture one.</p>
+        </div>
+
+        {% else %}
+        <div class="text-center py-16 px-6">
+            <i class="fa-solid fa-camera-slash text-slate-300 text-5xl mb-4"></i>
+            <p class="text-base font-bold text-slate-600">Screenshots Disabled</p>
+            <p class="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                Enable Automated Screenshots in the Administrative Modules block above to start capturing desktop
+                telemetry.
+            </p>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+</div>
+</div>
+
+<!-- ══ Lightbox Modal ══ -->
+<div id="lightboxModal"
+    class="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm hidden flex flex-col items-center justify-center p-4"
+    onclick="if(event.target===this) closeLightbox()">
+    <div class="relative w-full max-w-5xl max-h-[95vh] flex flex-col bg-black/50 rounded-lg overflow-hidden">
+        <!-- Toolbar (Fixed at Top) -->
+        <div
+            class="flex items-center justify-between w-full p-4 border-b border-white/10 flex-shrink-0 bg-black/70 backdrop-blur">
+            <div class="flex items-center gap-3">
+                <button onclick="lightboxNav(-1)"
+                    class="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <span id="lightboxCounter" class="text-white/70 text-sm font-medium min-w-[80px]"></span>
+                <button onclick="lightboxNav(1)"
+                    class="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="flex items-center gap-2">
+                <a id="lightboxDownload" href="#" download
+                    class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-download text-sm"></i> <span class="hidden sm:inline">Download</span>
+                </a>
+                <button onclick="closeLightbox()"
+                    class="w-9 h-9 bg-white/10 hover:bg-rose-500 text-white rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Image Container (Scrollable) -->
+        <div class="relative flex-1 flex items-center justify-center overflow-auto bg-black/30">
+            <img id="lightboxImg" src="" alt="Screenshot"
+                class="max-h-full max-w-full rounded object-contain transition-opacity duration-200" style="opacity:0;">
+            <div id="lightboxSpinner" class="absolute inset-0 flex items-center justify-center">
+                <div class="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+            </div>
+        </div>
+
+        <!-- Caption (Fixed at Bottom) -->
+        <div class="w-full p-4 border-t border-white/10 bg-black/70 backdrop-blur flex-shrink-0">
+            <p id="lightboxFilename" class="text-white font-medium text-sm truncate"></p>
+            <p id="lightboxMeta" class="text-white/50 text-xs mt-1 truncate"></p>
+        </div>
+    </div>
+</div>
+
+{% if server.screenshot_enabled %}
+<script>
+    var _galleryServerId = parseInt("{{ server.id }}", 10) || 0;
+</script>
+<script>
+    (function () {
+        const SERVER_ID = _galleryServerId;
+        const PER_PAGE = 24;
+
+        const galleryState = {
+            page: 1,
+            dateFilter: '',
+            total: 0,
+            dates: [],
+            shots: [],   // current page items
+            lightboxIdx: 0,
+        };
+        window.galleryState = galleryState;
+
+        /* ── Helpers ── */
+        function el(id) { return document.getElementById(id); }
+
+        function fmtDate(isoStr) {
+            if (!isoStr) return '—';
+            let s = isoStr;
+            if (!s.includes('T')) s = s.replace(' ', 'T');
+            if (!s.endsWith('Z')) s += 'Z';
+            const d = new Date(s);
+            return d.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function imgUrl(shot) {
+            // Prefer our app-served URL so thumbnails work even when SharePoint blocks hotlinking.
+            if (shot.image_url) return shot.image_url;
+            if (shot.sharepoint_url) return shot.sharepoint_url;
+            return `/api/screenshot/${shot.id}`;
+        }
+
+        /* ── Date tabs ── */
+        function renderDateTabs() {
+            const tabs = el('galleryDateTabs');
+            // Keep the "All" button; remove old date buttons
+            const children = [...tabs.querySelectorAll('button[data-date]')];
+            children.forEach(b => b.remove());
+
+            galleryState.dates.forEach(d => {
+                const btn = document.createElement('button');
+                btn.dataset.date = d;
+                btn.className = 'gallery-date-tab shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ' +
+                    (galleryState.dateFilter === d
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600');
+                btn.textContent = formatDateLabel(d);
+                btn.onclick = () => gallerySelectDate(d);
+                tabs.appendChild(btn);
+            });
+
+            // Highlight "All" tab
+            el('dateTab-all').className = 'gallery-date-tab shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ' +
+                (!galleryState.dateFilter
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600');
+        }
+
+        function formatDateLabel(d) {
+            const today = new Date().toISOString().slice(0, 10);
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            if (d === today) return 'Today';
+            if (d === yesterday) return 'Yesterday';
+            const dt = new Date(d + 'T00:00:00');
+            return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+        }
+
+        /* ── Grid rendering ── */
+        function renderGrid(shots) {
+            const grid = el('galleryGrid');
+            grid.innerHTML = '';
+
+            shots.forEach((s, i) => {
+                const url = imgUrl(s);
+                const thumb = url || '';
+                const isBlank = !url;
+
+                const card = document.createElement('div');
+                card.className = 'bg-slate-50 rounded-xl overflow-hidden border border-slate-200 shadow-sm group flex flex-col cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all duration-200';
+                card.onclick = () => openLightbox(i);
+
+                card.innerHTML = `
+                <div class="relative pb-[62.5%] bg-slate-900 overflow-hidden">
+                    ${thumb ? `
+                    <img src="${thumb}" alt="${s.filename || 'Screenshot'}" loading="lazy"
+                        class="absolute inset-0 w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-all duration-300"
+                        onerror="this.closest('.relative').innerHTML='<div class=\\'absolute inset-0 flex flex-col items-center justify-center text-slate-400\\'><i class=\\'fa-solid fa-image-slash text-2xl mb-1\\'></i><span class=\\'text-[0.6rem]\\'>Unavailable</span></div>'">
+                    ` : `
+                    <div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                        <i class="fa-solid fa-image text-2xl mb-1 opacity-40"></i>
+                        <span class="text-[0.6rem] opacity-60">No Preview</span>
+                    </div>
+                    `}
+                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <div class="bg-white/90 rounded-full p-2 shadow-lg">
+                            <i class="fa-solid fa-magnifying-glass-plus text-indigo-600 text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-2.5 border-t border-slate-100 bg-white flex-1 flex flex-col gap-0.5">
+                    <p class="text-[0.65rem] font-semibold text-slate-700 truncate" title="${s.filename || ''}">${s.filename || '—'}</p>
+                    <p class="text-[0.6rem] text-slate-400">${fmtDate(s.captured_at)}</p>
+                    ${s.active_user ? `<p class="text-[0.6rem] text-slate-400 truncate"><i class="fa-solid fa-user mr-1 text-[0.55rem] opacity-60"></i>${s.active_user}</p>` : ''}
+                    ${s.file_size_kb ? `<span class="self-start text-[0.55rem] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded font-bold">${s.file_size_kb} KB</span>` : ''}
+                </div>
+            `;
+                grid.appendChild(card);
+            });
+        }
+
+        /* ── Pagination controls ── */
+        function updatePagination() {
+            const totalPages = Math.max(1, Math.ceil(galleryState.total / PER_PAGE));
+            el('galleryPageInfo').textContent = `${galleryState.page} / ${totalPages}`;
+            el('galleryPrevBtn').disabled = galleryState.page <= 1;
+            el('galleryNextBtn').disabled = galleryState.page >= totalPages;
+            const badge = el('galleryTotalBadge');
+            if (galleryState.total > 0) {
+                badge.textContent = `${galleryState.total} total`;
+                badge.classList.remove('hidden');
+            }
+        }
+
+        /* ── Fetch & render ── */
+        async function fetchGallery() {
+            el('galleryLoading').classList.remove('hidden');
+            el('galleryLoading').classList.add('flex');
+            el('galleryGrid').innerHTML = '';
+            el('galleryEmpty').classList.add('hidden');
+
+            const params = new URLSearchParams({
+                page: galleryState.page,
+                per_page: PER_PAGE,
+            });
+            if (galleryState.dateFilter) params.set('date_str', galleryState.dateFilter);
+
+            try {
+                const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots?${params}`);
+                const data = await res.json();
+
+                if (!data.success) throw new Error(data.error || 'API error');
+
+                galleryState.total = data.total;
+                galleryState.shots = data.screenshots;
+                galleryState.dates = data.dates || [];
+
+                renderDateTabs();
+                updatePagination();
+
+                if (data.screenshots.length === 0) {
+                    el('galleryEmpty').classList.remove('hidden');
+                } else {
+                    renderGrid(data.screenshots);
+                }
+            } catch (err) {
+                console.error('Gallery fetch error:', err);
+                el('galleryEmpty').classList.remove('hidden');
+                el('galleryEmpty').querySelector('p').textContent = 'Error loading screenshots.';
+            } finally {
+                el('galleryLoading').classList.add('hidden');
+                el('galleryLoading').classList.remove('flex');
+            }
+        }
+
+        /* ── Public interface ── */
+        window.gallerySelectDate = function (d) {
+            galleryState.dateFilter = d;
+            galleryState.page = 1;
+            fetchGallery();
+        };
+
+        window.galleryLoadPage = function (p) {
+            const totalPages = Math.max(1, Math.ceil(galleryState.total / PER_PAGE));
+            if (p < 1 || p > totalPages) return;
+            galleryState.page = p;
+            fetchGallery();
+        };
+
+        window.galleryRefresh = function () {
+            galleryState.page = 1;
+            fetchGallery();
+        };
+
+        /* ── Lightbox ── */
+        window.openLightbox = function (idx) {
+            galleryState.lightboxIdx = idx;
+            showLightboxItem(idx);
+            el('lightboxModal').classList.remove('hidden');
+            el('lightboxModal').classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeLightbox = function () {
+            el('lightboxModal').classList.add('hidden');
+            el('lightboxModal').classList.remove('flex');
+            document.body.style.overflow = '';
+        };
+
+        window.lightboxNav = function (dir) {
+            const shots = galleryState.shots;
+            const next = galleryState.lightboxIdx + dir;
+            if (next < 0 || next >= shots.length) return;
+            galleryState.lightboxIdx = next;
+            showLightboxItem(next);
+        };
+
+        function showLightboxItem(idx) {
+            const shots = galleryState.shots;
+            const s = shots[idx];
+            if (!s) return;
+
+            const img = el('lightboxImg');
+            img.style.opacity = '0';
+            el('lightboxSpinner').style.display = 'flex';
+
+            const url = imgUrl(s) || 'https://placehold.co/1280x720/1e293b/64748b?text=No+Preview+Available';
+            img.onload = () => {
+                img.style.opacity = '1';
+                el('lightboxSpinner').style.display = 'none';
+            };
+            img.onerror = () => {
+                img.src = 'https://placehold.co/1280x720/1e293b/64748b?text=Image+Unavailable';
+            };
+            img.src = url;
+
+            el('lightboxDownload').href = url;
+            el('lightboxDownload').download = s.filename || 'screenshot.png';
+            el('lightboxFilename').textContent = s.filename || 'Screenshot';
+            el('lightboxMeta').textContent = `${fmtDate(s.captured_at)}${s.active_user ? ' · ' + s.active_user : ''}${s.file_size_kb ? ' · ' + s.file_size_kb + ' KB' : ''}`;
+            el('lightboxCounter').textContent = `${idx + 1} / ${shots.length}`;
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function (e) {
+            if (el('lightboxModal').classList.contains('hidden')) return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') lightboxNav(-1);
+            if (e.key === 'ArrowRight') lightboxNav(1);
+        });
+
+        /* ── Initial load ── */
+        document.addEventListener('DOMContentLoaded', fetchGallery);
+    })();
+</script>
+{% endif %}
+
+<script>
+    let rdpData = {};
+
+    // ── Browser Console Logger ──
+    const logger = {
+        log: (msg) => console.log(`[ServerMonitor] ${msg}`),
+        warn: (msg) => console.warn(`[ServerMonitor WARN] ${msg}`),
+        error: (msg) => console.error(`[ServerMonitor ERROR] ${msg}`),
+        debug: (msg) => console.debug(`[ServerMonitor DEBUG] ${msg}`)
+    };
+
+    // Initialize progress bars on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        // Set progress bar widths from data attributes
+        document.querySelectorAll('[data-value]').forEach(el => {
+            const val = parseFloat(el.getAttribute('data-value')) || 0;
+            el.style.width = Math.min(100, Math.max(3, val)) + '%';
+        });
+    });
+
+    // --- WebSocket Implementation for Live Monitoring ---
+    document.addEventListener('DOMContentLoaded', function () {
+        const socket = io();
+        const serverId = "{{ server.id }}";
+        const tenantId = "{{ server.tenant_id }}";
+
+        socket.on('connect', () => {
+            console.log('Connected to ServerMonitor Real-time Gateway');
+            socket.emit('join', { room: tenantId });
+        });
+
+        socket.on('metrics_update', (data) => {
+            if (data.server_id == serverId) {
+                updateTelemetry(data.metrics);
+                updateOnlineStatus(true);
+            }
+        });
+
+        socket.on('command_started', (data) => {
+            if (data.server_id == serverId) {
+                showAlert(`Agent acknowledged command: ${data.command}`, 'amber');
+                addLogEntry(data, 'processing');
+            }
+        });
+
+        socket.on('command_result', (data) => {
+            if (data.server_id == serverId) {
+                const color = data.status === 'success' ? 'emerald' : 'rose';
+                showAlert(`Command Finished: ${data.command}`, color);
+                updateLogEntry(data);
+            }
+        });
+
+        function updateTelemetry(metrics) {
+            const cpu = Math.round(metrics.cpu);
+            const ram = Math.round(metrics.ram);
+            const disk = Math.round(metrics.disk);
+
+            // Update CPU progress bar
+            const cpuBars = document.querySelectorAll('div[data-value]');
+            if (cpuBars.length > 0) {
+                cpuBars[0].setAttribute('data-value', cpu);
+                cpuBars[0].style.width = Math.min(100, Math.max(3, cpu)) + '%';
+            }
+
+            // Update RAM progress bar
+            if (cpuBars.length > 1) {
+                cpuBars[1].setAttribute('data-value', ram);
+                cpuBars[1].style.width = Math.min(100, Math.max(3, ram)) + '%';
+            }
+
+            // Update Disk progress bar
+            if (cpuBars.length > 2) {
+                cpuBars[2].setAttribute('data-value', disk);
+                cpuBars[2].style.width = Math.min(100, Math.max(3, disk)) + '%';
+            }
+        }
+
+        function updateOnlineStatus(isOnline) {
+            const badge = document.querySelector('.badge-online, .badge-offline');
+            if (isOnline) {
+                badge.className = 'badge badge-online py-0.5';
+                badge.innerHTML = '<span class="pulse-dot green"></span>Online';
+            }
+        }
+
+        function addLogEntry(data, status) {
+            const container = document.getElementById('auditLogContainer');
+            const placeholder = container.querySelector('.text-center.py-5');
+            if (placeholder) placeholder.remove();
+
+            const entryId = `cmd_log_${data.command_id || 'new'}`;
+            if (document.getElementById(entryId)) return;
+
+            const div = document.createElement('div');
+            div.id = entryId;
+            div.className = "bg-slate-50 border border-slate-100 rounded-xl p-3 hover:bg-white transition-colors group shadow-sm animate-fade-up";
+            div.innerHTML = `
+                <div class="flex justify-between items-start mb-2 gap-3">
+                    <p class="text-xs font-bold text-slate-800 font-mono break-all leading-tight">${data.command}</p>
+                    <span class="badge text-[0.6rem] px-1.5 py-0.5 shrink-0 badge-warning">
+                        <i class="fa-solid fa-spinner fa-spin mr-1 opacity-70"></i>
+                        ${status.toUpperCase()}
+                    </span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <p class="text-[0.6rem] text-slate-500 font-medium whitespace-nowrap"><i class="fa-solid fa-user-shield mr-1 opacity-50"></i> System</p>
+                    <p class="text-[0.6rem] text-slate-400 whitespace-nowrap">Just now</p>
+                </div>
+            `;
+            container.prepend(div);
+        }
+
+        function updateLogEntry(data) {
+            const entryId = `cmd_log_${data.command_id}`;
+            const entry = document.getElementById(entryId);
+            if (!entry) return;
+
+            const badge = entry.querySelector('.badge');
+            const status = data.status || 'success';
+            badge.className = `badge text-[0.6rem] px-1.5 py-0.5 shrink-0 ${status === 'success' ? 'badge-online' : 'badge-offline'}`;
+            badge.innerHTML = `<i class="fa-solid ${status === 'success' ? 'fa-check' : 'fa-xmark'} mr-1 opacity-70"></i> ${status.toUpperCase()}`;
+        }
+    });
+
+    async function initiateRDP(serverId) {
+        try {
+            const btn = document.getElementById('rdpBtn');
+            btn.disabled = true;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Establishing...';
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+
+            const response = await fetch(`/api/v2/server/${serverId}/remote/rdp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                rdpData = data;
+                showAlert('RDP session securely generated.', 'emerald');
+                document.getElementById('copyRdpBtn').style.display = 'flex';
+                navigator.clipboard.writeText(data.rdp_command);
+
+                if (navigator.platform.indexOf('Win') > -1) {
+                    setTimeout(() => { window.location.href = 'rdp://' + data.ip_address; }, 1000);
+                }
+            } else {
+                showAlert('Failed to negotiate RDP session', 'rose');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        } catch (error) {
+            showAlert('Error: ' + error.message, 'rose');
+            const btn = document.getElementById('rdpBtn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-desktop"></i> Intialize connection';
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        }
+    }
+
+    function copyRDPCommand() {
+        if (rdpData.rdp_command) {
+            navigator.clipboard.writeText(rdpData.rdp_command);
+            showAlert('RDP PowerShell Module copied to clipboard.', 'indigo');
+        }
+    }
+
+    async function deploySoftware(serverId, action) {
+        const softwareName = document.getElementById('softwareName').value;
+        if (!softwareName) {
+            showAlert('Please specify a software package.', 'amber');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/v2/server/${serverId}/remote/software`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, software: softwareName })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                showAlert(data.message, 'emerald');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                showAlert(errData.error || 'Deployment request rejected by server', 'rose');
+            }
+        } catch (error) {
+            showAlert('API connection lost: ' + error.message, 'rose');
+        }
+    }
+
+    async function executeRepair(serverId, repairType) {
+        const repairNames = {
+            'sfc': 'System File Check',
+            'disk_check': 'Disk Check & Repair',
+            'windows_update': 'Windows Update & Install'
+        };
+
+        if (!confirm(`Run elevated diagnostic tools for [${repairNames[repairType]}]? CPU performance may degrade temporarily.`)) {
+            return;
+        }
+
+        try {
+            showAlert(`Queuing ${repairNames[repairType]}...`, 'indigo');
+
+            const response = await fetch(`/api/v2/server/${serverId}/remote/repair`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repair_type: repairType })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                showAlert(`✓ ${data.message} (Command #${data.command_id})`, 'emerald');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                showAlert(errData.error || 'Failed to queue repair task', 'rose');
+            }
+        } catch (error) {
+            showAlert('API connection error: ' + error.message, 'rose');
+            logger.error(`Repair execution error: ${error}`);
+        }
+    }
+
+    async function triggerAgentRestart(serverId) {
+        if (!confirm('Queue agent restart command?\n\nThe agent will restart on next check-in (usually within 60 seconds).\n\nContinue?')) {
+            return;
+        }
+
+        const btnElement = document.querySelector('button[onclick*="triggerAgentRestart"]');
+        const originalHtml = btnElement.innerHTML;
+        const originalClass = btnElement.className;
+
+        try {
+            btnElement.disabled = true;
+            btnElement.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Queuing...';
+            btnElement.className = btnElement.className.replace('bg-rose-600', 'bg-slate-400');
+
+            const response = await fetch(`/api/v2/server/${serverId}/agent/restart`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showAlert(
+                    `✓ Restart queued (Command #${data.command_id}). Agent will restart on next heartbeat.`,
+                    'emerald'
+                );
+
+                // Optionally reload after delay to show updated status
+                setTimeout(() => {
+                    location.reload();
+                }, 2500);
+            } else {
+                // Handle known error codes
+                const errorMsg = data.error || 'Failed to queue restart command';
+                const errorCode = data.code || 'UNKNOWN';
+
+                let details = errorMsg;
+                switch (errorCode) {
+                    case 'ERR_DUPLICATE_COMMAND':
+                        details = `A restart command was already queued at ${new Date(data.created_at).toLocaleTimeString()}. Please wait before trying again.`;
+                        break;
+                    case 'ERR_QUEUE_FULL':
+                        details = `Too many pending commands (${data.pending_count}/10). Wait for some to complete before queuing another.`;
+                        break;
+                    case 'ERR_NO_AGENT':
+                        details = 'The agent is not installed on this system. Cannot restart a non-existent agent.';
+                        break;
+                    case 'ERR_UNAUTHORIZED':
+                        details = 'You do not have permission to restart the agent on this system.';
+                        break;
+                }
+
+                showAlert(details, 'rose');
+                logger.warn(`Agent restart failed: ${errorCode} - ${errorMsg}`);
+            }
+        } catch (error) {
+            showAlert(`Network error: ${error.message}. Please check your connection and try again.`, 'rose');
+            logger.error(`Agent restart network error: ${error}`);
+        } finally {
+            btnElement.disabled = false;
+            btnElement.innerHTML = originalHtml;
+            btnElement.className = originalClass;
+        }
+    }
+
+    function showAgentTroubleshooting() {
+        const troubleshootingHtml = `
+            <div class="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-6 border border-slate-200">
+                <h4 class="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-wrench text-indigo-600"></i> Agent Troubleshooting Guide
+                </h4>
+                <div class="space-y-4 text-sm">
+                    <div>
+                        <p class="font-semibold text-slate-800 mb-1">1. Check Agent Service Status</p>
+                        <p class="text-slate-600 font-mono text-xs bg-slate-900 text-emerald-400 p-2 rounded">Get-Service -Name "ServerMonitorAgent" | Start-Service</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-slate-800 mb-1">2. View Agent Logs</p>
+                        <p class="text-slate-600 font-mono text-xs bg-slate-900 text-emerald-400 p-2 rounded">Get-EventLog -LogName Application -Source ServerMonitorAgent -Newest 20</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-slate-800 mb-1">3. Verify API Connectivity</p>
+                        <p class="text-slate-600">Check if the system can reach the API endpoint. Review firewall rules and network configuration.</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-slate-800 mb-1">4. Restart Agent Manually</p>
+                        <p class="text-slate-600 font-mono text-xs bg-slate-900 text-emerald-400 p-2 rounded">Restart-Service -Name "ServerMonitorAgent"</p>
+                    </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+                        <p class="text-xs text-amber-800"><strong>Tip:</strong> If the agent is still not coming online after 5 minutes, check the Windows Event Viewer for detailed error messages.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 animate-fade-up';
+        alertDiv.innerHTML = `
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-auto">
+                <div class="p-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white">
+                    <h3 class="font-bold text-slate-900">Troubleshooting</h3>
+                    <button onclick="this.closest('div').remove()" class="p-1 hover:bg-slate-100 rounded">
+                        <i class="fa-solid fa-xmark text-slate-400"></i>
+                    </button>
+                </div>
+                <div class="p-6">
+                    ${troubleshootingHtml}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(alertDiv);
+    }
+
+    // Format screenshot timestamps to local IST
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.screenshot-ts').forEach(el => {
+            const ts = el.dataset.ts;
+            if (ts) {
+                const d = new Date(ts);
+                if (!isNaN(d.getTime())) {
+                    el.textContent = d.toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', hour12: true
+                    });
+                }
+            }
+        });
+    });
+
+    async function saveScreenshotConfig(serverId) {
+        const enabled = document.getElementById('screenshotToggle').checked;
+        const interval = document.getElementById('screenshotInterval').value;
+        const btnElement = document.getElementById('saveScreenshotBtn');
+        const iconElement = btnElement.querySelector('i');
+
+        iconElement.className = 'fa-solid fa-spinner fa-spin text-xs';
+
+        try {
+            const response = await fetch(`/api/v2/server/${serverId}/screenshots/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled, interval: parseInt(interval) })
+            });
+
+            if (response.ok) {
+                showAlert('Screenshot configuration saved globally.', 'emerald');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                showAlert(errData.error || 'Failed to save config', 'rose');
+            }
+        } catch (error) {
+            showAlert('API connection error: ' + error.message, 'rose');
+        } finally {
+            iconElement.className = 'fa-solid fa-save text-xs';
+        }
+    }
+
+    async function executeTerminalCommand(serverId) {
+        const input = document.getElementById('terminalCommandInput');
+        const command = input.value.trim();
+
+        if (!command) {
+            showAlert('Please enter a command', 'amber');
+            return;
+        }
+
+        const btn = document.getElementById('executeTerminalBtn');
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Queuing...';
+
+        try {
+            const response = await fetch(`/api/v2/server/${serverId}/terminal/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: command })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                showAlert(`✓ Command queued (ID: ${data.command_id})`, 'emerald');
+                input.value = '';
+                
+                // Show output box and start polling
+                const termBox = document.getElementById('terminalOutputBox');
+                if (termBox) termBox.classList.remove('hidden');
+                
+                const termOut = document.getElementById('termOut');
+                if (termOut) termOut.textContent = 'Waiting for agent to pick up command...';
+                
+                const termErrors = document.getElementById('termErrors');
+                if (termErrors) termErrors.classList.add('hidden');
+                
+                const statusEl = document.getElementById('termStatus');
+                if (statusEl) {
+                    statusEl.textContent = 'pending';
+                    statusEl.className = 'text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-700 uppercase';
+                }
+                
+                pollCommandStatus(data.command_id);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                showAlert(errData.error || 'Failed to queue command', 'rose');
+            }
+        } catch (error) {
+            showAlert('API error: ' + error.message, 'rose');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    }
+
+    function pollCommandStatus(commandId) {
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/v2/commands/' + commandId);
+                const data = await res.json();
+                if (data.success) {
+                    const status = document.getElementById('termStatus');
+                    const output = document.getElementById('termOut');
+                    const errors = document.getElementById('termErrors');
+                    const errText = document.getElementById('termErrText');
+
+                    if (data.output && output) {
+                        output.textContent = data.output;
+                    }
+
+                    if (data.error_output && errors && errText) {
+                        errors.classList.remove('hidden');
+                        errText.textContent = data.error_output;
+                    }
+
+                    if (data.status === 'completed') {
+                        if (status) {
+                            status.textContent = 'completed';
+                            status.className = 'text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-700 uppercase';
+                        }
+                        clearInterval(pollInterval);
+                    } else if (data.status === 'failed') {
+                        if (status) {
+                            status.textContent = 'failed';
+                            status.className = 'text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-700 uppercase';
+                        }
+                        clearInterval(pollInterval);
+                    } else if (data.status === 'running') {
+                        if (status) {
+                            status.textContent = 'running';
+                            status.className = 'text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-blue-200 text-blue-700 uppercase';
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to poll status', err);
+            }
+        }, 2000);
+        
+        // Timeout after 60 seconds
+        setTimeout(() => clearInterval(pollInterval), 60000);
+    }
+
+    function showAlert(message, color = 'indigo') {
+        const alertDiv = document.createElement('div');
+        // Tailwind JIT workaround to ensure classes are picked up: using inline styling if JIT misses dynamically created strings
+        alertDiv.className = `fixed top-6 right-6 z-[9999] animate-fade-up bg-dark-800 border border-l-4 border-l-${color}-500 border-white/10 text-white px-5 py-4 rounded-xl shadow-2xl backdrop-blur-xl flex justify-between items-center gap-6 min-w-[300px]`;
+
+        let iconHtml = '<i class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>';
+        if (color === 'emerald') iconHtml = '<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>';
+        if (color === 'rose') iconHtml = '<i class="fa-solid fa-circle-exclamation text-rose-400 text-lg"></i>';
+        if (color === 'amber') iconHtml = '<i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg"></i>';
+
+        alertDiv.innerHTML = `
+            <div class="flex items-center gap-3">
+                ${iconHtml}
+                <span class="text-sm font-semibold tracking-wide">${message}</span>
+            </div>
+            <button onclick="this.parentElement.remove()" class="text-slate-500 hover:text-white transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        `;
+        document.body.appendChild(alertDiv);
+        setTimeout(() => { if (alertDiv.parentElement) alertDiv.remove(); }, 5000);
+    }
+</script>
+{% endblock %}

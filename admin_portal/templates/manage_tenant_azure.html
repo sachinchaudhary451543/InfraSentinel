@@ -1,0 +1,28 @@
+{% extends 'superadmin_dashboard.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Manage Azure for Tenant: {{ tenant.name }}</h1>
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Client ID</label>
+            <input type="text" name="azure_client_id" class="form-control" required
+                value="{{ tenant.azure_client_id or '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Client Secret</label>
+            <input type="password" name="azure_client_secret" class="form-control" required
+                value="{{ tenant.azure_client_secret or '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Tenant ID</label>
+            <input type="text" name="azure_tenant_id" class="form-control" required
+                value="{{ tenant.azure_tenant_id or '' }}">
+        </div>
+        <div class="form-text mb-3">Ensure the application has Application permissions: Directory.Read.All,
+            Device.Read.All, DeviceManagementManagedDevices.Read.All and that an admin has granted consent.</div>
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{{ url_for('main.index_redirect') }}" class="btn btn-secondary ms-2">Cancel</a>
+    </form>
+</div>
+{% endblock %}

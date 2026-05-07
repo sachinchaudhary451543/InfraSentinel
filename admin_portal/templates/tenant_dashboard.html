@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Tenant Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Tenant Dashboard</h1>
+        <div>
+            <a href="{{ url_for('agents.agent_keys') }}" class="btn btn-outline-primary btn-sm me-2">Agent Keys</a>
+            <a href="{{ url_for('systems.registered_agents') }}" class="btn btn-outline-success btn-sm me-2">Registered
+                Agents</a>
+            <a href="{{ url_for('discovery.discover_domain') }}" class="btn btn-outline-info btn-sm">Discover Domain</a>
+        </div>
+    </div>
+
+    <h2>Your Servers</h2>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Hostname</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for server in servers %}
+            <tr>
+                <td>{{ server.id }}</td>
+                <td>{{ server.hostname }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="2" class="text-muted">No servers registered for your tenant.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% block tenant_content %}{% endblock %}
+</div>
+{% endblock %}

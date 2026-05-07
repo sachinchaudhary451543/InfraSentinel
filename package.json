@@ -1,0 +1,14 @@
+{
+    "name": "servermonitor-tailwind-build",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "build:css": "npx tailwindcss -i ./web/static/src/tailwind.css -o ./web/static/dist/css/tailwind.prod.min.css --minify --content \"./web/templates/**/*.html\" \"./admin_portal/templates/**/*.html\" \"./web/static/js/**/*.js\"",
+        "watch:css": "npx tailwindcss -i ./web/static/src/tailwind.css -o ./web/static/dist/css/tailwind.prod.min.css --watch --content \"./web/templates/**/*.html\" \"./admin_portal/templates/**/*.html\" \"./web/static/js/**/*.js\""
+    },
+    "devDependencies": {
+        "autoprefixer": "^10.4.14",
+        "postcss": "^8.4.23",
+        "tailwindcss": "^3.4.8"
+    }
+}

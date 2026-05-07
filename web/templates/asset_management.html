@@ -1,0 +1,933 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Management{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --ms-surface: #ffffff;
+        --ms-background: #f3f2f1;
+        --ms-border: #edebe9;
+        --ms-text: #323130;
+        --ms-text-secondary: #605e5c;
+        --ms-primary: #0078d4;
+        --ms-primary-hover: #106ebe;
+        --ms-radius: 8px;
+        --ms-shadow-sm: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108);
+        --ms-shadow-md: 0 3.2px 7.2px 0 rgba(0, 0, 0, 0.132), 0 0.6px 1.8px 0 rgba(0, 0, 0, 0.108);
+        --card-hover-bg: #f8f9fa;
+    }
+
+    [data-bs-theme="dark"] {
+        --ms-surface: #252423;
+        --ms-background: #11100f;
+        --ms-border: #3b3a39;
+        --ms-text: #ffffff;
+        --ms-text-secondary: #c8c6c4;
+        --ms-primary: #2899f5;
+        --card-hover-bg: #323130;
+    }
+
+    .am-container {
+        padding: 2rem;
+        background: var(--ms-background);
+        min-height: calc(100vh - 60px);
+        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .am-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 24px;
+    }
+
+    .am-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--ms-text);
+        margin: 0 0 8px 0;
+    }
+
+    .am-subtitle {
+        font-size: 0.9rem;
+        color: var(--ms-text-secondary);
+        margin: 0;
+    }
+
+    /* Top Stats row */
+    .stat-grids {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: var(--ms-surface);
+        border: 1px solid var(--ms-border);
+        border-radius: var(--ms-radius);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        box-shadow: var(--ms-shadow-sm);
+        transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--ms-shadow-md);
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(0, 120, 212, 0.1);
+        color: var(--ms-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        margin-right: 16px;
+    }
+
+    .stat-content h4 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--ms-text);
+    }
+
+    .stat-content p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--ms-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Toolbar: Search and Filter */
+    .am-toolbar {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        background: var(--ms-surface);
+        padding: 12px;
+        border-radius: var(--ms-radius);
+        border: 1px solid var(--ms-border);
+        box-shadow: var(--ms-shadow-sm);
+        position: sticky;
+        top: 16px;
+        z-index: 10;
+        align-items: center;
+    }
+
+    .search-input-wrapper {
+        position: relative;
+        flex: 1;
+        max-width: 400px;
+    }
+
+    .search-input-wrapper i {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--ms-text-secondary);
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 10px 14px 10px 40px;
+        border: 1px solid var(--ms-border);
+        border-radius: 6px;
+        background: var(--ms-background);
+        color: var(--ms-text);
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: var(--ms-primary);
+        box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+        background: var(--ms-surface);
+    }
+
+    .status-filter {
+        padding: 10px 14px;
+        border: 1px solid var(--ms-border);
+        border-radius: 6px;
+        background: var(--ms-surface);
+        color: var(--ms-text);
+        font-size: 0.95rem;
+        cursor: pointer;
+        min-width: 160px;
+    }
+
+    /* List Area */
+    .employee-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .employee-row {
+        background: var(--ms-surface);
+        border: 1px solid var(--ms-border);
+        border-radius: var(--ms-radius);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        transition: background-color 0.15s ease, border-color 0.15s;
+    }
+
+    .employee-row:hover {
+        background-color: var(--card-hover-bg);
+        border-color: var(--ms-primary);
+    }
+
+    .employee-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .emp-info {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .emp-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--ms-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .emp-details {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .emp-name {
+        font-weight: 600;
+        font-size: 1.05rem;
+        color: var(--ms-text);
+    }
+
+    .emp-email {
+        font-size: 0.85rem;
+        color: var(--ms-text-secondary);
+    }
+
+    .emp-meta {
+        font-size: 0.85rem;
+        color: var(--ms-text-secondary);
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .devices-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+        margin-top: 8px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--ms-border);
+    }
+
+    .device-card {
+        background: var(--ms-background);
+        border: 1px solid var(--ms-border);
+        border-radius: 6px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: transform 0.1s;
+    }
+
+    .device-card:hover {
+        border-color: #a0aeb2;
+    }
+
+    .device-icon {
+        font-size: 1.5rem;
+        color: var(--ms-text-secondary);
+    }
+
+    .device-info {
+        flex: 1;
+        overflow: hidden;
+    }
+
+    .device-hostname {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--ms-text);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .device-specs {
+        font-size: 0.75rem;
+        color: var(--ms-text-secondary);
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+    }
+
+    .device-source-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #e1dfdd;
+        color: #323130;
+        font-weight: 500;
+    }
+
+    [data-bs-theme="dark"] .device-source-badge {
+        background: #484644;
+        color: #f3f2f1;
+    }
+
+    .health-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .health-active {
+        background: #107c10;
+        box-shadow: 0 0 5px rgba(16, 124, 16, 0.5);
+    }
+
+    .health-warning {
+        background: #d83b01;
+    }
+
+    .health-critical {
+        background: #a4262c;
+        animation: pulse 1.5s infinite;
+    }
+
+    .health-inactive {
+        background: var(--ms-text-secondary);
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(164, 38, 44, 0.4);
+        }
+
+        70% {
+            box-shadow: 0 0 0 6px rgba(164, 38, 44, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(164, 38, 44, 0);
+        }
+    }
+
+    .loading-sentinel {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 40px;
+        color: var(--ms-text-secondary);
+        gap: 12px;
+        font-size: 0.95rem;
+    }
+
+    .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid rgba(0, 120, 212, 0.2);
+        border-top-color: var(--ms-primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--ms-text-secondary);
+        background: var(--ms-surface);
+        border-radius: var(--ms-radius);
+        border: 1px dashed var(--ms-border);
+    }
+
+    .view-btn {
+        padding: 6px 12px;
+        background: transparent;
+        border: 1px solid var(--ms-border);
+        border-radius: 4px;
+        color: var(--ms-primary);
+        font-weight: 500;
+        font-size: 0.85rem;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.15s;
+    }
+
+    .view-btn:hover {
+        background: rgba(0, 120, 212, 0.05);
+        color: var(--ms-primary-hover);
+        border-color: var(--ms-primary-hover);
+    }
+</style>
+
+<div class="am-container">
+    <div class="am-header">
+        <div>
+            <h1 class="am-title">Device Management</h1>
+            <p class="am-subtitle">Physical hardware inventory across Entra, Intune, and local agents (Excluding Virtual
+                Machines).</p>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stat-grids">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-content">
+                <h4>{{ total_employees }}</h4>
+                <p>Identities</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-laptop-code"></i></div>
+            <div class="stat-content">
+                <h4>{{ total_assets }}</h4>
+                <p>Tracked Endpoints</p>
+            </div>
+        </div>
+        <div class="stat-card" style="cursor: pointer; position: relative;"
+            onclick="document.getElementById('registerEmpModal').style.display='flex'">
+            <div class="stat-icon" style="color: #6366f1; background: rgba(99, 102, 241, 0.1);"><i
+                    class="fas fa-user-plus"></i></div>
+            <div class="stat-content">
+                <h4 style="color: #6366f1;">Add User</h4>
+                <p>Register Identity</p>
+            </div>
+        </div>
+        <a href="{{ url_for('asset_mgmt.view_audit_logs') }}"
+            style="text-decoration: none; color: inherit; display: block;">
+            <div class="stat-card">
+                <div class="stat-icon" style="color: #107c10; background: rgba(16, 124, 16, 0.1);"><i
+                        class="fas fa-file-shield"></i></div>
+                <div class="stat-content">
+                    <h4 style="color: #107c10;">Logs</h4>
+                    <p>Audit Trail</p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Register Employee Modal -->
+    <div id="registerEmpModal" class="modal-overlay"
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content"
+            style="background: var(--ms-surface); width: 100%; max-width: 500px; border-radius: 12px; border: 1px solid var(--ms-border); box-shadow: var(--ms-shadow-md); overflow: hidden;">
+            <div class="modal-header"
+                style="padding: 16px 20px; border-bottom: 1px solid var(--ms-border); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--ms-text);">Register Monitored
+                    Identity</h3>
+                <button onclick="document.getElementById('registerEmpModal').style.display='none'"
+                    style="background: none; border: none; color: var(--ms-text-secondary); cursor: pointer; font-size: 1.2rem;"><i
+                        class="fas fa-times"></i></button>
+            </div>
+            <form action="{{ url_for('asset_mgmt.add_employee') }}" method="POST"
+                style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+                <div class="form-group">
+                    <label
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Full
+                        Name</label>
+                    <input type="text" name="name" required placeholder="Employee Name"
+                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                </div>
+                <div class="form-group">
+                    <label
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Company
+                        Email ID</label>
+                    <input type="email" name="email" required placeholder="user@company.com"
+                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                </div>
+                <div class="form-group">
+                    <label
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Local
+                        System Username (for mapping)</label>
+                    <input type="text" name="local_username" placeholder="e.g. SachinKumar (from agent reports)"
+                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                    <p style="font-size: 0.65rem; color: var(--ms-text-secondary); margin-top: 4px;">This maps the agent
+                        telemetry to this company email ID.</p>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label
+                            style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Department</label>
+                        <input type="text" name="department" placeholder="IT, Sales, etc."
+                            style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                    </div>
+                    <div class="form-group">
+                        <label
+                            style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Designation</label>
+                        <input type="text" name="designation" placeholder="Manager, Developer"
+                            style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                    </div>
+                </div>
+                <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" onclick="document.getElementById('registerEmpModal').style.display='none'"
+                        class="view-btn"
+                        style="border: 1px solid var(--ms-border); color: var(--ms-text);">Cancel</button>
+                    <button type="submit" class="view-btn"
+                        style="background: var(--ms-primary); color: white; border: none; padding: 8px 24px;">Save
+                        Identity</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="am-tabs"
+        style="display: flex; gap: 20px; border-bottom: 1px solid var(--ms-border); margin-bottom: 24px;">
+        <button class="am-tab-btn active" data-target="devicesTab">Device Management</button>
+        <button class="am-tab-btn" data-target="activityTab">Live User Activity</button>
+    </div>
+
+    <!-- Tab Content: Devices -->
+    <div id="devicesTab" class="am-tab-content active" style="display: block;">
+        <!-- Toolbar -->
+        <div class="am-toolbar">
+            <div class="search-input-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" class="search-input"
+                    placeholder="Search identities or endpoints...">
+            </div>
+            <select id="statusFilter" class="status-filter">
+                <option value="">All Status</option>
+                <option value="active">Active Devices</option>
+                <option value="healthy">Healthy Only</option>
+                <option value="warning">Warning State</option>
+                <option value="critical">Critical State</option>
+            </select>
+            <select id="sourceFilter" class="status-filter">
+                <option value="">All Sources</option>
+                <option value="agent">Agent Managed</option>
+                <option value="azure">Intune/Azure</option>
+            </select>
+            <div id="toolbar-spinner" class="spinner"
+                style="width:18px;height:18px;border-width:2px;display:none;margin-left:auto;"></div>
+        </div>
+
+        <!-- List -->
+        <div id="employeeList" class="employee-list">
+            <!-- Rows injected here -->
+        </div>
+
+        <!-- Infinite Scroll Sentinel -->
+        <div id="scrollSentinel" class="loading-sentinel">
+            <div class="spinner"></div>
+            <span>Loading physical devices...</span>
+        </div>
+    </div>
+
+    <!-- Tab Content: Live Activity -->
+    <div id="activityTab" class="am-tab-content" style="display: none;">
+        <div class="am-toolbar" style="justify-content: space-between;">
+            <div style="font-weight: 600; color: var(--ms-text);">Live Domain Logins & Activities</div>
+            <div style="display: flex; gap: 12px;">
+                <button class="view-btn" onclick="syncToSharePoint()"
+                    style="color: #107c10; border-color: rgba(16, 124, 16, 0.2);">
+                    <i class="fas fa-cloud-upload-alt"></i> Sync to Cloud
+                </button>
+                <button class="view-btn" onclick="fetchLiveActivity()"><i class="fas fa-sync-alt"></i> Refresh
+                    Feed</button>
+            </div>
+        </div>
+
+        <div id="activityFeedList" class="employee-list" style="margin-top: 16px;">
+            <!-- Activity Rows injected here -->
+        </div>
+        <div id="activityLoading" class="loading-sentinel" style="display: none;">
+            <div class="spinner"></div>
+            <span>Fetching live activity...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Tab switching logic
+        const tabBtns = document.querySelectorAll('.am-tab-btn');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active class
+                document.querySelectorAll('.am-tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.am-tab-content').forEach(c => {
+                    c.style.display = 'none';
+                    c.classList.remove('active');
+                });
+
+                // Add active class
+                btn.classList.add('active');
+                const target = document.getElementById(btn.dataset.target);
+                target.style.display = 'block';
+                target.classList.add('active');
+
+                if (btn.dataset.target === 'activityTab') {
+                    fetchLiveActivity();
+                }
+            });
+        });
+
+        // Add some tab styles dynamically
+        const style = document.createElement('style');
+        style.textContent = `
+            .am-tab-btn {
+                background: none; border: none; padding: 12px 16px; font-size: 1rem; font-weight: 500;
+                color: var(--ms-text-secondary); cursor: pointer; border-bottom: 2px solid transparent;
+                transition: all 0.2s;
+            }
+            .am-tab-btn:hover { color: var(--ms-primary); }
+            .am-tab-btn.active { color: var(--ms-primary); border-bottom-color: var(--ms-primary); font-weight: 600; }
+            .activity-row { display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--ms-surface); border: 1px solid var(--ms-border); border-radius: var(--ms-radius); transition: all 0.2s; margin-bottom: 8px; }
+            .activity-row:hover { border-color: var(--ms-primary); box-shadow: var(--ms-shadow-sm); }
+            .act-status-active { color: #107c10; font-weight: 600; }
+            .act-status-idle { color: #d83b01; font-weight: 600; }
+            .act-status-loggedout { color: var(--ms-text-secondary); font-weight: 500; }
+        `;
+        document.head.appendChild(style);
+
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const sourceFilter = document.getElementById('sourceFilter');
+        const employeeList = document.getElementById('employeeList');
+        const scrollSentinel = document.getElementById('scrollSentinel');
+        const toolbarSpinner = document.getElementById('toolbar-spinner');
+
+        let offset = 0;
+        const limit = 30;
+        let isFetching = false;
+        let hasMore = true;
+        let currentQuery = '';
+        let currentStatus = '';
+        let currentSource = '';
+
+        let abortController = null;
+
+        window.syncToSharePoint = async () => {
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/assets/sync_sharepoint', { method: 'POST' });
+                const result = await resp.json();
+                if (result.success) {
+                    alert(`Sync completed successfully!\nMetrics: ${result.metrics}\nEmployees: ${result.employees}`);
+                } else {
+                    alert('Sync failed: ' + (result.error || 'Check SharePoint settings'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred during sync.');
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        };
+
+        // Escape HTML to prevent XSS
+        const escapeHtml = (unsafe) => {
+            return (unsafe || '').toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        };
+
+        const renderDeviceIcon = (type, os) => {
+            const osL = (os || '').toLowerCase();
+            const typeL = (type || '').toLowerCase();
+            if (osL.includes('windows')) return '<i class="fab fa-windows"></i>';
+            if (osL.includes('mac') || osL.includes('ios')) return '<i class="fab fa-apple"></i>';
+            if (osL.includes('linux') || osL.includes('ubuntu')) return '<i class="fab fa-linux"></i>';
+            if (osL.includes('android')) return '<i class="fab fa-android"></i>';
+            if (typeL.includes('server')) return '<i class="fas fa-server"></i>';
+            if (typeL.includes('mobile') || typeL.includes('phone')) return '<i class="fas fa-mobile-alt"></i>';
+            return '<i class="fas fa-laptop"></i>';
+        };
+
+        const getHealthClass = (cpu) => {
+            if (cpu >= 95) return 'health-critical';
+            if (cpu >= 80) return 'health-warning';
+            return 'health-active';
+        };
+
+        const buildRow = (emp) => {
+            const hasDevices = emp.assets && emp.assets.length > 0;
+            const initials = escapeHtml(emp.name).substring(0, 2).toUpperCase();
+
+            // source badge
+            const sourceBadge = emp.source === 'Manual'
+                ? '<span style="background:rgba(99,102,241,0.1); color:#6366f1; padding:2px 6px; border-radius:4px; font-size:0.65rem; font-weight:700; text-transform:uppercase; margin-left:8px;" title="IT-Managed Identity">IT Managed</span>'
+                : '<span style="background:rgba(0,120,212,0.1); color:#0078d4; padding:2px 6px; border-radius:4px; font-size:0.65rem; font-weight:700; text-transform:uppercase; margin-left:8px;" title="Azure Active Directory">Azure Sync</span>';
+
+            let devicesHtml = '';
+            if (hasDevices) {
+                const devs = emp.assets.map(d => `
+                    <div class="device-card">
+                        <div class="device-icon">
+                            ${renderDeviceIcon(d.device_type, d.os_info)}
+                        </div>
+                        <div class="device-info">
+                            <div class="device-hostname" title="${escapeHtml(d.hostname)}">
+                                <span class="health-indicator ${d.is_online ? getHealthClass(d.cpu_percent) : 'health-inactive'}"></span>
+                                ${escapeHtml(d.hostname)}
+                            </div>
+                            <div class="device-specs">
+                                <span>${escapeHtml(d.ip_address)}</span> &bull; 
+                                <span title="${escapeHtml(d.os_info)}">${escapeHtml(d.os_info).split(' ')[0] || 'Unknown OS'}</span>
+                            </div>
+                            <div style="margin-top:4px;">
+                                <span class="device-source-badge">${escapeHtml(d.source)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+                devicesHtml = `<div class="devices-grid">${devs}</div>`;
+            }
+
+            return `
+                <div class="employee-row">
+                    <div class="employee-header">
+                        <div class="emp-info">
+                            <div class="emp-avatar">${initials}</div>
+                            <div class="emp-details">
+                                <div style="display:flex; align-items:center;">
+                                    <span class="emp-name">${escapeHtml(emp.name)}</span>
+                                    ${sourceBadge}
+                                </div>
+                                <span class="emp-email">${escapeHtml(emp.email)}</span>
+                            </div>
+                        </div>
+                        <div class="emp-meta">
+                            ${emp.source === 'Manual' ? `
+                                <form action="/employees/delete/${emp.id}" method="POST" style="margin-right:8px; display:inline;" onsubmit="return confirm('Remove this manual identity mapping?')">
+                                    <button type="submit" class="view-btn" style="color:#d83b01; border-color:rgba(216,59,1,0.2); padding: 6px 10px;"><i class="fas fa-trash"></i></button>
+                                </form>
+                            ` : ''}
+                            <div style="text-align:right; margin-right: 12px;">
+                                <div style="font-weight:500; color:var(--ms-text);">${hasDevices ? emp.assets.length + ' Linked' : 'No Devices'}</div>
+                                <div>${escapeHtml(emp.title)}</div>
+                            </div>
+                            <a href="/assets/employee/${encodeURIComponent(emp.email)}" class="view-btn">View Profile</a>
+                        </div>
+                    </div>
+                    ${devicesHtml}
+                </div>
+            `;
+        };
+
+        const fetchEmployees = async (reset = false) => {
+            if (isFetching || (!hasMore && !reset)) return;
+
+            if (reset) {
+                offset = 0;
+                hasMore = true;
+                employeeList.innerHTML = '';
+                scrollSentinel.style.display = 'flex';
+                toolbarSpinner.style.display = 'block';
+                if (abortController) abortController.abort();
+            }
+
+            isFetching = true;
+            abortController = new AbortController();
+
+            try {
+                const params = new URLSearchParams({
+                    q: currentQuery,
+                    status: currentStatus,
+                    source: currentSource,
+                    limit: limit,
+                    offset: offset
+                });
+
+                const response = await fetch(`/api/v2/assets/employees_scroll?${params.toString()}`, {
+                    signal: abortController.signal
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch');
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+
+                    if (data.length === 0 && reset) {
+                        employeeList.innerHTML = `
+                            <div class="no-results">
+                                <i class="fas fa-search" style="font-size:2rem; margin-bottom:12px; opacity:0.5;"></i>
+                                <h3>No identities found</h3>
+                                <p>Try adjusting your search or filters.</p>
+                            </div>
+                        `;
+                    } else {
+                        const html = data.map(buildRow).join('');
+                        employeeList.insertAdjacentHTML('beforeend', html);
+                    }
+
+                    offset += data.length;
+                    if (data.length < limit || offset >= result.total) {
+                        hasMore = false;
+                        scrollSentinel.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Fetch error:', err);
+                }
+            } finally {
+                isFetching = false;
+                toolbarSpinner.style.display = 'none';
+            }
+        };
+
+        // Intersection Observer for Infinite Scroll
+        const observerTarget = scrollSentinel;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && hasMore && !isFetching) {
+                fetchEmployees();
+            }
+        }, { rootMargin: '200px' });
+
+        observer.observe(observerTarget);
+
+        // Search & Filter Listeners with Debounce
+        let timeout = null;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            toolbarSpinner.style.display = 'block';
+            timeout = setTimeout(() => {
+                currentQuery = e.target.value.trim();
+                fetchEmployees(true);
+            }, 400);
+        });
+
+        statusFilter.addEventListener('change', (e) => {
+            currentStatus = e.target.value;
+            fetchEmployees(true);
+        });
+
+        sourceFilter.addEventListener('change', (e) => {
+            currentSource = e.target.value;
+            fetchEmployees(true);
+        });
+
+        // Initial fetch is handled by IntersectionObserver triggering immediately
+
+        // ── LIVE ACTIVITY FEED LOGIC ──
+        window.fetchLiveActivity = async function () {
+            const listEl = document.getElementById('activityFeedList');
+            const loading = document.getElementById('activityLoading');
+
+            loading.style.display = 'flex';
+            listEl.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/v2/assets/live_activity');
+                if (!res.ok) throw new Error('Network response was not ok');
+                const json = await res.json();
+
+                loading.style.display = 'none';
+
+                if (!json.success || json.data.length === 0) {
+                    listEl.innerHTML = `<div class="no-results">No recent user activity found. Ensure agents are running and pushing telemetry.</div>`;
+                    return;
+                }
+
+                json.data.forEach(act => {
+                    const row = document.createElement('div');
+                    row.className = 'activity-row';
+
+                    let statusHtml = '';
+                    if (act.logout_time) {
+                        statusHtml = `<span class="act-status-loggedout"><i class="fas fa-sign-out-alt"></i> Logged Out</span>`;
+                    } else if (act.idle_minutes > 15) {
+                        statusHtml = `<span class="act-status-idle"><i class="fas fa-clock"></i> Idle (${act.idle_minutes}m)</span>`;
+                    } else {
+                        statusHtml = `<span class="act-status-active"><i class="fas fa-keyboard"></i> Active</span>`;
+                    }
+
+                    const loginDate = act.login_time ? new Date(act.login_time).toLocaleString() : '--';
+                    const logoutDate = act.logout_time ? new Date(act.logout_time).toLocaleString() : '--';
+
+                    row.innerHTML = `
+                        <div style="display:flex; gap: 16px; align-items: center;">
+                            <div class="emp-avatar" style="background: var(--ms-primary);"><i class="fas fa-user-circle"></i></div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 1.05rem;">${escapeHtml(act.session_user || 'Unknown User')}</div>
+                                <div style="font-size: 0.85rem; color: var(--ms-text-secondary);"><i class="fas fa-desktop"></i> ${escapeHtml(act.hostname)} | <i class="fas fa-network-wired"></i> ${escapeHtml(act.session_type)}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--ms-text-secondary); min-width: 200px;">
+                            <div><strong>Login:</strong> ${loginDate}</div>
+                            <div><strong>Logout:</strong> ${logoutDate}</div>
+                        </div>
+                        <div style="text-align: right; min-width: 150px;">
+                            ${statusHtml}
+                            <div style="font-size: 0.8rem; color: var(--ms-text-secondary); margin-top: 4px;">Reported: ${act.reported_at ? new Date(act.reported_at).toLocaleTimeString() : '--'}</div>
+                        </div>
+                    `;
+                    listEl.appendChild(row);
+                });
+
+            } catch (error) {
+                console.error("Error fetching live activity", error);
+                loading.style.display = 'none';
+                listEl.innerHTML = `<div class="no-results" style="color: #a4262c;">Failed to load activity feed.</div>`;
+            }
+        };
+
+        // Initialize activity feed on page load with a slight delay
+        window.addEventListener('DOMContentLoaded', () => {
+            // If activity tab is already visible (unlikely but safe), fetch it
+            const activityTab = document.getElementById('activityTab');
+            if (activityTab && activityTab.style.display === 'block') {
+                fetchLiveActivity();
+            }
+        });
+
+        // Auto-refresh activity feed every 30 seconds if tab is active
+        setInterval(() => {
+            const activityTab = document.getElementById('activityTab');
+            if (activityTab && activityTab.style.display === 'block') {
+                fetchLiveActivity();
+            }
+        }, 30000);
+
+    });
+</script>
+{% endblock %}

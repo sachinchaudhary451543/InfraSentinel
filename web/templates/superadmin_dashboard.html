@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Super Admin Dashboard - ServerMonitor{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <h2 class="font-display text-2xl font-bold text-white" style="font-family:'Outfit',sans-serif">
+            <i class="fa-solid fa-shield-halved text-indigo-400 mr-2"></i>Super Admin Dashboard
+        </h2>
+        <p class="text-slate-500 text-sm mt-1">Global view across all tenants and systems</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <select id="serverSelect"
+            class="bg-white/[0.04] border border-white/10 text-sm text-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all">
+            <option value="">All Systems</option>
+            {% for server in servers %}
+            <option value="{{ server.id }}">{{ server.hostname }}</option>
+            {% endfor %}
+        </select>
+        <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+            <span class="pulse-dot green"></span>
+            <span class="text-indigo-400 text-xs font-semibold">ADMIN</span>
+        </div>
+    </div>
+</div>
+
+<!-- Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="metric-card blue animate-fade-up delay-1">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Total Systems</p>
+                <p class="text-3xl font-bold text-white" style="font-family:'Outfit',sans-serif">{{ servers|length }}</p>
+                <p class="text-xs mt-2 font-medium text-emerald-400"><i class="fa-solid fa-circle text-[6px] mr-1 align-middle"></i>{{ online_count }} online</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-server text-blue-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="metric-card rose animate-fade-up delay-2">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Active Alerts</p>
+                <p class="text-3xl font-bold text-white" style="font-family:'Outfit',sans-serif" id="activeAlertsCount">{{ alert_count }}</p>
+                <p class="text-xs mt-2 font-medium {% if alert_count > 0 %}text-rose-400{% else %}text-slate-500{% endif %}">
+                    {% if alert_count > 0 %}Requires attention{% else %}All clear{% endif %}
+                </p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-bell text-rose-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="metric-card emerald animate-fade-up delay-3">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Avg CPU</p>
+                <p class="text-3xl font-bold text-white" style="font-family:'Outfit',sans-serif" id="avgCpuText">--%</p>
+                <p class="text-xs mt-2 font-medium text-slate-500">Global average</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-microchip text-emerald-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="metric-card sky animate-fade-up delay-4">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Avg RAM</p>
+                <p class="text-3xl font-bold text-white" style="font-family:'Outfit',sans-serif" id="avgRamText">--%</p>
+                <p class="text-xs mt-2 font-medium text-slate-500">Global average</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-sky-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-memory text-sky-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="metric-card violet animate-fade-up delay-5">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Tenants</p>
+                <p class="text-3xl font-bold text-white" style="font-family:'Outfit',sans-serif">{{ tenants|length }}</p>
+                <p class="text-xs mt-2 font-medium text-slate-500">Registered orgs</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-building text-violet-400"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+    <div class="glass-card animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-white">CPU Utilization</h3>
+            <span class="text-[0.65rem] text-slate-500 bg-white/5 px-2 py-1 rounded-md">Real-time</span>
+        </div>
+        <div class="w-full h-[280px]"><canvas id="cpuChart"></canvas></div>
+    </div>
+    <div class="glass-card animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-white">Memory Utilization</h3>
+            <span class="text-[0.65rem] text-slate-500 bg-white/5 px-2 py-1 rounded-md">Real-time</span>
+        </div>
+        <div class="w-full h-[280px]"><canvas id="ramChart"></canvas></div>
+    </div>
+</div>
+
+<div class="glass-card mb-8 animate-fade-up">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">Storage Utilization</h3>
+    </div>
+    <div class="w-full h-[280px]"><canvas id="ssdChart"></canvas></div>
+</div>
+
+<!-- Tenants Overview -->
+<div class="glass-card animate-fade-up">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-white">Tenant Overview</h3>
+        <span class="text-[0.65rem] text-slate-500 bg-white/5 px-2 py-1 rounded-md">{{ tenants|length }} tenants</span>
+    </div>
+    {% if tenants %}
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Tenant Name</th>
+                    <th>Azure Status</th>
+                    <th>SharePoint</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tenants %}
+                <tr>
+                    <td class="font-medium text-white">{{ t.name }}</td>
+                    <td>
+                        {% if t.azure_registered %}
+                        <span class="badge badge-online">Connected</span>
+                        {% else %}
+                        <span class="badge badge-unknown">Not Connected</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if t.sharepoint_connected %}
+                        <span class="badge badge-online">Active</span>
+                        {% else %}
+                        <span class="badge badge-unknown">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+        <i class="fa-solid fa-building text-2xl text-slate-600 mb-3"></i>
+        <p class="text-slate-500 text-sm">No tenants registered</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    let cpuChartInst, ramChartInst, ssdChartInst;
+
+    const darkOpts = {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 600, easing: 'easeOutQuart' },
+        plugins: { legend: { display: false }, tooltip: {
+            backgroundColor: 'rgba(15,21,41,0.95)', borderColor: 'rgba(99,102,241,0.3)',
+            borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10, cornerRadius: 8
+        }},
+        scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 10 } }, border: { display: false } },
+            y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: '#475569', font: { size: 10 }, callback: v => v+'%' }, border: { display: false } }
+        },
+        elements: { point: { radius: 0, hoverRadius: 5 }, line: { tension: 0.4, borderWidth: 2 } }
+    };
+
+    function initCharts() {
+        cpuChartInst = new Chart(document.getElementById('cpuChart').getContext('2d'), {
+            type: 'line', data: { labels: [], datasets: [{ label: 'CPU %', data: [], borderColor: '#6366f1',
+                backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0,0,0,280); g.addColorStop(0,'rgba(99,102,241,0.15)'); g.addColorStop(1,'rgba(99,102,241,0)'); return g; }, fill: true }] }, options: darkOpts
+        });
+        ramChartInst = new Chart(document.getElementById('ramChart').getContext('2d'), {
+            type: 'line', data: { labels: [], datasets: [{ label: 'RAM %', data: [], borderColor: '#8b5cf6',
+                backgroundColor: ctx => { const g = ctx.chart.ctx.createLinearGradient(0,0,0,280); g.addColorStop(0,'rgba(139,92,246,0.15)'); g.addColorStop(1,'rgba(139,92,246,0)'); return g; }, fill: true }] }, options: darkOpts
+        });
+        ssdChartInst = new Chart(document.getElementById('ssdChart').getContext('2d'), {
+            type: 'bar', data: { labels: [], datasets: [{ label: 'Storage %', data: [], backgroundColor: 'rgba(6,182,212,0.4)', borderColor: '#06b6d4', borderWidth: 1, borderRadius: 6, borderSkipped: false }] },
+            options: { ...darkOpts, scales: { ...darkOpts.scales, y: { ...darkOpts.scales.y } } }
+        });
+    }
+
+    async function loadMetrics() {
+        const sid = document.getElementById('serverSelect').value;
+        const url = sid ? `/api/v2/metrics?server_id=${sid}&limit=50` : `/api/v2/metrics?limit=50`;
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (!data || !data.length) {
+                const cpuEl = document.getElementById('avgCpuText');
+                const ramEl = document.getElementById('avgRamText');
+                if (cpuEl) cpuEl.innerText = '--%';
+                if (ramEl) ramEl.innerText = '--%';
+                return;
+            }
+            const m = data.slice(-20);
+            const labels = m.map(d => new Date(d.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }));
+            const cpu = m.map(d => d.cpu_util_percent || 0);
+            const ram = m.map(d => d.ram_util_percent || 0);
+            const ssd = m.map(d => d.ssd_util_percent || 0);
+
+            const cpuEl = document.getElementById('avgCpuText');
+            const ramEl = document.getElementById('avgRamText');
+            if (cpuEl) cpuEl.innerText = (cpu.reduce((a,b)=>a+b,0)/cpu.length).toFixed(1) + '%';
+            if (ramEl) ramEl.innerText = (ram.reduce((a,b)=>a+b,0)/ram.length).toFixed(1) + '%';
+
+            cpuChartInst.data.labels = labels; cpuChartInst.data.datasets[0].data = cpu; cpuChartInst.update('none');
+            ramChartInst.data.labels = labels; ramChartInst.data.datasets[0].data = ram; ramChartInst.update('none');
+            ssdChartInst.data.labels = labels; ssdChartInst.data.datasets[0].data = ssd; ssdChartInst.update('none');
+        } catch (e) { console.error(e); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initCharts(); loadMetrics();
+        try {
+            const socket = io();
+            socket.on('new_metrics', data => {
+                const sid = document.getElementById('serverSelect').value;
+                if (!sid || parseInt(sid) === data.server_id) {
+                    if (cpuChartInst && cpuChartInst.data.datasets[0]) {
+                        const MAX = 20;
+                        if (cpuChartInst.data.labels.length >= MAX) {
+                            cpuChartInst.data.labels.shift(); cpuChartInst.data.datasets[0].data.shift();
+                            ramChartInst.data.labels.shift(); ramChartInst.data.datasets[0].data.shift();
+                            ssdChartInst.data.labels.shift(); ssdChartInst.data.datasets[0].data.shift();
+                        }
+                        const t = new Date(data.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+                        cpuChartInst.data.labels.push(t); cpuChartInst.data.datasets[0].data.push(data.cpu||0); cpuChartInst.update('none');
+                        ramChartInst.data.labels.push(t); ramChartInst.data.datasets[0].data.push(data.ram||0); ramChartInst.update('none');
+                        ssdChartInst.data.labels.push(t); ssdChartInst.data.datasets[0].data.push(data.ssd||0); ssdChartInst.update('none');
+                        const cpuEl = document.getElementById('avgCpuText');
+                        const ramEl = document.getElementById('avgRamText');
+                        if (cpuEl) cpuEl.innerText = (data.cpu||0).toFixed(1)+'%';
+                        if (ramEl) ramEl.innerText = (data.ram||0).toFixed(1)+'%';
+                    }
+                }
+            });
+        } catch(e) {}
+        const serverSelect = document.getElementById('serverSelect');
+        if (serverSelect) serverSelect.addEventListener('change', loadMetrics);
+    });
+</script>
+{% endblock %}

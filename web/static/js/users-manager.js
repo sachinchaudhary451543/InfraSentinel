@@ -1,0 +1,316 @@
+let selectedServer = null;
+let selectedIP = null;
+let charts = { resources: null, utilization: null };
+
+// Render servers from config
+function renderServerList(servers) {
+  const container = document.getElementById("serverListContainer");
+  if (!servers || servers.length === 0) {
+    container.innerHTML =
+      '<p class="text-gray-500 text-sm">No servers configured</p>';
+    return;
+  }
+
+  container.innerHTML = servers
+    .map(
+      (server) => `
+        <button class="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded border-l-4 border-blue-500 transition serverListBtn" data-hostname="${
+          server.hostname
+        }" data-ip="${server.ip}">
+            <div class="font-bold text-sm">${server.hostname}</div>
+            <div class="text-xs text-gray-600">${server.ip}</div>
+            ${
+              server.alias
+                ? `<div class="text-xs text-gray-500">${server.alias}</div>`
+                : ""
+            }
+            <button class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 mt-2 removeServerBtn" data-hostname="${
+              server.hostname
+            }">Remove</button>
+        </button>
+    `
+    )
+    .join("");
+
+  // Wire click handlers
+  document.querySelectorAll(".serverListBtn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      if (!e.target.classList.contains("removeServerBtn")) {
+        const hostname = btn.getAttribute("data-hostname");
+        const ip = btn.getAttribute("data-ip");
+        selectServer(hostname, ip);
+      }
+    });
+  });
+
+  document.querySelectorAll(".removeServerBtn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const hostname = btn.getAttribute("data-hostname");
+      removeServer(hostname);
+    });
+  });
+}
+
+// Select server and load details
+function selectServer(hostname, ip) {
+  selectedServer = hostname;
+  selectedIP = ip;
+
+  // Update header and UI
+  document.getElementById(
+    "detailsHeader"
+  ).textContent = `📊 Server Details: ${hostname} (${ip})`;
+  document.getElementById("noServerSelected").classList.add("hidden");
+  document.getElementById("chartsContainer").classList.remove("hidden");
+
+  // Highlight selected
+  document.querySelectorAll(".serverListBtn").forEach((btn) => {
+    btn.classList.toggle(
+      "ring-2 ring-blue-500",
+      btn.getAttribute("data-hostname") === hostname
+    );
+  });
+
+  // Load data
+  loadServerDetails();
+}
+
+// Load and display server details
+async function loadServerDetails() {
+  if (!selectedServer) return;
+
+  try {
+    const hours = document.getElementById("timeFilterUsers").value || 24;
+    const params = new URLSearchParams({
+      server: selectedServer,
+      hours: hours,
+    });
+
+    const res = await fetch(`/api/server-detail?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to fetch server details");
+
+    const data = await res.json();
+
+    // Update stats
+    document.getElementById("statAvgCpu").textContent =
+      data.stats.avg_cpu + "%";
+    document.getElementById("statAvgRam").textContent =
+      data.stats.avg_ram + "%";
+    document.getElementById("statAvgSsd").textContent =
+      data.stats.avg_ssd + "%";
+    document.getElementById("statDataPoints").textContent =
+      data.stats.total_data_points;
+
+    // Update metrics table
+    renderMetricsTable(data.metrics);
+
+    // Update charts
+    updateCharts(data.metrics);
+  } catch (err) {
+    console.error("Error loading server details:", err);
+    alert("Error: " + err.message);
+  }
+}
+
+// Render metrics table
+function renderMetricsTable(metrics) {
+  const tbody = document.getElementById("metricsTable");
+  if (!metrics || metrics.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="4" class="text-center p-4 text-gray-500">No metrics data available</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = metrics
+    .slice(0, 20)
+    .map(
+      (m) => `
+        <tr class="border-b hover:bg-gray-50">
+            <td class="px-4 py-2 text-sm">${m.Timestamp}</td>
+            <td class="px-4 py-2 text-center"><span class="bg-red-100 text-red-800 px-2 py-1 rounded">${(
+              m.CPU || 0
+            ).toFixed(2)}%</span></td>
+            <td class="px-4 py-2 text-center"><span class="bg-green-100 text-green-800 px-2 py-1 rounded">${(
+              m.RAM || 0
+            ).toFixed(2)}%</span></td>
+            <td class="px-4 py-2 text-center"><span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">${(
+              m.SSD || 0
+            ).toFixed(2)}%</span></td>
+        </tr>
+    `
+    )
+    .join("");
+}
+
+// Update charts
+function updateCharts(metrics) {
+  if (!metrics || metrics.length === 0) return;
+
+  const timestamps = metrics
+    .map((m) => {
+      const dt = new Date(m.Timestamp);
+      return dt.toLocaleTimeString();
+    })
+    .reverse();
+
+  const cpu = metrics.map((m) => m.CPU || 0).reverse();
+  const ram = metrics.map((m) => m.RAM || 0).reverse();
+  const ssd = metrics.map((m) => m.SSD || 0).reverse();
+
+  // Resource Usage Chart
+  const resCtx = document.getElementById("resourceChart")?.getContext("2d");
+  if (resCtx) {
+    if (charts.resources) charts.resources.destroy();
+    charts.resources = new Chart(resCtx, {
+      type: "line",
+      data: {
+        labels: timestamps,
+        datasets: [
+          {
+            label: "CPU (%)",
+            data: cpu,
+            borderColor: "#ef4444",
+            tension: 0.3,
+            fill: false,
+          },
+          {
+            label: "RAM (%)",
+            data: ram,
+            borderColor: "#22c55e",
+            tension: 0.3,
+            fill: false,
+          },
+          {
+            label: "SSD (%)",
+            data: ssd,
+            borderColor: "#f59e0b",
+            tension: 0.3,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100 } },
+      },
+    });
+  }
+
+  // Utilization Trend Chart
+  const utilCtx = document.getElementById("utilizationChart")?.getContext("2d");
+  if (utilCtx) {
+    if (charts.utilization) charts.utilization.destroy();
+    charts.utilization = new Chart(utilCtx, {
+      type: "bar",
+      data: {
+        labels: timestamps.slice(-10),
+        datasets: [
+          { label: "CPU", data: cpu.slice(-10), backgroundColor: "#ef4444" },
+          { label: "RAM", data: ram.slice(-10), backgroundColor: "#22c55e" },
+          { label: "SSD", data: ssd.slice(-10), backgroundColor: "#f59e0b" },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100 } },
+      },
+    });
+  }
+}
+
+// Add new server
+async function addServer() {
+  const hostname = document.getElementById("newHostname").value.trim();
+  const ip = document.getElementById("newIP").value.trim();
+  const alias = document.getElementById("newAlias").value.trim();
+  const msgDiv = document.getElementById("addServerMessage");
+
+  if (!hostname || !ip) {
+    showMessage(msgDiv, "❌ Hostname and IP are required", "error");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/servers/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hostname, ip, alias }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      showMessage(msgDiv, "✅ " + data.message, "success");
+      document.getElementById("newHostname").value = "";
+      document.getElementById("newIP").value = "";
+      document.getElementById("newAlias").value = "";
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showMessage(
+        msgDiv,
+        "❌ " + (data.error || "Failed to add server"),
+        "error"
+      );
+    }
+  } catch (err) {
+    showMessage(msgDiv, "❌ Error: " + err.message, "error");
+  }
+}
+
+// Remove server
+async function removeServer(hostname) {
+  if (!confirm(`Remove ${hostname}?`)) return;
+
+  try {
+    const res = await fetch("/api/servers/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hostname }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      alert("✅ " + data.message);
+      location.reload();
+    } else {
+      alert("❌ " + (data.error || "Failed to remove server"));
+    }
+  } catch (err) {
+    alert("❌ Error: " + err.message);
+  }
+}
+
+// Helper to show messages
+function showMessage(element, text, type) {
+  element.textContent = text;
+  element.classList.remove(
+    "hidden",
+    "bg-green-50",
+    "text-green-700",
+    "bg-red-50",
+    "text-red-700"
+  );
+  if (type === "success") {
+    element.classList.add("bg-green-50", "text-green-700");
+  } else {
+    element.classList.add("bg-red-50", "text-red-700");
+  }
+}
+
+// Event listeners
+document.addEventListener("DOMContentLoaded", () => {
+  const serversData = JSON.parse(
+    document.getElementById("servers-data")?.textContent || "[]"
+  );
+  renderServerList(serversData);
+
+  document.getElementById("addServerBtn").addEventListener("click", addServer);
+  document
+    .getElementById("refreshDetailBtn")
+    .addEventListener("click", loadServerDetails);
+  document
+    .getElementById("timeFilterUsers")
+    .addEventListener("change", loadServerDetails);
+});

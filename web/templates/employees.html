@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-up">
+    <div>
+        <h2 class="font-display text-2xl font-bold text-white" style="font-family:'Outfit',sans-serif">Employees</h2>
+        <p class="text-slate-500 text-sm mt-1">Azure AD users and their device assignments</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <div class="relative">
+            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs"></i>
+            <input type="text" id="empSearch" placeholder="Search employees..."
+                class="pl-9 pr-4 py-2.5 bg-white/[0.04] border border-white/10 rounded-xl text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 w-56 transition-all">
+        </div>
+        <div class="flex gap-2">
+            <span class="text-[0.65rem] text-slate-500 bg-white/5 px-3 py-2 rounded-xl border border-white/5">
+                <i class="fa-solid fa-users mr-1 text-indigo-400"></i>{{ employees|length }} users
+            </span>
+            <span class="text-[0.65rem] text-slate-500 bg-white/5 px-3 py-2 rounded-xl border border-white/5">
+                <i class="fa-solid fa-server mr-1 text-emerald-400"></i>{{ server_count }} servers
+            </span>
+        </div>
+    </div>
+</div>
+
+{% if error %}
+<div class="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm mb-6 animate-fade-up">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>{{ error }}</span>
+</div>
+{% endif %}
+
+{% if employees %}
+<div class="glass-card animate-fade-up">
+    <div class="overflow-x-auto">
+        <table class="data-table" id="empTable">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Email</th>
+                    <th>Job Title</th>
+                    <th>Systems</th>
+                    <th>Assets</th>
+                    <th>Last Login</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in employees %}
+                <tr class="emp-row" data-name="{{ emp.display_name|lower }}" data-email="{{ emp.email|lower }}">
+                    <td>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold">
+                                {{ emp.display_name[0]|upper if emp.display_name else '?' }}
+                            </div>
+                            <span class="font-medium text-white">{{ emp.display_name }}</span>
+                        </div>
+                    </td>
+                    <td class="text-slate-400">{{ emp.email }}</td>
+                    <td>
+                        <span class="text-xs px-2 py-1 rounded-md bg-white/5 text-slate-400">{{ emp.job_title or 'N/A' }}</span>
+                    </td>
+                    <td>
+                        {% if emp.systems %}
+                        <div class="flex flex-wrap gap-1">
+                            {% for sys in emp.systems[:3] %}
+                                {% if '(Intune)' in sys %}
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 flex items-center gap-1">
+                                    <i class="fa-brands fa-microsoft"></i> {{ sys.replace(' (Intune)', '') }}
+                                </span>
+                                {% else %}
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 flex items-center gap-1">
+                                    <i class="fa-solid fa-server"></i> {{ sys }}
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+                            {% if emp.systems|length > 3 %}
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-500">+{{ emp.systems|length - 3 }}</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-slate-600 italic">No systems linked</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm font-semibold text-white">{{ emp.asset_count }}</span>
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {% if emp.last_login %}
+                        {{ emp.last_login.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}Never{% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('asset_mgmt.employee_asset_detail', email=emp.email) }}"
+                           class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium">
+                            View Profile <i class="fa-solid fa-arrow-right ml-1 text-[0.6rem]"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="glass-card text-center py-20 animate-fade-up">
+    <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-white/5 flex items-center justify-center">
+        <i class="fa-solid fa-user-group text-3xl text-slate-600"></i>
+    </div>
+    <h3 class="text-lg font-semibold text-white mb-2" style="font-family:'Outfit',sans-serif">No employees found</h3>
+    <p class="text-slate-500 text-sm max-w-md mx-auto">Connect your Azure AD tenant to sync employee data automatically. Employees will appear here once your Entra ID is configured.</p>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const search = document.getElementById('empSearch');
+    if (search) {
+        search.addEventListener('input', () => {
+            const q = search.value.toLowerCase();
+            document.querySelectorAll('.emp-row').forEach(row => {
+                const name = row.dataset.name || '';
+                const email = row.dataset.email || '';
+                row.style.display = (name.includes(q) || email.includes(q)) ? '' : 'none';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

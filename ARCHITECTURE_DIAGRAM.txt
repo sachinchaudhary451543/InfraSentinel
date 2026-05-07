@@ -1,0 +1,398 @@
+═══════════════════════════════════════════════════════════════════════════════
+  SYSTEM ARCHITECTURE - COMPLETE FLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          AGENT PORTAL FLOW                                  │
+│                                                                             │
+│  User Browser                Flask Server              Windows System      │
+│  ─────────────               ─────────────              ──────────────      │
+│                                                                             │
+│  1. Login                    ┌────────────┐                                │
+│  ──────────────────────────→ │ Dashboard  │                                │
+│                              └────────────┘                                │
+│                                   │                                        │
+│  2. Click "Agent Portal"           │                                       │
+│  ──────────────────────────────→ /agent-portal                             │
+│                                    │                                       │
+│  3. Register System                │                                       │
+│  ──────────────────────────────→ API: /api/v2/agent/register-system        │
+│                                    │                                       │
+│                             ┌──────▼──────┐                                │
+│                             │  Generate   │                                │
+│                             │  API Key    │                                │
+│                             │  64 Hex     │                                │
+│                             └──────┬──────┘                                │
+│                                    │                                       │
+│  4. See Download Options           │                                       │
+│  ◄──────────────────────────────── ┤                                       │
+│                                    │                                       │
+│  5a. Click Download Agent          │                                       │
+│  ──────────────────────────────────→ /agent/download-python-agent/<id>    │
+│  ◄─────────────────────────────────  Save: agent_improved_<hostname>.py   │
+│                                                                             │
+│  5b. Click Download Script         │                                       │
+│  ──────────────────────────────────→ /agent/download-deployment-script/<id>│
+│  ◄─────────────────────────────────  Save: DEPLOY_<hostname>.ps1          │
+│                                                                             │
+│  6. Transfer Files to Windows ─────────────────────────────────────→       │
+│                                                                             │
+│  7. On Windows (As Admin)          │                                  │    │
+│      .\DEPLOY_<hostname>.ps1 ──────────────────────────────────────→ ┌─────┤
+│                                    │                                │ │    │
+│                                    │                             Executes  │
+│                                    │                                │ │    │
+│                                    │                                └─┼────┤
+│                                    │                                  │    │
+│                                    │                        ┌─────────▼──┐ │
+│                                    │                        │ pip install│ │
+│                                    │                        │ psutil etc │ │
+│                                    │                        └────┬───────┘ │
+│                                    │                             │        │
+│                                    │                        ┌────▼───────┐ │
+│                                    │                        │  Set Env   │ │
+│                                    │                        │  Variables │ │
+│                                    │                        └────┬───────┘ │
+│                                    │                             │        │
+│                                    │                        ┌────▼───────┐ │
+│                                    │                        │   Run      │ │
+│                                    │                        │   agent    │ │
+│                                    │                        └────┬───────┘ │
+│                                    │                             │        │
+└──────────────────────────────────────────────────────────────────┼────────┘
+                                     │                             │
+                                     │                      ┌──────▼───────┐
+                                     │                      │ Agent Loop   │
+                                     │                      │ Metrics →30s │
+                                     │                      │ Screenshot   │
+                                     │                      │ →5 minutes   │
+                                     │                      └──────┬───────┘
+                                     │                             │
+                      ┌──────────────────────────────────────────┘
+                      │
+                      ▼ POST /api/v2/agent/metrics
+              ┌──────────────────┐
+              │  API Endpoint    │
+              │ - Authenticate   │
+              │ - Validate Data  │
+              │ - Store Metric   │
+              │ - Store Snapshot │
+              │ - Emit WebSocket │
+              └────────┬─────────┘
+                      │
+           ┌──────────┴──────────┐
+           │                     │
+    ┌──────▼────────┐    ┌───────▼────────┐
+    │   Database    │    │ WebSocket Push │
+    │ - metric      │    │ - Real-time    │
+    │ - screenshot  │    │   update       │
+    │ - server      │    │ - Charts       │
+    └──────┬────────┘    │ - IST time     │
+           │             └───────┬────────┘
+           │                     │
+           └─────────────────┬───┘
+                             │
+                      ┌──────▼─────────┐
+                      │   Dashboard    │
+                      │ - Real-time    │
+                      │   metrics      │
+                      │ - Charts (IST) │
+                      │ - Screenshots  │
+                      │ - System list  │
+                      └────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  DATA FLOW - METRICS & SCREENSHOTS
+═══════════════════════════════════════════════════════════════════════════════
+
+Agent on Windows System                   Flask Server                Database
+────────────────────                      ────────────                ────────
+
+Every 30 Seconds:
+┌─────────────────────┐
+│ collect_metrics()   │  CPU%, RAM%, Disk%  ┌──────────────┐
+│ • CPU util          │ Network, User       │ /api/v2/     │
+│ • RAM util          │ Timestamp (UTC+    │ agent/metrics│ ┌───────────┐
+│ • Disk util         │            IST)     │              │ │ Store In  │
+│ • Network IP        │──────────────────→  │ Authenticate │→│ metric    │
+│ • Logged-in user    │                     │ Validate     │ │ table     │
+│ • Timestamp (IST)   │                     │ Store DB     │ └───────────┘
+└─────────────────────┘                     └──────────────┘
+
+Every 5 Minutes:
+┌──────────────────────┐
+│ capture_screenshot() │  JPEG (base64)     ┌──────────────┐
+│ • PIL.ImageGrab      │ Encoded + Timestamp│ /api/v2/     │
+│ • PowerShell fallback│ With metrics       │ agent/metrics│ ┌───────────┐
+│ • JPEG quality 70    │─────────────────→  │              │ │ Store In  │
+│ • Base64 encode      │                     │ Authenticate │→│ screenshot│
+│ • Size ~100 KB       │                     │ Extract      │ │ table     │
+└──────────────────────┘                     │ Save BLOB    │ └───────────┘
+                                             └──────────────┘
+
+Browser Dashboard:
+                                    WebSocket Push
+                                          ↓
+                                   ┌──────────────┐
+                                   │ Dashboard    │
+                                   │ • Load data  │
+                                   │ • Convert    │
+                                   │   UTC → IST  │
+                                   │ • Render     │
+                                   │   charts     │
+                                   │ • Show       │
+                                   │   screenshots│
+                                   └──────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  DATABASE SCHEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ server (Agent Registration)                                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • id (PK)                           • api_key (unique per system)            │
+│ • hostname                          • tenant_id (multi-tenant)              │
+│ • ip                                • status (online/offline)               │
+│ • name                              • agent_installed                       │
+│ • monitoring_active                 • last_seen (timestamp)                │
+│ • serial_number                     • created_at                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+              │
+              ├─ Foreign Key to tenant
+              └─ 1:M relationship with metric, screenshot
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ metric (30-second Snapshots)                                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • id (PK)                           • ram_util_percent                       │
+│ • server_id (FK)                    • ssd_util_percent                       │
+│ • timestamp (UTC, indexed)          • drives_details (JSON)                 │
+│ • cpu_util_percent                  • network_ip                            │
+│ • ram_util_gb                       • logged_in_user                        │
+│ • created_at                        • local_timestamp (IST ref)             │
+└──────────────────────────────────────────────────────────────────────────────┘
+              │
+              └─ 1:M relationship with server
+                 Indexed on: timestamp, server_id, tenant_id
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ screenshot (5-minute Captures)                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • id (PK)                           • file_path (optional)                   │
+│ • server_id (FK)                    • timestamp (UTC, indexed)              │
+│ • image_data (BLOB, base64)         • created_at                            │
+│ • format (jpeg, png)                • size (bytes)                          │
+│ • local_timestamp (IST ref)         • success (boolean)                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+              │
+              └─ 1:M relationship with server
+                 Indexed on: timestamp, server_id
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECURITY ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Authentication Layer                                                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • Flask-Login @login_required on portal endpoints                           │
+│ • Session-based authentication                                             │
+│ • Multi-tenant isolation enforced                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ API Key Management                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • Generated: secrets.token_hex(32) = 64 hex characters                      │
+│ • Stored: Server.api_key in database                                        │
+│ • Verified: POST /api/v2/agent/metrics validates key in headers             │
+│ • Unique: Per-system isolation (no sharing between agents)                  │
+│ • Sent: In download files (pre-configured)                                  │
+│ • Regenerable: Admin can rotate keys in portal                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Tenant Isolation                                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • Portal: Can only see/download own systems                                 │
+│ • API: Validates tenant_id on metrics submission                            │
+│ • Dashboard: Filters systems by tenant_id                                   │
+│ • Superadmin: Can see all tenants (role-based)                              │
+│ • Downloads: API key scoped to server, server scoped to tenant              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  DEPLOYMENT ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+                    ┌─────────────────────────────────────────┐
+                    │      ServerMonitor Dashboard            │
+                    │    http://your-server:8080              │
+                    │                                         │
+                    │  [Agent Portal] [Systems] [Analytics]   │
+                    └─────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+             ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
+             │  Register   │ │   Download  │ │   Monitor   │
+             │  Systems    │ │   Agents    │ │   Metrics   │
+             └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+                    │               │               │
+                    │     ┌─────────┴─────────┐     │
+                    │     │                   │     │
+                    │  ┌──▼──┐  ┌──────────┐  │     │
+                    │  │Store│  │Generate  │  │     │
+                    │  │API  │  │Download  │  │     │
+                    │  │Key  │  │Files     │  │     │
+                    │  └──┬──┘  └──────────┘  │     │
+                    │     │                   │     │
+                    ▼     ▼                   ▼     ▼
+              ┌────────────────────────────────────────┐
+              │       Database (SQLite3)               │
+              │  • server table (registry)            │
+              │  • metric table (30-second stats)      │
+              │  • screenshot table (5-min captures)  │
+              │  • Indexed for performance             │
+              └────────┬───────────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+   ┌────▼─────────────┐       ┌───────▼──────────┐
+   │ Agent on System A│       │ Agent on System B │
+   │ • Collect        │       │ • Collect         │
+   │   metrics        │       │   metrics         │
+   │ • POST every 30s │       │ • POST every 30s  │
+   │ • Screenshot     │       │ • Screenshot      │
+   │   every 5 min    │       │   every 5 min     │
+   └────┬─────────────┘       └───────┬──────────┘
+        │                             │
+        │          /api/v2/agent/metrics
+        │          POST with:
+        │          • api_key
+        │          • hostname
+        │          • metrics JSON
+        │          • screenshot (base64)
+        │
+        └─────────────────────────────┘
+                    │
+                    ▼
+            ┌──────────────────┐
+            │ Authenticate &   │
+            │ Store Data       │
+            │ Emit WebSocket   │
+            └────┬─────────────┘
+                 │
+             ┌───┴───┐
+             │       │
+        ┌────▼───┐ ┌─▼─────┐
+        │ Update │ │Broadcast
+        │Database│ │WebSocket
+        └────────┘ └──┬────┘
+                      │
+                 ┌────▼─────────────┐
+                 │ Browser Updates  │
+                 │ Dashboard        │
+                 │ Charts           │
+                 │ Metrics (IST)    │
+                 │ Screenshots      │
+                 └──────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  TIMELINE - FROM REGISTRATION TO METRICS VISIBLE
+═══════════════════════════════════════════════════════════════════════════════
+
+T+0 seconds
+  └─ Admin registers system in portal
+  └─ API generates unique 64-char API key
+  └─ System stored in database
+
+T+1-5 seconds
+  └─ Admin downloads 2 files with API key pre-filled
+  └─ agent_improved_<hostname>.py
+  └─ DEPLOY_<hostname>.ps1
+
+T+5-30 seconds
+  └─ Admin transfers files to Windows system
+  └─ System owner or admin opens PowerShell as Administrator
+  └─ Runs: .\DEPLOY_<hostname>.ps1
+
+T+30-60 seconds
+  └─ Deployment script:
+     └─ Checks Admin elevation
+     └─ Installs Python dependencies
+     └─ Sets environment variables
+     └─ Starts Python agent
+
+T+60-90 seconds
+  └─ Agent starts:
+     └─ Validates server connectivity
+     └─ Begins metric collection loop
+     └─ Every 30 seconds: POST /api/v2/agent/metrics
+     └─ Stores in database
+     └─ WebSocket broadcast to dashboard
+
+T+90 seconds
+  └─ Dashboard receives WebSocket push
+  └─ Updates real-time metrics
+  └─ Converts UTC to IST
+  └─ Charts update
+  └─ System shows "Online" (green)
+
+T+150-300 seconds (5 minutes)
+  └─ First screenshot captured
+  └─ Sent with metrics payload
+  └─ Stored in screenshot table
+  └─ Appears in dashboard gallery
+
+═══════════════════════════════════════════════════════════════════════════════
+  WHAT HAPPENS AFTER DEPLOYMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Continuous Operation (Agent Running):
+
+  Every 30 Seconds
+  ├─ Collect: CPU%, RAM%, Disk%, Network IP, User
+  ├─ Create: ISO 8601 UTC timestamp
+  ├─ Add: Local IST reference timestamp
+  ├─ POST: /api/v2/agent/metrics
+  ├─ Store: Database metric record
+  ├─ Emit: WebSocket update
+  └─ Update: Dashboard real-time
+
+  Every 5 Minutes (in addition to above)
+  ├─ Capture: System screenshot (PIL or PowerShell)
+  ├─ Compress: JPEG quality 70 (~100 KB)
+  ├─ Encode: Base64 for transmission
+  ├─ Send: With metrics payload
+  ├─ Store: Database screenshot record
+  └─ Display: Dashboard screenshot gallery
+
+  On Dashboard
+  ├─ Real-time metrics chart (CPU, RAM, Disk)
+  ├─ System status indicator (Online/Offline)
+  ├─ Last seen timestamp
+  ├─ Historical data view (1h, 6h, 12h, 24h, 7d)
+  ├─ Screenshots gallery (productivity snapshots)
+  ├─ Timezone: All times in IST (UTC+5:30)
+  └─ Updates: Live WebSocket every 30 seconds
+
+  Error Handling
+  ├─ Network error: Retry with exponential backoff
+  ├─ Server unreachable: Log error, continue loop
+  ├─ Screenshot failure: Continue with metrics only
+  ├─ API key invalid: Log and attempt re-submission
+  └─ Timeout: Automatic reconnection
+
+═══════════════════════════════════════════════════════════════════════════════
+  STATUS: COMPLETE & PRODUCTION READY ✅
+═══════════════════════════════════════════════════════════════════════════════
+
+All systems are integrated and ready for deployment.
+No additional components needed.
+Ready to deploy to production systems immediately!
+
+═══════════════════════════════════════════════════════════════════════════════

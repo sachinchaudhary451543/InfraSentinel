@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex items-center gap-3 mb-2">
+        <a href="{{ url_for('users.list_users') }}" class="text-slate-400 hover:text-indigo-600 transition-colors tooltip" title="Back to Users">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h2 class="text-3xl font-bold text-slate-900 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
+            Edit User
+        </h2>
+    </div>
+    <p class="text-slate-500 text-sm ml-7">Modify settings for <span class="font-bold text-indigo-600">{{ user.username }}</span></p>
+</div>
+
+<div class="max-w-lg">
+    <form method="POST" class="space-y-6">
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-6 md:p-8 relative overflow-hidden group">
+            
+            <div class="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 absolute top-0 left-0 right-0"></div>
+
+            <div class="space-y-5 relative z-10">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Username</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-user text-slate-400"></i>
+                        </div>
+                        <input type="text" name="username" value="{{ user.username }}" required
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Assigned Tenant</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-building text-slate-400"></i>
+                        </div>
+                        <select name="tenant_id" required
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-10 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium appearance-none">
+                            {% for t in tenants %}
+                            <option value="{{ t.id }}" {% if user.tenant_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <label class="flex items-center gap-3 cursor-pointer p-3 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
+                        <div class="relative flex items-center">
+                            <input type="checkbox" name="is_superadmin" class="peer sr-only" {% if user.is_superadmin %}checked{% endif %}>
+                            <div class="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-slate-900">Super Administrator</span>
+                            <span class="text-xs font-medium text-slate-500">Grant global access across all tenants</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit"
+            class="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01]">
+            <i class="fa-solid fa-save"></i> Save Changes
+        </button>
+    </form>
+</div>
+{% endblock %}

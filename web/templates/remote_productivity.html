@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Productivity - {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-8 pt-4">
+    <div class="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+                class="text-slate-400 hover:text-indigo-600 transition-colors text-sm font-medium inline-flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i><span>Back to Controls</span>
+            </a>
+            <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight mt-2"
+                style="font-family:'Outfit',sans-serif">
+                Productivity — {{ server.hostname }}
+            </h2>
+            <p class="text-sm text-slate-500 mt-1">Today’s activity stream from the agent.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-images mr-1.5"></i>Live Images
+            </a>
+            <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
+            </a>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
+        <form method="get" class="flex flex-col md:flex-row md:items-end gap-3">
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Date</label>
+                <input type="date" name="date" value="{{ selected_date }}"
+                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+            </div>
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Employee</label>
+                <select name="user"
+                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 min-w-[220px]">
+                    <option value="">All</option>
+                    {% for u in users %}
+                    <option value="{{ u }}" {% if selected_user==u %}selected{% endif %}>{{ u }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button
+                class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all w-fit">
+                <i class="fa-solid fa-filter mr-1.5"></i>Apply
+            </button>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="xl:col-span-1 space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black text-slate-900 tracking-wide uppercase">
+                        <i class="fa-solid fa-gauge-high text-indigo-600 mr-2"></i>Today
+                    </h3>
+                    <span class="text-[0.65rem] font-black px-2 py-1 rounded-full border
+                        {% if percent >= 70 %}bg-emerald-50 text-emerald-700 border-emerald-100
+                        {% elif percent >= 40 %}bg-amber-50 text-amber-700 border-amber-100
+                        {% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
+                        {{ percent }}% Active
+                    </span>
+                </div>
+                <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-indigo-600 to-violet-600" style="width: {{ percent }}%"></div>
+                </div>
+                <div class="mt-4 space-y-2 text-xs text-slate-600 font-semibold">
+                    <div class="flex items-center justify-between">
+                        <span>Active Time</span><span class="text-slate-900">{{ active_time_str }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span>Samples</span><span class="text-slate-900">{{ total_samples }}</span>
+                    </div>
+                    <div class="text-[0.65rem] text-slate-400 leading-relaxed mt-2">
+                        Active samples are defined as <span class="font-mono">idle_time &lt; 60s</span>.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="xl:col-span-2 space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black text-slate-900 tracking-wide uppercase">
+                        <i class="fa-solid fa-stream text-indigo-600 mr-2"></i>Activity Stream
+                    </h3>
+                    <span class="text-xs text-slate-500 font-semibold">{{ activities|length }} shown</span>
+                </div>
+
+                <div class="overflow-auto custom-scrollbar max-h-[75vh] border border-slate-100 rounded-xl">
+                    <table class="min-w-full text-left">
+                        <thead class="bg-slate-50 border-b border-slate-100 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-3 text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Time</th>
+                                <th class="px-4 py-3 text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">User</th>
+                                <th class="px-4 py-3 text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">App</th>
+                                <th class="px-4 py-3 text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Idle</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for a in activities %}
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-4 py-3 text-xs text-slate-600 font-mono whitespace-nowrap">
+                                    <span class="ist-ts" data-ts="{{ (a.timestamp.isoformat() ~ 'Z') if a.timestamp else '' }}">
+                                        {{ a.timestamp.strftime('%Y-%m-%d %H:%M:%S') if a.timestamp else '' }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-slate-700 font-semibold whitespace-nowrap">
+                                    {{ a.user or '—' }}
+                                </td>
+                                <td class="px-4 py-3 text-xs text-slate-700">
+                                    <div class="font-bold truncate max-w-[420px]">{{ a.app or '—' }}</div>
+                                    <div class="text-[0.65rem] text-slate-400 truncate max-w-[420px]">{{ a.window_title or '' }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-xs font-bold whitespace-nowrap
+                                    {% if a.idle_time is not none and a.idle_time < 60 %}text-emerald-700{% else %}text-slate-500{% endif %}">
+                                    {{ (a.idle_time ~ 's') if a.idle_time is not none else '—' }}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="px-4 py-10 text-center text-slate-400">
+                                    <i class="fa-solid fa-circle-info text-2xl opacity-50 mb-2"></i>
+                                    <div class="text-sm font-bold">No activity yet</div>
+                                    <div class="text-xs mt-1">Ensure the agent is running and configured to send activity.</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Render timestamps in IST (Asia/Kolkata) regardless of server timezone.
+    (function () {
+        const nodes = document.querySelectorAll('.ist-ts[data-ts]');
+        nodes.forEach(n => {
+            const ts = n.dataset.ts || '';
+            if (!ts) return;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return;
+            n.textContent = d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        });
+    })();
+</script>
+{% endblock %}

@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Asset Details - {{ user_info.name }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-6 pt-4">
+    <!-- Header -->
+    <div class="mb-6">
+        <a href="{{ url_for('asset_mgmt.list_employees_assets') }}"
+            class="text-slate-400 hover:text-indigo-400 transition-colors text-sm font-medium mb-4 inline-block">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Back to Assets
+        </a>
+        <div class="flex items-center gap-4">
+            <div
+                class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-indigo-500/20">
+                {{ user_info.name[0] | upper }}
+            </div>
+            <div>
+                <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight">{{ user_info.name }}</h2>
+                <p class="text-sm text-slate-600 mt-0.5">
+                    <span class="text-indigo-600 font-medium">{{ user_info.email }}</span> &bull; {{ user_info.title }}
+                    ({{ user_info.department }})
+                </p>
+                <p
+                    class="text-[0.7rem] text-slate-500 mt-1 font-medium bg-slate-100 w-fit px-2 py-0.5 rounded shadow-sm">
+                    Monitoring {{ total_assets }} tracked endpoint(s)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assets Grid -->
+    <div class="space-y-6 flex-1 max-w-7xl">
+        {% for asset in assets %}
+        <div class="glass-card">
+            <!-- Card Header -->
+            <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-4 gap-4">
+                <div>
+                    <h5 class="text-slate-900 font-bold flex items-center gap-2 mb-1 text-lg">
+                        <i class="fa-solid fa-desktop text-indigo-500"></i> {{ asset.hostname }}
+                        {% if asset.is_online %}
+                        <span class="badge badge-online"><span class="pulse-dot green"></span>Online</span>
+                        {% elif asset.server_status == 'Intune Managed' %}
+                        <span class="badge bg-blue-50 text-blue-600 border border-blue-100">Intune Managed</span>
+                        {% else %}
+                        <span class="badge badge-offline"><span class="pulse-dot red"></span>Offline</span>
+                        {% endif %}
+                        <span class="badge bg-slate-100 text-slate-600 border border-slate-200">{{ asset.source
+                            }}</span>
+                    </h5>
+                    <p class="text-xs text-slate-500">IP: <span class="text-slate-700 font-mono">{{ asset.ip_address
+                            }}</span> &bull; Domain: <span class="text-slate-700">{{ asset.domain }}</span> &bull; Type:
+                        <span class="text-slate-700">{{ asset.device_type }}</span>
+                    </p>
+                </div>
+                {% if asset.server_id %}
+                <div>
+                    <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=asset.server_id) }}"
+                        class="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/15 transition-all text-sm font-medium flex items-center gap-2 shadow-lg shadow-indigo-500/10">
+                        <i class="fa-solid fa-terminal"></i> Remote Control
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Card Body / Details -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider mb-1">Operating System
+                    </p>
+                    <p class="text-sm font-semibold text-slate-800"><i
+                            class="fa-brands fa-windows text-blue-500 mr-1"></i> {{ asset.os_info }}</p>
+                </div>
+                <div>
+                    <p class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider mb-1">First Seen /
+                        Enrolled</p>
+                    <p class="text-sm font-semibold text-slate-800"><i
+                            class="fa-regular fa-calendar-check text-emerald-500 mr-1"></i> <span class="utc-date"
+                            data-date="{{ asset.first_login }}">{{ asset.first_login }}</span></p>
+                </div>
+            </div>
+
+            <!-- Recent Screenshots (Productivity Monitoring) -->
+            {% if asset.screenshots %}
+            <div class="mb-6">
+                <h6
+                    class="text-[0.65rem] text-slate-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-camera text-indigo-500"></i> Recent Activity Proof
+                </h6>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {% for shot in asset.screenshots %}
+                    <div
+                        class="relative group aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm">
+                        {% if shot.sharepoint_url %}
+                        <img src="{{ shot.sharepoint_url }}"
+                            class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                            onerror="this.src='https://placehold.co/600x400/f8fafc/64748b?text=Snapshot+Unavailable'">
+                        {% elif shot.local_file_path %}
+                        <img src="{{ url_for('api.api_screenshot_view', screenshot_id=shot.id, size='thumb') }}"
+                            class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                            onerror="this.src='https://placehold.co/600x400/f8fafc/64748b?text=Snapshot+Unavailable'">
+                        {% endif %}
+
+                        <div
+                            class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                            <a href="{{ shot.sharepoint_url if shot.sharepoint_url else ( url_for('api.api_screenshot_view', screenshot_id=shot.id) if shot.local_file_path else '#' ) }}"
+                                {% if shot.sharepoint_url %}target="_blank" {% endif %}
+                                class="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/40 transition-all border border-white/30"
+                                title="View Full Size">
+                                <i
+                                    class="fa-solid fa-{{ 'external-link-alt' if shot.sharepoint_url else ( 'expand' if shot.local_file_path else 'image' ) }}"></i>
+                            </a>
+                        </div>
+
+                        <div
+                            class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent text-[0.6rem] text-white font-medium">
+                            <span class="utc-date" data-date="{{ shot.captured_at.isoformat() }}">{{
+                                shot.captured_at.strftime('%H:%M') }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <!-- CPU -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <p class="text-xs text-slate-500 font-bold mb-3 flex justify-between uppercase tracking-tight">
+                    <span>CPU Usage</span>
+                    <i class="fa-solid fa-microchip opacity-30 text-indigo-500"></i>
+                </p>
+                <div class="w-full bg-slate-100 rounded-full h-[6px] mb-3 overflow-hidden shadow-inner">
+                    <div class="h-[6px] rounded-full transition-all duration-500 {% if asset.cpu_percent > 80 %}bg-rose-500{% elif asset.cpu_percent > 60 %}bg-amber-500{% else %}bg-indigo-500{% endif %} bar-fill"
+                        id="cpu-{{ asset.log_id }}" data-val="{{ asset.cpu_percent }}"></div>
+                </div>
+                <div class="flex items-end justify-between">
+                    <span class="text-xl font-bold text-slate-900 tracking-tight" id="cpu-text-{{ asset.log_id }}">{{
+                        asset.cpu_percent }}%</span>
+                    <span class="text-[0.65rem] text-slate-500 font-semibold">{{ asset.virtual_cores }} Cores</span>
+                </div>
+            </div>
+            <!-- RAM -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <p class="text-xs text-slate-500 font-bold mb-3 flex justify-between uppercase tracking-tight">
+                    <span>Memory Usage</span>
+                    <i class="fa-solid fa-memory opacity-30 text-emerald-500"></i>
+                </p>
+                <div class="w-full bg-slate-100 rounded-full h-[6px] mb-3 overflow-hidden shadow-inner">
+                    <div class="h-[6px] rounded-full transition-all duration-500 {% if asset.memory_percent > 85 %}bg-rose-500{% elif asset.memory_percent > 70 %}bg-amber-500{% else %}bg-emerald-500{% endif %} bar-fill"
+                        id="mem-{{ asset.log_id }}" data-val="{{ asset.memory_percent }}"></div>
+                </div>
+                <div class="flex items-end justify-between">
+                    <span class="text-xl font-bold text-slate-900 tracking-tight" id="mem-text-{{ asset.log_id }}">{{
+                        asset.memory_percent }}%</span>
+                    <span class="text-[0.65rem] text-slate-500 font-semibold" id="mem-gb-{{ asset.log_id }}">{{
+                        asset.memory_gb }}GB total</span>
+                </div>
+            </div>
+            <!-- DISK -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <p class="text-xs text-slate-500 font-bold mb-3 flex justify-between uppercase tracking-tight">
+                    <span>Disk Space</span>
+                    <i class="fa-solid fa-hard-drive opacity-30 text-violet-500"></i>
+                </p>
+                <div class="w-full bg-slate-100 rounded-full h-[6px] mb-3 overflow-hidden shadow-inner">
+                    <div class="h-[6px] rounded-full transition-all duration-500 {% if asset.disk_percent > 85 %}bg-rose-500{% elif asset.disk_percent > 70 %}bg-amber-500{% else %}bg-violet-500{% endif %} bar-fill"
+                        id="disk-{{ asset.log_id }}" data-val="{{ asset.disk_percent }}"></div>
+                </div>
+                <div class="flex items-end justify-between">
+                    <span class="text-xl font-bold text-slate-900 tracking-tight" id="disk-text-{{ asset.log_id }}">{{
+                        asset.disk_percent }}%</span>
+                    <span class="text-[0.65rem] text-slate-500 font-semibold" id="disk-gb-{{ asset.log_id }}">{{
+                        asset.disk_gb }}GB total</span>
+                </div>
+            </div>
+            <!-- ALERTS -->
+            <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+                <p class="text-xs text-slate-500 font-bold flex justify-between uppercase tracking-tight">
+                    <span>Status & Alerts</span>
+                    <i class="fa-solid fa-bell opacity-30 text-rose-500"></i>
+                </p>
+                <div class="mt-2">
+                    <p class="text-2xl font-bold tracking-tight {% if asset.alerts_count > 0 %}text-rose-600{% else %}text-emerald-600{% endif %}"
+                        id="alerts-count-{{ asset.log_id }}">
+                        {% if asset.alerts_count > 0 %}
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> {{ asset.alerts_count }}
+                        {% else %}
+                        <i class="fa-solid fa-circle-check mr-1"></i> 0
+                        {% endif %}
+                    </p>
+                    <p class="text-[0.65rem] text-slate-500 mt-1 font-semibold">
+                        {% if asset.alerts_count > 0 %}Systems require attention{% elif asset.server_id %}All systems
+                        healthy{% else %}Managed Offline{% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Polling Script -->
+        {% if asset.server_id %}
+        <script>
+            (function () {
+                const serverId = '{{ asset.server_id }}';
+                const logId = '{{ asset.log_id }}';
+
+                setInterval(() => {
+                    fetch('/assets/api/v2/asset/' + serverId + '/status')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                const m = data.metrics;
+                                const cpuBar = document.getElementById('cpu-' + logId);
+                                if (cpuBar) {
+                                    cpuBar.style.width = m.cpu_percent + '%';
+                                    cpuBar.className = `h-[6px] rounded-full transition-all duration-500 ${m.cpu_percent > 80 ? 'bg-rose-500' : (m.cpu_percent > 60 ? 'bg-amber-500' : 'bg-indigo-500')} bar-fill`;
+                                }
+                                document.getElementById('cpu-text-' + logId).textContent = m.cpu_percent + '%';
+
+                                const memBar = document.getElementById('mem-' + logId);
+                                if (memBar) {
+                                    memBar.style.width = m.ram_percent + '%';
+                                    memBar.className = `h-[6px] rounded-full transition-all duration-500 ${m.ram_percent > 85 ? 'bg-rose-500' : (m.ram_percent > 70 ? 'bg-amber-500' : 'bg-emerald-500')} bar-fill`;
+                                }
+                                document.getElementById('mem-text-' + logId).textContent = m.ram_percent + '%';
+                                document.getElementById('mem-gb-' + logId).textContent = m.ram_gb.toFixed(1) + 'GB / ' + m.ram_total.toFixed(1) + 'GB';
+
+                                const diskBar = document.getElementById('disk-' + logId);
+                                if (diskBar) {
+                                    diskBar.style.width = m.disk_percent + '%';
+                                    diskBar.className = `h-[6px] rounded-full transition-all duration-500 ${m.disk_percent > 85 ? 'bg-rose-500' : (m.disk_percent > 70 ? 'bg-amber-500' : 'bg-violet-500')} bar-fill`;
+                                }
+                                document.getElementById('disk-text-' + logId).textContent = m.disk_percent + '%';
+                                document.getElementById('disk-gb-' + logId).textContent = m.disk_gb.toFixed(1) + 'GB / ' + m.disk_total.toFixed(1) + 'GB';
+
+                                const alertEl = document.getElementById('alerts-count-' + logId);
+                                if (data.alerts.active_count > 0) {
+                                    alertEl.className = 'text-2xl font-bold tracking-tight text-rose-600';
+                                    alertEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> ${data.alerts.active_count}`;
+                                } else {
+                                    alertEl.className = 'text-2xl font-bold tracking-tight text-emerald-600';
+                                    alertEl.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i> 0`;
+                                }
+                            }
+                        }).catch(e => { });
+                }, 10000);
+            })();
+        </script>
+        {% endif %}
+
+        <!-- Activities Table -->
+        {% if asset.activities %}
+        <div class="mt-8">
+            <h6 class="text-sm font-bold text-slate-800 mb-4 flex items-center"><i
+                    class="fa-solid fa-history mr-2 text-indigo-500"></i> Recent Session Activity</h6>
+            <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <table class="data-table w-full text-left">
+                    <thead class="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                User Account</th>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                Login Time</th>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                Logout Time</th>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                Session Time</th>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                Time Breakdown</th>
+                            <th class="px-5 py-3.5 text-[0.65rem] font-bold text-slate-600 uppercase tracking-wider">
+                                Connection</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm">
+                        {% for act in asset.activities %}
+                        <tr class="hover:bg-slate-50/50 transition-colors">
+                            <td class="px-5 py-3 font-bold text-slate-900">{{ act.user }}</td>
+                            <td class="px-5 py-3 text-slate-600 utc-date" data-date="{{ act.login }}">{{ act.login }}
+                            </td>
+                            <td class="px-5 py-3 text-slate-600">
+                                {% if act.logout %}
+                                <span class="utc-date" data-date="{{ act.logout }}">{{ act.logout }}</span>
+                                {% else %}
+                                <span class="badge badge-online text-xs font-bold">Active Session</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-5 py-3 text-slate-700 font-bold">
+                                {% if act.logout %}
+                                ~{{ (act.active_minutes + act.idle_minutes) | int }} m
+                                {% else %}
+                                <span class="text-indigo-600 font-bold">Ongoing</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-5 py-3 text-[0.7rem] text-slate-600 font-mono tracking-tight">
+                                Act: <span class="text-emerald-600 font-bold">{{ act.active_minutes | int }}m</span>
+                                &bull; Idl: <span class="text-amber-600 font-bold">{{ act.idle_minutes | int }}m</span>
+                            </td>
+                            <td class="px-5 py-3">
+                                <span
+                                    class="badge bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider text-[0.6rem] font-bold">{{
+                                    act.session_type }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Alerts Box -->
+        {% if asset.alerts and asset.alerts|length > 0 %}
+        <div class="mt-6">
+            <div class="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+                <h6 class="text-sm font-bold text-rose-700 mb-4 flex items-center"><i
+                        class="fa-solid fa-bell mr-2 animate-bounce"></i> Unresolved Incidents</h6>
+                <div class="space-y-4">
+                    {% for alert in asset.alerts %}
+                    <div class="flex items-start gap-4 p-3 rounded-lg bg-white border border-rose-100 shadow-sm alert-item"
+                        data-alert-id="{{ alert.id }}">
+                        <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-triangle-exclamation text-rose-600 text-xs"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm text-slate-700"><span class="font-bold text-rose-800">{{ alert.type
+                                    }}</span> &mdash; {{ alert.message }}</p>
+                            <p class="text-[0.65rem] text-slate-500 mt-1 font-mono tracking-tight utc-date"
+                                data-date="{{ alert.created }}">{{ alert.created }}</p>
+                        </div>
+                        <button onclick="resolveIncident(this, '{{ asset.server_id }}', '{{ alert.id }}')" type="button"
+                            class="shrink-0 px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all flex items-center gap-1">
+                            <i class="fa-solid fa-check"></i>Resolve
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+</div>
+
+<script>
+    // Resolve Incident Function
+    async function resolveIncident(btn, serverId, alertId) {
+        if (!confirm('Mark this incident as resolved?')) return;
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+        try {
+            const res = await fetch(`/assets/api/v2/alert/${alertId}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ server_id: serverId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                const alertItem = document.querySelector(`[data-alert-id="${alertId}"]`);
+                alertItem.style.opacity = '0.5';
+                setTimeout(() => alertItem.remove(), 300);
+            } else {
+                alert('Error: ' + (data.error || 'Failed to resolve incident'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+
+    // Safe UTC to Localized strings
+    document.addEventListener("DOMContentLoaded", function () {
+        // Init bar widths
+        document.querySelectorAll('.bar-fill').forEach(el => {
+            const val = el.getAttribute('data-val');
+            if (val) el.style.width = val + '%';
+        });
+
+        document.querySelectorAll('.utc-date').forEach(el => {
+            const dateStr = el.dataset.date;
+            if (dateStr && dateStr !== 'Unknown' && dateStr !== 'None' && dateStr.trim() !== '') {
+                const date = new Date(dateStr); // Browsers interpret 'Z' at the end as UTC correctly.
+                if (!isNaN(date.getTime())) {
+                    el.textContent = date.toLocaleString(undefined, {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                } else {
+                    el.textContent = dateStr.replace('Z', '');
+                }
+            } else {
+                el.innerText = '—';
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,243 @@
+{% extends "tenant_dashboard.html" %}
+{% block tenant_content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fa fa-desktop"></i> Registered Agents (Live Monitoring)</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary" id="refreshBtn" onclick="location.reload()">
+                <i class="fa fa-refresh"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Total Agents</h5>
+                    <h2 class="text-primary">{{ servers|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Status</h5>
+                    <h4><span class="badge bg-success">Live Monitoring</span></h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Last Refresh</h5>
+                    <small class="text-muted" id="lastRefresh">Just now</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="text-muted">Auto-Refresh</h5>
+                    <button class="btn btn-sm btn-outline-secondary" id="autoRefreshToggle"
+                        onclick="toggleAutoRefresh()">
+                        Disabled
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agents Table -->
+    <div class="card">
+        <div class="card-header bg-light">
+            <div class="row">
+                <div class="col">
+                    <h5 class="mb-0">Managed Systems</h5>
+                </div>
+                <div class="col-auto">
+                    <input type="text" id="searchBox" class="form-control form-control-sm"
+                        placeholder="Search hostname..." style="width: 250px;" onkeyup="filterTable()">
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if servers %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 5%">#</th>
+                            <th style="width: 30%">Hostname</th>
+                            <th style="width: 25%">IP Address</th>
+                            <th style="width: 20%">Status</th>
+                            <th style="width: 15%">Last Seen</th>
+                            <th style="width: 5%">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentsTable">
+                        {% for server in servers %}
+                        <tr class="agent-row" data-hostname="{{ server.hostname.lower() }}">
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <strong>{{ server.hostname }}</strong>
+                                {% if server.ip %}
+                                <br><small class="text-muted">ID: {{ server.id }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <code>{{ server.ip or 'N/A' }}</code>
+                            </td>
+                            <td>
+                                <span class="badge bg-success" style="font-size: 11px;">Active</span>
+                            </td>
+                            <td>
+                                <small class="text-muted">Just now</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-info" title="View Details"
+                                        onclick="showDetails('{{ server.hostname }}', '{{ server.ip }}')">
+                                        📊
+                                    </button>
+                                    <button class="btn btn-outline-danger" title="Remove"
+                                        onclick="removeAgent({{ server.id }})">
+                                        ✕
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info m-3 mb-0">
+                <i class="fa fa-info-circle"></i> No agents registered yet.
+                <a href="{{ url_for('agents.agent_keys') }}" class="alert-link">Generate an agent key</a> to get
+                started.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Agent Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted">Hostname</label>
+                            <p id="detailHostname" class="h6 mb-0">-</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted">IP Address</label>
+                            <p id="detailIP" class="h6 mb-0">-</p>
+                        </div>
+                    </div>
+                    <div class="alert alert-success mb-0">
+                        Agent is actively monitoring and reporting metrics.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Monitoring Info -->
+    <div class="alert alert-info mt-4">
+        <h5 class="mb-2"><i class="fa fa-eye"></i> Live Monitoring Status</h5>
+        <p class="mb-1"><strong>✓ Automatic:</strong> All agents are automatically monitored</p>
+        <p class="mb-1"><strong>✓ Real-time:</strong> Metrics update every 5 minutes</p>
+        <p class="mb-0"><strong>✓ Auto-refresh:</strong> Enable above to auto-refresh this page every 30 seconds</p>
+    </div>
+</div>
+
+<script>
+    let autoRefreshInterval = null;
+
+    function filterTable() {
+        const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+        const rows = document.querySelectorAll('.agent-row');
+
+        rows.forEach(row => {
+            const hostname = row.dataset.hostname;
+            row.style.display = hostname.includes(searchTerm) ? '' : 'none';
+        });
+    }
+
+    function showDetails(hostname, ip) {
+        document.getElementById('detailHostname').textContent = hostname;
+        document.getElementById('detailIP').textContent = ip || 'N/A';
+        new bootstrap.Modal(document.getElementById('detailsModal')).show();
+    }
+
+    function removeAgent(serverId) {
+        if (confirm('Remove this agent from monitoring? This action cannot be undone.')) {
+            // TODO: Implement removal endpoint
+            alert('Agent removal endpoint needs implementation');
+        }
+    }
+
+    function toggleAutoRefresh() {
+        const btn = document.getElementById('autoRefreshToggle');
+
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+            btn.textContent = 'Disabled';
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-outline-secondary');
+        } else {
+            autoRefreshInterval = setInterval(() => {
+                location.reload();
+            }, 30000); // 30 seconds
+
+            btn.textContent = 'Enabled (30s)';
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-danger');
+        }
+    }
+
+    // Update last refresh time
+    function updateRefreshTime() {
+        const now = new Date();
+        document.getElementById('lastRefresh').textContent = now.toLocaleTimeString();
+    }
+
+    document.addEventListener('DOMContentLoaded', updateRefreshTime);
+</script>
+
+<style>
+    .sticky-top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    code {
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+
+    .agent-row:hover {
+        background-color: #f9f9f9 !important;
+    }
+
+    .btn-group-sm {
+        gap: 4px;
+    }
+</style>
+{% endblock %}

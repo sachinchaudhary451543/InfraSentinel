@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+
+{% block title %}Live Images - {{ server.hostname }}{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-8 pt-4">
+    <div class="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+                class="text-slate-400 hover:text-indigo-600 transition-colors text-sm font-medium inline-flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i><span>Back to Controls</span>
+            </a>
+            <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight mt-2"
+                style="font-family:'Outfit',sans-serif">
+                Live Images — {{ server.hostname }}
+            </h2>
+            <p class="text-sm text-slate-500 mt-1">Shows latest screenshots and refreshes automatically (optional).</p>
+            {% if not sharepoint_configured %}
+            <div class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 w-fit">
+                <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>SharePoint not configured. Previews use local
+                fallback when available.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
+            </a>
+            <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=server.id) }}"
+                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
+            </a>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div>
+                    <div class="text-sm font-black text-slate-900">Auto Refresh</div>
+                    <div class="text-xs text-slate-500">Fetches latest images every 10 seconds.</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <label
+                    class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 cursor-pointer">
+                    <input id="autoRefresh" type="checkbox" class="accent-indigo-600">
+                    <span>Auto refresh</span>
+                </label>
+                <div class="h-10 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                {% if current_user.is_superadmin %}
+                <div class="flex items-center gap-2 flex-wrap">
+                    <label
+                        class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 cursor-pointer">
+                        <input id="capEnabled" type="checkbox" class="accent-indigo-600" {% if screenshot_enabled
+                            %}checked{% endif %}>
+                        <span>Capture enabled</span>
+                    </label>
+                    <select id="capInterval"
+                        class="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                        <option value="5">Every 5 min</option>
+                        <option value="10">Every 10 min</option>
+                        <option value="15">Every 15 min</option>
+                        <option value="30">Every 30 min</option>
+                        <option value="60">Every 60 min</option>
+                        <option value="120">Every 2 hours</option>
+                    </select>
+                    <button onclick="saveCaptureConfig()"
+                        class="px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                        <i class="fa-solid fa-floppy-disk mr-1.5"></i>Save
+                    </button>
+                </div>
+                {% endif %}
+                <button onclick="loadShots(true)"
+                    class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all">
+                    <i class="fa-solid fa-rotate mr-1.5"></i>Refresh Now
+                </button>
+                <span class="text-xs text-slate-500 font-semibold">Last: <span id="lastRef"
+                        class="text-slate-700">—</span></span>
+            </div>
+        </div>
+        <div id="cfgMsg" class="hidden mt-4 text-sm font-semibold rounded-xl border px-4 py-3"></div>
+    </div>
+
+    <!-- Date Filter Section -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+                <div class="text-sm font-black text-slate-900">Filter by Date</div>
+                <div class="text-xs text-slate-500">Select date range to filter screenshots</div>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <input type="date" id="filterDateFrom"
+                    class="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                <span class="text-slate-400 font-bold">to</span>
+                <input type="date" id="filterDateTo"
+                    class="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                <button onclick="applyDateFilter()"
+                    class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all">
+                    <i class="fa-solid fa-filter mr-1.5"></i>Apply Filter
+                </button>
+                <button onclick="clearDateFilter()"
+                    class="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-sm font-black hover:bg-slate-300 transition-all">
+                    <i class="fa-solid fa-times mr-1.5"></i>Clear
+                </button>
+            </div>
+        </div>
+        <div id="filterMsg"
+            class="hidden mt-3 text-sm font-semibold rounded-xl border px-3 py-2 bg-blue-50 text-blue-700 border-blue-100">
+        </div>
+    </div>
+
+    <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div class="col-span-full flex items-center justify-center py-14 text-slate-400">
+            <div class="text-center">
+                <i class="fa-solid fa-image text-3xl mb-3 opacity-50"></i>
+                <div class="text-sm font-bold">Loading…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lb"
+    style="display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); backdrop-filter: blur(4px);"
+    onclick="if(event.target===this) closeLb()">
+    <div
+        style="width: 100%; max-width: 56rem; background: rgba(0,0,0,0.4); border-radius: 1rem; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+        <div
+            style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(0,0,0,0.6); border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div style="color: rgba(255,255,255,0.8); font-size: 0.875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                id="lbTitle">—</div>
+            <button onclick="closeLb()"
+                style="width: 2.25rem; height: 2.25rem; border-radius: 0.75rem; background: rgba(255,255,255,0.1); color: white; border: none; cursor: pointer; font-size: 1.25rem; display: flex; align-items: center; justify-content: center;"
+                title="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div
+            style="position: relative; background: black; display: flex; align-items: center; justify-content: center; min-height: 200px;">
+            <img id="lbImg" src="" alt="" style="width: 100%; max-height: 80vh; object-fit: contain;">
+        </div>
+        <div
+            style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(0,0,0,0.6); border-top: 1px solid rgba(255,255,255,0.1);">
+            <span style="color: rgba(255,255,255,0.6); font-size: 0.75rem;" id="lbMeta">—</span>
+            <a id="lbOpen" href="#" target="_blank"
+                style="font-size: 0.75rem; font-weight: 900; color: #a5d6ff; text-decoration: none; cursor: pointer;"
+                title="Open in new tab">
+                Open <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    const SERVER_ID = Number("{{ server.id }}");
+    let refreshTimer = null;
+    let allShots = [];  // Store all screenshots for filtering
+
+    function getDateFromISO(iso) {
+        if (!iso) return null;
+        let s = iso;
+        if (!s.includes('T')) s = s.replace(' ', 'T');
+        if (!s.endsWith('Z')) s += 'Z';
+        try {
+            return new Date(s);
+        } catch {
+            return null;
+        }
+    }
+
+    function fmt(iso) {
+        try {
+            const d = getDateFromISO(iso);
+            if (!d || Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: '2-digit', 
+                hour: '2-digit', minute: '2-digit'
+            });
+        } catch { return '—'; }
+    }
+
+    function fmtDateOnly(iso) {
+        try {
+            const d = getDateFromISO(iso);
+            if (!d || Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+        } catch { return '—'; }
+    }
+
+    function showFilterMsg(msg) {
+        const el = document.getElementById('filterMsg');
+        if (!el) return;
+        el.classList.remove('hidden');
+        el.textContent = msg;
+        setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+
+    function applyDateFilter() {
+        const fromInput = document.getElementById('filterDateFrom');
+        const toInput = document.getElementById('filterDateTo');
+
+        if (!fromInput || !toInput) {
+            showFilterMsg('⚠ Date inputs not found');
+            return;
+        }
+
+        const fromStr = fromInput.value;
+        const toStr = toInput.value;
+
+        if (!fromStr || !toStr) {
+            showFilterMsg('⚠ Please select both start and end dates');
+            return;
+        }
+
+        const fromDate = new Date(fromStr + 'T00:00:00Z');
+        const toDate = new Date(toStr + 'T23:59:59Z');
+
+        if (fromDate > toDate) {
+            showFilterMsg('⚠ Start date must be before end date');
+            return;
+        }
+
+        const filtered = allShots.filter(s => {
+            const capturedDate = getDateFromISO(s.captured_at);
+            if (!capturedDate) return false;
+            return capturedDate >= fromDate && capturedDate <= toDate;
+        });
+
+        // Sort by date descending (latest first)
+        filtered.sort((a, b) => {
+            const dateA = getDateFromISO(a.captured_at) || new Date(0);
+            const dateB = getDateFromISO(b.captured_at) || new Date(0);
+            return dateB - dateA;
+        });
+
+        renderShots(filtered);
+        showFilterMsg(`✅ Showing ${filtered.length} screenshots from ${fmtDateOnly(fromStr)} to ${fmtDateOnly(toStr)}`);
+    }
+
+    function clearDateFilter() {
+        const fromInput = document.getElementById('filterDateFrom');
+        const toInput = document.getElementById('filterDateTo');
+        const filterMsg = document.getElementById('filterMsg');
+
+        if (fromInput) fromInput.value = '';
+        if (toInput) toInput.value = '';
+        if (filterMsg) filterMsg.classList.add('hidden');
+
+        // Re-render all shots sorted by date (latest first)
+        const sorted = [...allShots];
+        sorted.sort((a, b) => {
+            const dateA = getDateFromISO(a.captured_at) || new Date(0);
+            const dateB = getDateFromISO(b.captured_at) || new Date(0);
+            return dateB - dateA;
+        });
+        renderShots(sorted);
+        showFilterMsg('✅ Filter cleared - showing all screenshots (latest first)');
+    }
+
+    function renderShots(shots) {
+        const grid = document.getElementById('grid');
+        if (!grid) return;
+
+        if (!shots.length) {
+            grid.innerHTML = `
+                <div class="col-span-full flex items-center justify-center py-14 text-slate-400">
+                    <div class="text-center">
+                        <i class="fa-solid fa-camera-slash text-3xl mb-3 opacity-50"></i>
+                        <div class="text-sm font-bold">No screenshots found</div>
+                        <div class="text-xs mt-1">Adjust filters or wait for agent to capture.</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            grid.innerHTML = shots.map(s => {
+                const url = s.thumb_url || s.image_url || s.sharepoint_url || '';
+                const full = s.image_url || s.sharepoint_url || url || '';
+                const title = s.filename || `Screenshot ${s.id}`;
+                const meta = `${fmt(s.captured_at)} • ${s.active_user || '—'}`;
+                return `
+                    <button style="border-radius: 0.75rem; overflow: hidden; border: 1px solid #cbd5e1; background: #1e293b; cursor: pointer; display: flex; flex-direction: column; text-align: left; transition: all 0.2s; position: relative;"
+                        onmouseover="this.style.borderColor='#818cf8'; this.style.boxShadow='0 10px 15px rgba(0,0,0,0.1)';" 
+                        onmouseout="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none';"
+                        data-full="${encodeURIComponent(full)}" data-title="${encodeURIComponent(title)}" data-meta="${encodeURIComponent(meta)}"
+                        onclick="openLb(this.dataset.full,this.dataset.title,this.dataset.meta)" title="Click to view full size">
+                        <div style="position: relative; width: 100%; padding-bottom: 62.5%; background: #0f172a; overflow: hidden; flex-grow: 0; flex-shrink: 0;">
+                            <img src="${url}" alt="${title}" loading="lazy" decoding="async" fetchpriority="low"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0f172a;"
+                                onerror="this.parentElement.style.background='#0f172a'; this.style.display='none'; this.parentElement.innerHTML='<div style=\\\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#64748b;font-size:0.75rem;\\\">⚠ Failed</div>'">
+                        </div>
+                        <div style="padding: 0.5rem; background: white; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+                            <div style="font-size: 0.65rem; font-weight: 900; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; line-height: 1;">${title}</div>
+                            <div style="font-size: 0.6rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; line-height: 1;">${fmt(s.captured_at)}</div>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        }
+    }
+
+    function openLb(url, title, meta) {
+        const lb = document.getElementById('lb');
+        const img = document.getElementById('lbImg');
+        const t = document.getElementById('lbTitle');
+        const m = document.getElementById('lbMeta');
+        const o = document.getElementById('lbOpen');
+        if (!lb || !img) return;
+        try {
+            const decodedUrl = decodeURIComponent(url || '');
+            img.src = decodedUrl;
+            if (o) o.href = decodedUrl;
+        } catch (e) {
+            img.src = url || '';
+            if (o) o.href = url || '';
+        }
+        try { t.textContent = decodeURIComponent(title || '') || 'Screenshot'; } catch (e) { t.textContent = title || 'Screenshot'; }
+        try { m.textContent = decodeURIComponent(meta || '') || ''; } catch (e) { m.textContent = meta || ''; }
+        if (lb) lb.style.display = 'flex';
+    }
+
+    function closeLb() {
+        const lb = document.getElementById('lb');
+        const img = document.getElementById('lbImg');
+        if (img) img.src = '';
+        if (lb) lb.style.display = 'none';
+    }
+
+    async function loadShots(force = false) {
+        const grid = document.getElementById('grid');
+        if (!grid) return;
+        try {
+            const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots?page=1&per_page=100`);
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'failed');
+
+            allShots = (data.screenshots || []).filter(s => s.has_image);
+
+            // Sort by date descending (latest first)
+            allShots.sort((a, b) => {
+                const dateA = getDateFromISO(a.captured_at) || new Date(0);
+                const dateB = getDateFromISO(b.captured_at) || new Date(0);
+                return dateB - dateA;
+            });
+
+            renderShots(allShots);
+
+            const last = document.getElementById('lastRef');
+            if (last) last.textContent = fmt(new Date().toISOString());
+
+            // Set default date range (last 7 days)
+            const fromInput = document.getElementById('filterDateFrom');
+            const toInput = document.getElementById('filterDateTo');
+            if (fromInput && toInput) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+                fromInput.valueAsDate = sevenDaysAgo;
+                toInput.valueAsDate = today;
+            }
+        } catch (e) {
+            grid.innerHTML = `
+                <div class="col-span-full flex items-center justify-center py-14 text-rose-500">
+                    <div class="text-center">
+                        <i class="fa-solid fa-triangle-exclamation text-3xl mb-3 opacity-50"></i>
+                        <div class="text-sm font-bold">Failed to load screenshots</div>
+                        <div class="text-xs mt-1">${((e && e.message) ? e.message : e)}</div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    function setAutoRefresh(on) {
+        if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+        if (on) {
+            refreshTimer = setInterval(() => loadShots(false), 10000);
+        }
+    }
+
+    function showCfg(msg, ok = true) {
+        const el = document.getElementById('cfgMsg');
+        if (!el) return;
+        el.classList.remove('hidden');
+        el.className = 'mt-4 text-sm font-semibold rounded-xl border px-4 py-3 ' + (ok
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+            : 'bg-rose-50 text-rose-700 border-rose-100');
+        el.textContent = msg;
+        setTimeout(() => el.classList.add('hidden'), 3500);
+    }
+
+    async function saveCaptureConfig() {
+        const intervalEl = document.getElementById('capInterval');
+        const enabledEl = document.getElementById('capEnabled');
+        const interval = Number((intervalEl && intervalEl.value) ? intervalEl.value : 10);
+        const enabled = Boolean(enabledEl && enabledEl.checked);
+        try {
+            const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, interval })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || data.message || `${res.status}`);
+            showCfg(data.enabled ? `Capture saved: every ${data.interval} minutes.` : 'Capture disabled.');
+        } catch (e) {
+            showCfg('Failed to save capture settings: ' + ((e && e.message) ? e.message : e), false);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            const sel = document.getElementById('capInterval');
+            if (sel) sel.value = String(Number("{{ screenshot_interval|default(10) }}") || 10);
+        } catch { }
+        const chk = document.getElementById('autoRefresh');
+        if (chk) {
+            chk.addEventListener('change', () => setAutoRefresh(chk.checked));
+        }
+        loadShots(true);
+    });
+</script>
+{% endblock %}

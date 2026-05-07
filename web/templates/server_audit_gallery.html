@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Server Audit & Gallery{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-900">Audit & Screenshot Gallery — {{ server.hostname if server else
+                'Unknown' }}</h2>
+            <p class="text-sm text-slate-500 mt-1">Audit trail for the selected server alongside a responsive screenshot
+                gallery.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('asset_mgmt.view_audit_logs') }}"
+                class="px-3 py-2 bg-white border rounded-lg text-sm">All Audit Logs</a>
+            <a href="{{ url_for('main.dashboard') }}" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">Back
+                to Dashboard</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-white rounded-lg border shadow-sm p-4">
+                <h4 class="font-semibold text-slate-800 mb-3">Recent Audit Entries</h4>
+                <div class="max-h-[600px] overflow-auto custom-scrollbar">
+                    {% if logs %}
+                    {% for log in logs %}
+                    <div class="p-3 border-b last:border-b-0 flex items-start gap-3 hover:bg-slate-50">
+                        <div class="w-12 text-xs text-slate-500">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm font-semibold text-slate-800">{{ log.action.replace('_',' ') }}
+                                </div>
+                                <div class="text-xs text-slate-400">{{ log.user }}</div>
+                            </div>
+                            <div class="text-[0.85rem] text-slate-600 mt-1">{{ log.details or '—' }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="p-6 text-center text-slate-400">No audit entries found.</div>
+                    {% endif %}
+                </div>
+
+                <!-- Pagination -->
+                {% if pagination and pagination.pages > 1 %}
+                <div class="mt-4 flex justify-center">
+                    <nav class="inline-flex rounded-md shadow-sm">
+                        {% if pagination.has_prev %}
+                        <a href="?page={{ pagination.prev_num }}" class="px-3 py-1.5 bg-white border">Prev</a>
+                        {% endif %}
+                        <span class="px-3 py-1.5 bg-white border">Page {{ pagination.page }} of {{ pagination.pages
+                            }}</span>
+                        {% if pagination.has_next %}
+                        <a href="?page={{ pagination.next_num }}" class="px-3 py-1.5 bg-white border">Next</a>
+                        {% endif %}
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="bg-white rounded-lg border shadow-sm p-4">
+                <h4 class="font-semibold text-slate-800 mb-3">Screenshot Gallery</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {% for shot in screenshots %}
+                    <div class="rounded-lg overflow-hidden border bg-slate-50">
+                        <a href="#" onclick="openShot('{{ loop.index0 }}'); return false;"
+                            class="block relative pb-[62.5%]">
+                            {% if shot.sharepoint_url %}
+                            <img src="{{ shot.sharepoint_url }}" alt="{{ shot.filename }}"
+                                class="absolute inset-0 w-full h-full object-cover">
+                            {% elif shot.local_file_path and shot.local_file_path|length > 0 %}
+                            <img src="{{ url_for('api.api_screenshot_view', screenshot_id=shot.id, size='thumb') }}"
+                                alt="{{ shot.filename }}" class="absolute inset-0 w-full h-full object-cover">
+                            {% else %}
+                            <div class="absolute inset-0 flex items-center justify-center text-slate-400">No Preview
+                            </div>
+                            {% endif %}
+                        </a>
+                        <div class="p-2 text-xs text-slate-600">
+                            <div class="font-semibold truncate">{{ shot.filename }}</div>
+                            <div class="text-[0.75rem] text-slate-400">{{ shot.captured_at.strftime('%Y-%m-%d %H:%M') }}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-slate-400 col-span-2">No screenshots available</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg border shadow-sm p-4">
+                <h4 class="font-semibold text-slate-800 mb-3">Gallery Controls</h4>
+                <div class="flex items-center gap-2">
+                    <button onclick="refreshGallery()"
+                        class="px-3 py-2 bg-indigo-600 text-white rounded">Refresh</button>
+                    <a href="{{ url_for('asset_mgmt.view_audit_logs') }}" class="px-3 py-2 bg-white border rounded">View
+                        All Logs</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Store screenshot data as HTML attribute to avoid JS linter issues with Jinja2 syntax -->
+<div id="gallery-data-store" style="display:none;" data-shots='{{ screenshots | tojson | safe }}'></div>
+
+<script>
+    // Retrieve screenshot data from HTML attribute
+    const dataStore = document.getElementById('gallery-data-store');
+    const galleryShots = dataStore ? JSON.parse(dataStore.dataset.shots || '[]') : [];
+    let currentShotIdx = 0;
+
+    function openShot(idx) {
+        currentShotIdx = parseInt(idx, 10) || 0;
+        const shot = galleryShots[currentShotIdx];
+        if (!shot) return;
+
+        const url = shot.sharepoint_url || (`/api/screenshot/${shot.id}`);
+        const win = window.open(url, '_blank');
+        if (!win) alert('Cannot open image in new tab');
+    }
+
+    function refreshGallery() {
+        location.reload();
+    }
+</script>
+
+{% endblock %}

@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Portal - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="mb-8 animate-fade-up">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="font-display text-3xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">Agent
+                Portal</h2>
+            <p class="text-slate-500 mt-1">Register new systems and generate one-click bots for automated monitoring.
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                <span class="text-[0.65rem] text-indigo-400 font-bold uppercase tracking-wider block">Your Tenant</span>
+                <span class="text-sm font-bold text-indigo-700">{{ tenant.name if tenant else 'Global' }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Registration Form -->
+    <div class="lg:col-span-1">
+        <div class="glass-card border-slate-200 shadow-xl overflow-hidden animate-fade-up">
+            <div class="bg-slate-900 p-6 -m-6 mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center text-white">
+                        <i class="fa-solid fa-plus"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-white">Register System</h3>
+                </div>
+            </div>
+
+            <form id="registrationForm" onsubmit="registerSystem(event)" class="space-y-5 mt-6">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Host Name / PC
+                        Name</label>
+                    <input type="text" id="hostname" required placeholder="e.g. WIN-SERVER-01"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">IP Address
+                        (Optional)</label>
+                    <input type="text" id="ip_address" placeholder="192.168.1.10"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Location /
+                        Physical Address</label>
+                    <input type="text" id="address" placeholder="e.g. Server Room B, 4th Floor"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Serial Number
+                        (Optional)</label>
+                    <input type="text" id="serial_number" placeholder="XYZ-123-456"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+                </div>
+
+                <button type="submit" id="regBtn"
+                    class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-shield-halved"></i> Generate Bot Installer
+                </button>
+            </form>
+
+            <div id="statusMsg" class="mt-4 p-3 rounded-xl hidden text-xs font-bold"></div>
+        </div>
+
+        <div class="mt-8 p-6 bg-amber-50 border border-amber-100 rounded-3xl animate-fade-up">
+            <h4 class="text-xs font-black text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-info"></i> How it works
+            </h4>
+            <p class="text-xs text-amber-600 leading-relaxed font-medium">
+                1. Provide the target system's details.<br>
+                2. We generate a custom monitoring bot.<br>
+                3. Download the ZIP and run <b>OneClickInstall.bat</b> as Administrator on the target machine.<br>
+                4. The bot will automatically link to your portal and start tracking productivity.
+            </p>
+        </div>
+    </div>
+
+    <!-- Deployment History / Recent Bots & Domain Discovery -->
+    <div class="lg:col-span-2 space-y-8">
+        <!-- Tabs -->
+        <div class="flex gap-2 border-b border-slate-200">
+            <button onclick="switchTab('bots')" id="tab-bots"
+                class="px-4 py-3 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 transition-all cursor-pointer">
+                <i class="fa-solid fa-robot mr-1.5"></i>Generated Bots
+            </button>
+            <button onclick="switchTab('discovery')" id="tab-discovery"
+                class="px-4 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-700 transition-all cursor-pointer">
+                <i class="fa-solid fa-globe mr-1.5"></i>Domain Discovery
+            </button>
+        </div>
+
+        <!-- Bot List Tab -->
+        <div id="bots-tab" class="glass-card border-slate-200 shadow-sm animate-fade-up min-h-[400px]">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-robot text-indigo-500"></i> Generated Bots
+                </h3>
+                <button onclick="loadBots()"
+                    class="text-xs text-slate-500 hover:text-indigo-600 font-bold flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+            </div>
+
+            <div id="botList" class="space-y-4">
+                <div class="text-center py-20 text-slate-400">
+                    <i class="fa-solid fa-folder-open text-4xl mb-4 opacity-20"></i>
+                    <p class="text-sm font-medium">No bots generated yet. Use the form to get started.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Domain Discovery Tab -->
+        <div id="discovery-tab" class="hidden glass-card border-slate-200 shadow-sm animate-fade-up min-h-[400px]">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-network-wired text-emerald-500"></i> Discovered Systems
+                </h3>
+                <button onclick="loadDiscoveredSystems(true)"
+                    class="text-xs text-slate-500 hover:text-emerald-600 font-bold flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+            </div>
+
+            <div id="discoveryList" class="space-y-3">
+                <div class="text-center py-20 text-slate-400">
+                    <i class="fa-solid fa-magnifying-glass text-4xl mb-4 opacity-20"></i>
+                    <p class="text-sm font-medium">Loading discovered systems...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function registerSystem(e) {
+        e.preventDefault();
+        const btn = document.getElementById('regBtn');
+        const status = document.getElementById('statusMsg');
+
+        const data = {
+            hostname: document.getElementById('hostname').value,
+            ip_address: document.getElementById('ip_address').value,
+            address: document.getElementById('address').value,
+            serial_number: document.getElementById('serial_number').value
+        };
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
+
+        try {
+            const res = await fetch('/api/v2/agent/register-system', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                status.className = 'mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-xs font-bold';
+                status.innerHTML = '<i class="fa-solid fa-check-circle mr-1"></i> ' + result.message + ' Triggering download...';
+                status.classList.remove('hidden');
+
+                // Trigger Download
+                window.location.href = `/agent/download-bot/${result.server_id}`;
+
+                // Clear form
+                document.getElementById('registrationForm').reset();
+            } else {
+                status.className = 'mt-4 p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold';
+                status.innerHTML = '<i class="fa-solid fa-xmark-circle mr-1"></i> ' + (result.error || 'Failed to register');
+                status.classList.remove('hidden');
+            }
+        } catch (e) {
+            status.className = 'mt-4 p-3 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold';
+            status.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> Connection error.';
+            status.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Generate Bot Installer';
+            loadBots();
+        }
+    }
+
+    async function loadBots() {
+        const list = document.getElementById('botList');
+        // Add filter input above the list if it doesn't exist
+        if (!document.getElementById('botFilterWrapper')) {
+            const filterHtml = `
+            <div id="botFilterWrapper" class="mb-4 relative">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="botFilter" placeholder="Search by employee name or hostname..." 
+                    class="w-full md:w-1/3 pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    onkeyup="filterTable('botFilter', 'botsTableBody', 'bot-row')">
+            </div>`;
+            list.insertAdjacentHTML('beforebegin', filterHtml);
+        }
+
+        try {
+            const res = await fetch('/api/systems/list');
+            const systems = await res.json();
+
+            if (!systems || systems.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-20 text-slate-400">
+                        <i class="fa-solid fa-folder-open text-4xl mb-4 opacity-20"></i>
+                        <p class="text-sm font-medium">No bots generated yet. Use the form to get started.</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest border-b border-slate-100">
+                                <th class="pb-3 px-4">System Identity</th>
+                                <th class="pb-3 px-4">Assigned To</th>
+                                <th class="pb-3 px-4">Network Info</th>
+                                <th class="pb-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50" id="botsTableBody">
+                            ${systems.map(s => `
+                                <tr class="hover:bg-slate-50/50 transition-colors bot-row" data-search="${(s.hostname + ' ' + (s.employee_name || '')).toLowerCase()}">
+                                    <td class="py-4 px-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-xs">
+                                                <i class="fa-solid fa-desktop"></i>
+                                            </div>
+                                            <div>
+                                                <div class="font-bold text-slate-900">${s.hostname}</div>
+                                                <div class="text-[0.65rem] text-slate-400 font-medium">Internal ID: ${s.id}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-user text-slate-400"></i>
+                                            <span class="font-semibold text-slate-700 text-xs">${s.employee_name || 'Unassigned'}</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <div class="flex flex-col">
+                                            <span class="font-medium text-slate-700">${s.ip || 'Pending IP'}</span>
+                                            <span class="text-[0.65rem] text-slate-400">Status: <span class="capitalize">${s.status || 'Registered'}</span></span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-4 text-right">
+                                        <a href="/agent/download-bot/${s.id}" class="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-bold transition-all">
+                                            <i class="fa-solid fa-download"></i> Download Bot
+                                        </a>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        } catch (e) {
+            list.innerHTML = '<div class="text-center py-20 text-rose-400 font-bold text-sm">Failed to load systems list.</div>';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadBots();
+        loadDiscoveredSystems();
+    });
+
+    function switchTab(tab) {
+        // Hide all tabs
+        document.getElementById('bots-tab').classList.add('hidden');
+        document.getElementById('discovery-tab').classList.add('hidden');
+
+        // Remove active border from tabs
+        document.getElementById('tab-bots').classList.remove('border-indigo-600', 'text-indigo-600');
+        document.getElementById('tab-bots').classList.add('text-slate-500', 'border-transparent');
+        document.getElementById('tab-discovery').classList.remove('border-indigo-600', 'text-indigo-600');
+        document.getElementById('tab-discovery').classList.add('text-slate-500', 'border-transparent');
+
+        // Show selected tab
+        if (tab === 'bots') {
+            document.getElementById('bots-tab').classList.remove('hidden');
+            document.getElementById('tab-bots').classList.remove('text-slate-500', 'border-transparent');
+            document.getElementById('tab-bots').classList.add('border-indigo-600', 'text-indigo-600');
+        } else if (tab === 'discovery') {
+            document.getElementById('discovery-tab').classList.remove('hidden');
+            document.getElementById('tab-discovery').classList.remove('text-slate-500', 'border-transparent');
+            document.getElementById('tab-discovery').classList.add('border-indigo-600', 'text-indigo-600');
+            loadDiscoveredSystems(true);
+        }
+    }
+
+    async function loadDiscoveredSystems(force = false) {
+        const list = document.getElementById('discoveryList');
+        if (!document.getElementById('discoveryFilterWrapper')) {
+            const filterHtml = `
+            <div id="discoveryFilterWrapper" class="mb-4 relative">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="discoveryFilter" placeholder="Search by employee name or hostname..." 
+                    class="w-full md:w-1/3 pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    onkeyup="filterTable('discoveryFilter', 'discoveryTableBody', 'discovery-row')">
+            </div>`;
+            list.insertAdjacentHTML('beforebegin', filterHtml);
+        }
+
+        try {
+            const res = await fetch('/api/v2/domain-discovery/systems', {
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+
+            if (!data.success || !data.discovered_systems || data.discovered_systems.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-20 text-slate-400">
+                        <i class="fa-solid fa-network-wired text-4xl mb-4 opacity-20"></i>
+                        <p class="text-sm font-medium">No systems discovered yet. Run domain discovery from the admin panel.</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest border-b border-slate-100">
+                                <th class="pb-3 px-4">System</th>
+                                <th class="pb-3 px-4">Assigned To</th>
+                                <th class="pb-3 px-4">Network</th>
+                                <th class="pb-3 px-4">OS Info</th>
+                                <th class="pb-3 px-4">Status</th>
+                                <th class="pb-3 px-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50" id="discoveryTableBody">
+                            ${data.discovered_systems.map(s => `
+                                <tr class="hover:bg-slate-50/50 transition-colors discovery-row" data-search="${(s.hostname + ' ' + (s.employee_name || '')).toLowerCase()}">
+                                    <td class="py-4 px-4">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-8 h-8 rounded-lg ${s.is_imported ? 'bg-slate-50' : 'bg-emerald-50'} flex items-center justify-center text-xs font-bold">
+                                                ${s.is_imported ? '<i class="fa-solid fa-check text-slate-400"></i>' : '<i class="fa-solid fa-circle-play text-emerald-600"></i>'}
+                                            </div>
+                                            <div>
+                                                <div class="font-bold text-slate-900">${s.hostname}</div>
+                                                <div class="text-[0.65rem] text-slate-400 font-medium">Source: ${s.source}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-user text-slate-400"></i>
+                                            <span class="font-semibold text-slate-700 text-xs">${s.employee_name || 'Unassigned'}</span>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <span class="font-mono text-xs text-slate-600">${s.ip_address || '—'}</span>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <span class="text-xs text-slate-600 max-w-xs truncate">${s.os_info || '—'}</span>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold 
+                                        ${s.is_imported ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700'}">
+                                            ${s.is_imported ? '<i class="fa-solid fa-check-circle"></i> Imported' : '<i class="fa-solid fa-hourglass-start"></i> Pending'}
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-4 text-right">
+                                        ${s.is_manageable ? `
+                                            <button onclick="pushAgent(${s.discovery_id}, '${s.hostname}')" 
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-all">
+                                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Push Agent
+                                            </button>
+                                        ` : `
+                                            <span class="text-xs text-slate-400 font-semibold">—</span>
+                                        `}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        } catch (e) {
+            list.innerHTML = '<div class="text-center py-20 text-rose-400 font-bold text-sm">Failed to load discovered systems.</div>';
+        }
+    }
+
+    function filterTable(inputId, tbodyId, rowClass) {
+        const input = document.getElementById(inputId);
+        const filter = input.value.toLowerCase();
+        const tbody = document.getElementById(tbodyId);
+        const rows = tbody.getElementsByClassName(rowClass);
+
+        for (let i = 0; i < rows.length; i++) {
+            const searchData = rows[i].getAttribute('data-search');
+            if (searchData.indexOf(filter) > -1) {
+                rows[i].style.display = "";
+            } else {
+                rows[i].style.display = "none";
+            }
+        }
+    }
+
+    async function pushAgent(discoveryId, hostname) {
+        if (!confirm(`Deploy agent to ${hostname}?\n\nThis will queue the agent deployment and import the system as a managed server.`)) return;
+
+        try {
+            const res = await fetch(`/api/v2/domain-discovery/${discoveryId}/push-agent`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agent_type: 'psremoting' })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                alert(`✓ Agent deployment queued for ${hostname}!\n\nServer ID: ${data.server_id}\nCommand ID: ${data.command_id}\n\nThe agent will begin deployment shortly. Check System Controls for progress.`);
+                loadDiscoveredSystems(true);
+            } else {
+                alert(`✗ Failed: ${data.error || 'Unknown error'}`);
+            }
+        } catch (e) {
+            alert(`✗ Error: ${e?.message || e}`);
+        }
+    }
+
+</script>
+
+<style>
+    .glass-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-radius: 24px;
+        padding: 24px;
+    }
+
+    .animate-fade-up {
+        opacity: 0;
+        animation: fadeUp 0.6s ease-out forwards;
+    }
+
+    @keyframes fadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+{% endblock %}

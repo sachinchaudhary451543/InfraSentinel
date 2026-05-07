@@ -1,0 +1,104 @@
+# ── CREDENTIALS & SECRETS (NEVER commit these) ──────────────────────────────
+.env
+.env.*
+!.env.example
+config.json
+config.json.bak
+config.secrets.enc
+storedCred.xml
+*.enc
+*.key
+*.pem
+*.pfx
+*.p12
+*.xml
+.encryption.key
+
+# ── DATABASES (contain real org data) ───────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.log
+data/*.csv
+central.db
+server_monitor.db
+
+# ── PYTHON ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+pip-log.txt
+
+# ── LOGS ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+main_startup.log
+APP_RUNNING.txt
+
+# ── SCREENSHOTS / MEDIA UPLOADS ─────────────────────────────────────────────
+uploads/
+web/static/screenshots/
+web/static/uploads/
+*.png
+*.jpg
+*.jpeg
+!web/static/images/login_hero.png
+!web/static/images/logo_icon.png
+!web/static/favicon_io/
+
+# ── BACKUP / TEMP FILES ──────────────────────────────────────────────────────
+backups/
+*.backup
+*.bak
+*.broken
+*.new
+tmpclaude-*
+_ul
+scratch/
+
+# ── REPORTS & EXPORTS ────────────────────────────────────────────────────────
+*.xlsx
+*.csv
+
+# ── NODE ─────────────────────────────────────────────────────────────────────
+node_modules/
+package-lock.json
+
+# ── IDE / EDITOR ─────────────────────────────────────────────────────────────
+.vs/
+.vscode/settings.json
+.vscode/*.log
+*.suo
+*.user
+.idea/
+pyrightconfig.json
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── INSTANCE / FLASK ─────────────────────────────────────────────────────────
+instance/
+web/data/
+
+web/config/credentials.json
+web/config/servers.json
+storedCred.xml
+.vs/
+web/__pycache__/
+web/**/__pycache__/
+**/tmpclaude-*
+pyrightconfig.json
+*.pyc

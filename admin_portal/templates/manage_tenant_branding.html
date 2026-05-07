@@ -1,0 +1,222 @@
+{% extends "base_redesigned.html" %}
+
+{% block title %}Manage Branding - {{ tenant.name }}{% endblock %}
+
+{% block page_title %}Manage Branding: {{ tenant.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            <i class="fa-solid fa-palette mr-2"></i>White-Label Branding Setup
+        </h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-6">
+            Customize the appearance of this tenant's portal with your own branding. This allows you to resell the
+            platform as a white-label solution to MSPs.
+        </p>
+
+        <form method="POST" class="space-y-6">
+            <!-- Company Name -->
+            <div>
+                <label for="company_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <i class="fa-solid fa-building mr-2"></i>Company Name
+                </label>
+                <input type="text" id="company_name" name="company_name"
+                    value="{{ tenant.get_branding()['company_name'] }}"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="e.g., Acme Corp, TechVision Inc.">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Displayed in headers, footers, and browser tabs
+                </p>
+            </div>
+
+            <!-- Logo URL -->
+            <div>
+                <label for="logo_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <i class="fa-solid fa-image mr-2"></i>Logo URL
+                </label>
+                <input type="url" id="logo_url" name="logo_url" value="{{ tenant.get_branding()['logo_url'] or '' }}"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="https://example.com/logo.png">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    PNG/JPG recommended (recommended size: 200x80px). Leave empty for default icon.
+                </p>
+            </div>
+
+            <!-- Color Scheme -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label for="primary_color" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fa-solid fa-palette mr-2"></i>Primary Color
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="primary_color" name="primary_color"
+                            value="{{ tenant.get_branding()['primary_color'] }}"
+                            class="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer">
+                        <input type="text" id="primary_color_text" value="{{ tenant.get_branding()['primary_color'] }}"
+                            class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white font-mono text-sm"
+                            placeholder="#2563eb">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Main UI elements (buttons, nav)
+                    </p>
+                </div>
+
+                <div>
+                    <label for="secondary_color"
+                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fa-solid fa-palette mr-2"></i>Secondary Color
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="secondary_color" name="secondary_color"
+                            value="{{ tenant.get_branding()['secondary_color'] }}"
+                            class="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer">
+                        <input type="text" id="secondary_color_text"
+                            value="{{ tenant.get_branding()['secondary_color'] }}"
+                            class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white font-mono text-sm"
+                            placeholder="#1e40af">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Complementary elements
+                    </p>
+                </div>
+
+                <div>
+                    <label for="accent_color" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fa-solid fa-palette mr-2"></i>Accent Color
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="accent_color" name="accent_color"
+                            value="{{ tenant.get_branding()['accent_color'] }}"
+                            class="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer">
+                        <input type="text" id="accent_color_text" value="{{ tenant.get_branding()['accent_color'] }}"
+                            class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white font-mono text-sm"
+                            placeholder="#dc2626">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Alerts and warnings
+                    </p>
+                </div>
+            </div>
+
+            <!-- Favicon URL -->
+            <div>
+                <label for="favicon_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <i class="fa-solid fa-icon mr-2"></i>Favicon URL
+                </label>
+                <input type="url" id="favicon_url" name="favicon_url"
+                    value="{{ tenant.get_branding()['favicon_url'] or '' }}"
+                    class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="https://example.com/favicon.ico">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Browser tab icon (16x16px minimum). Leave empty for default.
+                </p>
+            </div>
+
+            <!-- Preview -->
+            <div
+                class="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 border-2 border-dashed border-gray-300 dark:border-gray-600">
+                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                    <i class="fa-solid fa-eye mr-2"></i>Preview
+                </h3>
+                <div class="space-y-4">
+                    <!-- Logo Preview -->
+                    <div class="flex items-center space-x-4">
+                        <div
+                            class="w-20 h-20 rounded-lg bg-white dark:bg-gray-700 flex items-center justify-center border border-gray-300 dark:border-gray-600">
+                            {% if tenant.get_branding()['logo_url'] %}
+                            <img src="{{ tenant.get_branding()['logo_url'] }}" alt="logo" class="max-w-full max-h-full">
+                            {% else %}
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">Logo</p>
+                            <p class="text-lg font-bold text-gray-900 dark:text-white">{{
+                                tenant.get_branding()['company_name'] }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Color Preview -->
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-12 h-12 rounded" id="primary_preview"
+                                style="background-color: {{ tenant.get_branding()['primary_color'] }}"></div>
+                            <span class="text-xs font-mono text-gray-600 dark:text-gray-400">Primary</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-12 h-12 rounded" id="secondary_preview"
+                                style="background-color: {{ tenant.get_branding()['secondary_color'] }}"></div>
+                            <span class="text-xs font-mono text-gray-600 dark:text-gray-400">Secondary</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-12 h-12 rounded" id="accent_preview"
+                                style="background-color: {{ tenant.get_branding()['accent_color'] }}"></div>
+                            <span class="text-xs font-mono text-gray-600 dark:text-gray-400">Accent</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+                <a href="{{ url_for('main.index_redirect') }}"
+                    class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                    Cancel
+                </a>
+                <button type="submit"
+                    class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                    <i class="fa-solid fa-save mr-2"></i>Save Branding
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Info Box -->
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <h4 class="font-semibold text-blue-900 dark:text-blue-300 mb-2">
+            <i class="fa-solid fa-circle-info mr-2"></i>White-Labeling for MSPs
+        </h4>
+        <ul class="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+            <li>✅ Customize company name, logo, and colors per tenant</li>
+            <li>✅ Support multiple MSP brands on the same platform</li>
+            <li>✅ Changes apply immediately to login page and dashboard</li>
+            <li>✅ Each MSP sees their own branding when accessing the portal</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    // Live color preview update
+    document.getElementById('primary_color').addEventListener('change', function () {
+        document.getElementById('primary_color_text').value = this.value;
+        document.getElementById('primary_preview').style.backgroundColor = this.value;
+    });
+    document.getElementById('primary_color_text').addEventListener('change', function () {
+        document.getElementById('primary_color').value = this.value;
+        document.getElementById('primary_preview').style.backgroundColor = this.value;
+    });
+
+    document.getElementById('secondary_color').addEventListener('change', function () {
+        document.getElementById('secondary_color_text').value = this.value;
+        document.getElementById('secondary_preview').style.backgroundColor = this.value;
+    });
+    document.getElementById('secondary_color_text').addEventListener('change', function () {
+        document.getElementById('secondary_color').value = this.value;
+        document.getElementById('secondary_preview').style.backgroundColor = this.value;
+    });
+
+    document.getElementById('accent_color').addEventListener('change', function () {
+        document.getElementById('accent_color_text').value = this.value;
+        document.getElementById('accent_preview').style.backgroundColor = this.value;
+    });
+    document.getElementById('accent_color_text').addEventListener('change', function () {
+        document.getElementById('accent_color').value = this.value;
+        document.getElementById('accent_preview').style.backgroundColor = this.value;
+    });
+</script>
+{% endblock %}
