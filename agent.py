@@ -21,7 +21,7 @@ def load_config():
     config_paths = [
         Path('agent_config.json'),  # Current directory
         Path(os.path.dirname(os.path.abspath(__file__))) / 'agent_config.json',  # Script directory
-        Path('C:\\Program Files\\ServerMonitor\\Agent\\agent_config.json'),  # Windows Service directory
+        Path('C:\\Program Files\\InfraSentinel\\Agent\\agent_config.json'),  # Windows Service directory
     ]
     
     for config_path in config_paths:
