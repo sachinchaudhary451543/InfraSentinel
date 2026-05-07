@@ -1,6 +1,6 @@
-# InfraSentinel: Master Deployment Guide
+# ServerMonitor: Master Deployment Guide
 
-This document outlines the complete, start-to-end process for deploying the InfraSentinel platform across your organization's Hyper-V infrastructure and endpoint devices.
+This document outlines the complete, start-to-end process for deploying the ServerMonitor platform across your organization's Hyper-V infrastructure and endpoint devices.
 
 ---
 
@@ -11,14 +11,14 @@ The first step is setting up the "Brain" of the platform—the central dashboard
 2. **Assign a Static IP:** Ensure this VM has a permanent, internal static IP address on your network (e.g., `192.168.10.50`).
 3. **Install Prerequisites:** 
    - Install **Python 3.10+** on this VM. *(During installation, ensure the "Add Python to PATH" checkbox is checked).*
-4. **Copy the Codebase:** Copy the entire `InfraSentinel` project folder to a permanent location on this VM (e.g., `C:\InfraSentinel`).
+4. **Copy the Codebase:** Copy the entire `ServerMonitor` project folder to a permanent location on this VM (e.g., `C:\ServerMonitor`).
 
 ---
 
 ## Phase 2: Initializing the Dashboard Server
 We must start the web application using a production-grade server (`Waitress`), rather than the default Flask development server.
 
-1. Open the `deployment` folder inside your `InfraSentinel` directory.
+1. Open the `deployment` folder inside your `ServerMonitor` directory.
 2. Double-click the **`Start_Dashboard_Server.bat`** file.
    - *This script will automatically create a virtual environment, install all required dependencies (including Waitress), and launch the server on Port 8080.*
 3. Ensure the black console window remains open. Your dashboard is now locally active.

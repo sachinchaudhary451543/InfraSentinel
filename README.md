@@ -1,4 +1,4 @@
-# InfraSentinel Enterprise Edition
+# ServerMonitor Enterprise Edition
 
 A production-ready Server, Network & VM Monitoring application featuring Real-Time WebSockets, active Remote Command Execution, and scalable containerization.
 
