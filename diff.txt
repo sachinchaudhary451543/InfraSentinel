@@ -1,0 +1,197 @@
+﻿commit 67ed169dd904444e0111294329686f76596f3172
+Author: SACHIN CHAUDHARY <sachinchaudhary451543@gmail.com>
+Date:   Thu May 7 20:29:10 2026 +0530
+
+    UI improvements and formatting
+
+diff --git a/web/templates/dashboard.html b/web/templates/dashboard.html
+index 0b2b756..8e9a7a3 100644
+--- a/web/templates/dashboard.html
++++ b/web/templates/dashboard.html
+@@ -58,18 +58,18 @@
+         color: #646363 !important;
+     }
+ 
+-    /* Ensure tables have clean light theme styling */
++    /* Kill base data-table light overrides inside noc-page */
+     .noc-page .data-table thead th,
+     .noc-page .noc-table thead th {
+-        color: #475569 !important;
+-        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+-        background: #f8fafc !important;
++        color: #64748b !important;
++        border-bottom: 1px solid rgba(56, 189, 248, 0.06) !important;
++        background: rgba(13, 20, 34, 0.8) !important;
+     }
+ 
+     .noc-page .data-table tbody td,
+     .noc-page .noc-table tbody td {
+-        color: #0f172a !important;
+-        border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
++        color: #e2e8f0 !important;
++        border-bottom: 1px solid rgba(56, 189, 248, 0.04) !important;
+     }
+ 
+     .noc-page .data-table tbody tr:hover,
+@@ -101,7 +101,7 @@
+ 
+     /* Kill base border-white/x overrides inside noc-page */
+     .noc-page [class*="border-white/"] {
+-        border-color: rgba(148, 163, 184, 0.2) !important;
++        border-color: rgba(56, 189, 248, 0.08) !important;
+     }
+ 
+     /* Main content padding ΓÇö let noc-page handle its own */
+@@ -131,30 +131,30 @@
+ {% block content %}
+ 
+ <style>
+-    /* ΓöÇΓöÇ NOC Light Theme Variables ΓöÇΓöÇ */
++    /* ΓöÇΓöÇ NOC Dark Theme Variables ΓöÇΓöÇ */
+     :root {
+-        --noc-bg: #fbfcfd;
+-        --noc-surface: #ffffff;
+-        --noc-surface-2: #f8fafc;
+-        --noc-border: rgba(148, 163, 184, 0.2);
+-        --noc-border-bright: rgba(56, 189, 248, 0.4);
+-        --noc-cyan: #0284c7;
+-        --noc-cyan-dim: rgba(2, 132, 199, 0.08);
+-        --noc-indigo: #4f46e5;
+-        --noc-indigo-dim: rgba(79, 70, 229, 0.08);
+-        --noc-emerald: #059669;
+-        --noc-emerald-dim: rgba(5, 150, 105, 0.08);
+-        --noc-amber: #d97706;
+-        --noc-amber-dim: rgba(217, 119, 6, 0.08);
+-        --noc-rose: #e11d48;
+-        --noc-rose-dim: rgba(225, 29, 72, 0.08);
+-        --noc-violet: #7c3aed;
+-        --noc-text-primary: #0f172a;
+-        --noc-text-secondary: #475569;
+-        --noc-text-muted: #64748b;
+-        --noc-glow-cyan: 0 4px 12px rgba(2, 132, 199, 0.1);
+-        --noc-glow-indigo: 0 4px 12px rgba(79, 70, 229, 0.1);
+-        --noc-glow-emerald: 0 4px 12px rgba(5, 150, 105, 0.1);
++        --noc-bg: #fbfcff;
++        --noc-surface: #f4f4f4;
++        --noc-surface-2: #f0f0f0;
++        --noc-border: rgba(56, 189, 248, 0.08);
++        --noc-border-bright: rgba(56, 189, 248, 0.18);
++        --noc-cyan: #22d3ee;
++        --noc-cyan-dim: rgba(34, 211, 238, 0.12);
++        --noc-indigo: #818cf8;
++        --noc-indigo-dim: rgba(129, 140, 248, 0.12);
++        --noc-emerald: #34d399;
++        --noc-emerald-dim: rgba(52, 211, 153, 0.1);
++        --noc-amber: #fbbf24;
++        --noc-amber-dim: rgba(251, 191, 36, 0.1);
++        --noc-rose: #fb7185;
++        --noc-rose-dim: rgba(251, 113, 133, 0.1);
++        --noc-violet: #a78bfa;
++        --noc-text-primary: #052145;
++        --noc-text-secondary: #2d2d2d;
++        --noc-text-muted: #07090b;
++        --noc-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.15), 0 0 40px rgba(34, 211, 238, 0.05);
++        --noc-glow-indigo: 0 0 20px rgba(129, 140, 248, 0.15);
++        --noc-glow-emerald: 0 0 20px rgba(52, 211, 153, 0.15);
+     }
+ 
+     /* ΓöÇΓöÇ Scoped to this page only ΓöÇΓöÇ */
+@@ -168,7 +168,7 @@
+         box-sizing: border-box;
+     }
+ 
+-    /* ΓöÇΓöÇ Scanline overlay (disabled) ΓöÇΓöÇ
++    /* ΓöÇΓöÇ Scanline overlay ΓöÇΓöÇ */
+     .noc-scanlines::before {
+         content: '';
+         position: fixed;
+@@ -176,12 +176,11 @@
+         background: repeating-linear-gradient(0deg,
+                 transparent,
+                 transparent 2px,
+-                rgba(0, 0, 0, 0.03) 2px,
++                rgba(0, 0, 0, 0.03) 2px;
+                 rgba(0, 0, 0, 0.03) 4px);
+         pointer-events: none;
+         z-index: 9999;
+     }
+-    */
+ 
+     /* ΓöÇΓöÇ NOC Panel ΓöÇΓöÇ */
+     .noc-panel {
+@@ -193,7 +192,14 @@
+     }
+ 
+     .noc-panel::before {
+-        display: none;
++        content: '';
++        position: absolute;
++        top: 0;
++        left: 0;
++        right: 0;
++        height: 1px;
++        background: linear-gradient(90deg, transparent, var(--noc-cyan), transparent);
++        opacity: 0.4;
+     }
+ 
+     .noc-panel-bright {
+@@ -311,10 +317,15 @@
+         border: 1px solid rgba(251, 191, 36, 0.2);
+     }
+ 
+-    .badge-offline {
++    /* .badge-offline {
+         background: rgba(51, 65, 85, 0.5);
+         color: #64748b;
+         border: 1px solid rgba(51, 65, 85, 0.8);
++    } */
++    .badge-offline {
++        background: rgb(171 171 172 / 50%);
++        color: #060606;
++        border: 1px solid rgba(51, 65, 85, 0.8);
+     }
+ 
+     .badge-agent {
+@@ -348,7 +359,7 @@
+     }
+ 
+     .noc-table thead tr {
+-        background: #f1f5f9;
++        background: rgba(13, 20, 34, 0.8);
+         border-bottom: 1px solid var(--noc-border);
+     }
+ 
+@@ -978,13 +989,13 @@
+ 
+     /* ΓöÇΓöÇ Terminal-style script block ΓöÇΓöÇ */
+     .noc-terminal {
+-        background: #1e293b;
+-        border: 1px solid var(--noc-border);
+-        border-radius: 4px;
++        background: #020509;
++        border: 1px solid rgba(34, 211, 238, 0.15);
++        border-radius: 3px;
+         padding: 16px;
+         font-family: 'JetBrains Mono', 'Fira Code', monospace;
+         font-size: 0.7rem;
+-        color: #e2e8f0;
++        color: #22d3ee;
+         overflow-x: auto;
+         max-height: 240px;
+         overflow-y: auto;
+@@ -1069,7 +1080,14 @@
+     }
+ 
+     .telemetry-header::before {
+-        display: none;
++        content: '';
++        position: absolute;
++        top: 0;
++        left: 0;
++        right: 0;
++        height: 1px;
++        background: linear-gradient(90deg, transparent, var(--noc-cyan), var(--noc-indigo), transparent);
++        opacity: 0.5;
+     }
+ 
+     /* ΓöÇΓöÇ Filter bar ΓöÇΓöÇ */

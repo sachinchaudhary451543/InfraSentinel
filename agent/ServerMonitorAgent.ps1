@@ -5,7 +5,7 @@
 # local buffering for network resilience.
 #
 # Usage:
-#   .\ServerMonitorAgent.ps1 -AgentKey "YOUR_KEY" -ApiUrl "https://server:8080/api/metrics"
+#   .\ServerMonitorAgent.ps1 -AgentKey "YOUR_KEY" -ApiUrl "https://server:3000/api/metrics"
 #   .\ServerMonitorAgent.ps1 -AgentKey "YOUR_KEY" -ApiUrl "..." -MonitoringMode light
 #
 param(

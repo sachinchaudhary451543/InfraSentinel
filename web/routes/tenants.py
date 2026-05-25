@@ -64,6 +64,23 @@ def add_tenant():
     
     return render_template('add_tenant.html')
 
+@tenants_bp.route('/tenant/<int:tenant_id>/status', methods=['POST'])
+@login_required
+@require_superadmin
+def update_tenant_status(tenant_id):
+    """Superadmin: Toggle tenant subscription status"""
+    t = db.get_or_404(Tenant, tenant_id)
+    new_status = request.form.get('status')
+    
+    if new_status in ['active', 'suspended', 'hold']:
+        t.status = new_status
+        db.session.commit()
+        flash(f'Tenant "{t.name}" status updated to {new_status}.', 'success')
+    else:
+        flash('Invalid status provided.', 'danger')
+        
+    return redirect(url_for('tenants.list_tenants'))
+
 
 @tenants_bp.route('/manage_azure/<int:tenant_id>', methods=['GET', 'POST'])
 @login_required
@@ -127,4 +144,74 @@ def manage_tenant_azure(tenant_id):
             return redirect(url_for('tenants.manage_tenant_azure', tenant_id=t.id))
 
     return render_template('manage_tenant_azure.html', tenant=t)
+
+@tenants_bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+def tenant_settings():
+    """Self-service tenant settings for org_admins"""
+    from flask_login import current_user as _current_user
+    # Only allow org_admin or superadmin to configure this tenant
+    if _current_user.role not in ['super_admin', 'org_admin'] and not _current_user.is_superadmin:
+        flash('You do not have permission to access tenant settings.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    tenant_id = _current_user.tenant_id
+    if not tenant_id:
+        flash('Unable to determine tenant for settings.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    t = db.get_or_404(Tenant, tenant_id)
+    
+    if request.method == 'POST':
+        client_id = request.form.get('azure_client_id')
+        client_secret = request.form.get('azure_client_secret')
+        tenant_id_field = request.form.get('azure_tenant_id')
+        interval = request.form.get('polling_interval_minutes', type=int) or 60
+        
+        # Azure Credentials
+        if client_id and client_secret and tenant_id_field:
+            try:
+                from core.azure_discovery import get_token_result
+                import requests
+
+                result = get_token_result(client_id, client_secret, tenant_id_field)
+                if 'access_token' not in result:
+                    flash('MSAL token error: ' + (result.get('error_description') or str(result)), 'danger')
+                else:
+                    # fetch org display name
+                    token = result.get('access_token')
+                    resp = requests.get('https://graph.microsoft.com/v1.0/organization', headers={'Authorization': f'Bearer {token}'}, timeout=10)
+                    display_name = None
+                    if resp.status_code == 200:
+                        org = resp.json()
+                        value = org.get('value', [])
+                        if value:
+                            display_name = value[0].get('displayName')
+
+                    t.azure_client_id = client_id
+                    t.azure_client_secret = client_secret
+                    t.azure_tenant_id = tenant_id_field
+                    t.azure_display_name = display_name or tenant_id_field
+                    t.azure_registered = True
+                    flash('Azure credentials successfully updated!', 'success')
+            except Exception as e:
+                logging.error(f'Failed to save azure creds for tenant {t.id}: {e}')
+                flash(f'Error verifying Azure credentials: {str(e)}', 'danger')
+
+        # Polling and SharePoint Settings
+        t.polling_interval_minutes = interval
+        
+        sp_site = request.form.get('sharepoint_site_url')
+        if sp_site:
+            t.sharepoint_site_url = sp_site
+            t.sharepoint_connected = True
+        
+        t.sharepoint_auto_sync = request.form.get('sharepoint_auto_sync') == 'on'
+        t.sharepoint_sync_interval_minutes = request.form.get('sharepoint_sync_interval_minutes', type=int) or 60
+        
+        db.session.commit()
+        flash('Tenant settings saved successfully.', 'success')
+        return redirect(url_for('tenants.tenant_settings'))
+        
+    return render_template('manage_tenant_azure.html', tenant=t, tenant_settings=True)
 

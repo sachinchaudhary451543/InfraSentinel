@@ -1,0 +1,16 @@
+psycopg[binary]>=3.1
+flask
+flask_sqlalchemy
+flask_login
+flask_socketio
+gevent
+requests
+pyjwt
+cryptography
+msal
+azure-identity
+azure-graphrbac
+redis
+flask-compress
+alembic
+flask-caching

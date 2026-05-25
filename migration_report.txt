@@ -1,0 +1,50 @@
+Source (SQLite): sqlite:///C:\Users\SachinKumar\OneDrive - BaffleSol Technologies Pvt Ltd\ServerMonitor\data\central.db
+Destination (Postgres): postgresql://postgres:Airport%402026@localhost:5432/servermonitor
+
+Reflecting source schema...
+Source tables (26): ['agent_control_command', 'agent_key', 'alert', 'audit_log', 'azure_device', 'azure_device_owner', 'azure_license', 'azure_license_assignment', 'azure_user', 'deployment_job', 'device_activity', 'employee', 'employee_activity', 'employee_asset_log', 'entra_role', 'metric', 'remote_command', 'screenshot', 'server', 'sharepoint_metric_queue', 'sync_notification', 'system_alert', 'system_discovery', 'tenant', 'user', 'vm']
+
+Reflecting destination schema...
+Destination tables (25): ['agent_control_command', 'agent_key', 'audit_log', 'azure_device', 'azure_device_owner', 'azure_license', 'azure_license_assignment', 'azure_user', 'deployment_job', 'device_activity', 'employee', 'employee_activity', 'employee_asset_log', 'entra_role', 'metric', 'remote_command', 'screenshot', 'server', 'sharepoint_metric_queue', 'sync_notification', 'system_alert', 'system_discovery', 'tenant', 'user', 'vm']
+
+Table differences:
+  Only in source: ['alert']
+  Only in dest: []
+
+Column differences (common tables):
+  Table azure_device: +[]  -['device_status', 'disabled_at', 'is_active', 'last_activity']
+  Table azure_user: +[]  -['employment_status', 'is_active', 'last_activity', 'left_date']
+  Table employee: +[]  -['employment_status', 'left_date']
+  Table server: +[]  -['device_active_status', 'last_heartbeat', 'last_user_activity']
+  Table vm: +[]  -['vm_name']
+
+Row counts (source -> dest):
+  agent_control_command: source=0 dest=0
+  agent_key: source=4 dest=0
+  alert: source=0 dest=None
+  audit_log: source=442 dest=None
+  azure_device: source=654 dest=None
+  azure_device_owner: source=474 dest=None
+  azure_license: source=0 dest=None
+  azure_license_assignment: source=0 dest=None
+  azure_user: source=611 dest=None
+  deployment_job: source=0 dest=None
+  device_activity: source=1 dest=None
+  employee: source=0 dest=None
+  employee_activity: source=6821 dest=None
+  employee_asset_log: source=261 dest=None
+  entra_role: source=0 dest=None
+  metric: source=6854 dest=None
+  remote_command: source=17 dest=None
+  screenshot: source=479 dest=None
+  server: source=584 dest=None
+  sharepoint_metric_queue: source=0 dest=None
+  sync_notification: source=50 dest=None
+  system_alert: source=3 dest=None
+  system_discovery: source=587 dest=None
+  tenant: source=1 dest=None
+  user: source=2 dest=None
+  vm: source=0 dest=None
+
+Summary:
+  Schema mismatch detected. Please review differences above.

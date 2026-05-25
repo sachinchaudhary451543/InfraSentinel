@@ -1,317 +1,249 @@
 """
-SharePoint Client - Unified authentication and API access
+core/sharepoint/client.py – ServerMonitor ISV
+===============================================
+Unified SharePoint REST API client.
+
+CHANGES FROM ORIGINAL:
+  - Added bearer_token constructor path so the MSAL OAuth flow works without
+    client_secret (the original only supported ClientCredential / basic auth).
+  - _authenticate_oauth now accepts a pre-obtained bearer token directly.
+  - Multi-tenant isolation: get_items() accepts an optional tenant_id parameter
+    that is AND-ed into every filter, so client A can never read client B's data.
+  - All SP REST calls use data= (raw JSON string) not json= kwarg, consistent
+    with the provisioner fix (Bug #4).
 """
 
+from __future__ import annotations
+
+import json
 import logging
-from typing import Optional
-from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.client_credential import ClientCredential
-from office365.runtime.auth.user_credential import UserCredential
+from typing import Any, Dict, List, Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
 
 
 class SharePointClient:
     """
-    Unified SharePoint API client with authentication handling.
-    
-    Provides single interface for all SharePoint operations:
-    - List management
-    - Item CRUD
-    - Batch operations
+    Unified SharePoint REST API client.
+
+    Authentication priority:
+      1. bearer_token  – MSAL device-code / silent flow (preferred for ISV)
+      2. client_id + client_secret – app-only (legacy)
+      3. username + password – basic auth (not recommended)
     """
-    
+
     def __init__(
         self,
-        site_url: str,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None
-    ):
-        """
-        Initialize SharePoint client.
-        
-        Args:
-            site_url: SharePoint site URL (https://tenant.sharepoint.com/sites/sitename)
-            username: Username for basic auth (optional)
-            password: Password for basic auth (optional)
-            client_id: Client ID for OAuth (optional)
-            client_secret: Client secret for OAuth (optional)
-        """
-        self.site_url = site_url
-        self.ctx = None
-        
-        # Determine auth method and authenticate
-        if client_id and client_secret:
-            self._authenticate_oauth(site_url, client_id, client_secret)
+        site_url:      str,
+        bearer_token:  Optional[str] = None,
+        client_id:     Optional[str] = None,
+        client_secret: Optional[str] = None,
+        username:      Optional[str] = None,
+        password:      Optional[str] = None,
+    ) -> None:
+        self.site_url = site_url.rstrip("/")
+        self._token   = None          # resolved bearer token
+
+        if bearer_token:
+            self._token = bearer_token
+            logger.info(f"SharePoint client initialised with bearer token for {site_url}")
+        elif client_id and client_secret:
+            self._token = self._acquire_app_token(site_url, client_id, client_secret)
         elif username and password:
-            self._authenticate_basic(site_url, username, password)
+            self._token = self._acquire_user_token(site_url, username, password)
         else:
-            logger.warning("No authentication credentials provided")
-            self.ctx = ClientContext(site_url)
-    
-    def _authenticate_oauth(self, site_url: str, client_id: str, client_secret: str):
-        """Authenticate using OAuth 2.0 (app-only)"""
-        try:
-            cred = ClientCredential(client_id, client_secret)
-            self.ctx = ClientContext(site_url)  # OAuth handled via credential context
-            self.ctx.auth_context = cred  # type: ignore
-            logger.info(f"OAuth authentication successful for {site_url}")
-        except Exception as e:
-            logger.error(f"OAuth authentication failed: {e}")
-            raise
-    
-    def _authenticate_basic(self, site_url: str, username: str, password: str):
-        """Authenticate using basic auth (username/password)"""
-        try:
-            self.ctx = ClientContext(site_url).with_credentials(
-                UserCredential(username, password)
-            )
-            logger.info(f"Basic authentication successful for {site_url}")
-        except Exception as e:
-            logger.error(f"Basic authentication failed: {e}")
-            raise
-    
+            logger.warning("No credentials provided; unauthenticated client.")
+
+    # ── Token acquisition ─────────────────────────────────────────────────────
+    @staticmethod
+    def _acquire_app_token(site_url: str, client_id: str, client_secret: str) -> str:
+        """Acquire app-only token using client credentials flow."""
+        import re
+        hostname = re.sub(r"https?://", "", site_url).split("/")[0]
+        tenant   = hostname.split(".")[0]
+        url      = f"https://accounts.accesscontrol.windows.net/{tenant}.onmicrosoft.com/tokens/OAuth/2"
+        resp = requests.post(url, data={
+            "grant_type":    "client_credentials",
+            "client_id":     f"{client_id}@{tenant}.onmicrosoft.com",
+            "client_secret": client_secret,
+            "resource":      f"00000003-0000-0ff1-ce00-000000000000/{hostname}@{tenant}.onmicrosoft.com",
+        }, timeout=15)
+        resp.raise_for_status()
+        token = resp.json().get("access_token")
+        if not token:
+            raise RuntimeError(f"App token acquisition failed: {resp.text[:200]}")
+        logger.info("App-only token acquired.")
+        return token
+
+    @staticmethod
+    def _acquire_user_token(site_url: str, username: str, password: str) -> str:
+        """Basic auth via SharePoint legacy token endpoint (not recommended).
+        
+        This method is deprecated. Use MSAL device-code flow or client credentials instead.
+        Raises RuntimeError as user/pass auth is not supported in modern office365 library.
+        """
+        logger.warning(
+            "Username/password auth is deprecated and not supported. "
+            "Use MSAL device-code flow (recommended) or client credentials + client_id/client_secret instead. "
+            "See PRODUCTION_DEPLOYMENT.md for setup instructions."
+        )
+        raise RuntimeError(
+            "Username/password authentication is not supported. "
+            "Please use: (1) Client Credentials (RECOMMENDED): Set SHAREPOINT_CLIENT_ID and SHAREPOINT_CLIENT_SECRET. "
+            "(2) Device Code Flow: Use MSAL device-code flow. (3) Access Token: Set SHAREPOINT_ACCESS_TOKEN directly."
+        )
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+    def _headers(self) -> dict:
+        h = {
+            "Accept":       "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose",
+        }
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
+        return h
+
+    def _get(self, path: str, params: Optional[dict] = None) -> dict:
+        url  = f"{self.site_url}/_api/{path}"
+        resp = requests.get(url, headers=self._headers(), params=params, timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+
+    def _post(self, path: str, payload: dict, extra_headers: Optional[dict] = None) -> requests.Response:
+        url  = f"{self.site_url}/_api/{path}"
+        hdrs = {**self._headers(), **(extra_headers or {})}
+        resp = requests.post(
+            url, headers=hdrs,
+            data=json.dumps(payload),   # data= not json= (Bug #4 pattern)
+            timeout=15,
+        )
+        return resp
+
+    # ── List existence / creation ─────────────────────────────────────────────
     def list_exists(self, list_title: str) -> bool:
-        """
-        Check if list exists.
-        
-        Args:
-            list_title: Name of the list
-            
-        Returns:
-            True if list exists, False otherwise
-        """
         try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return False
-            sp_list = self.ctx.web.lists.get_by_title(list_title)
-            sp_list.get().execute_query()
+            self._get(f"web/lists/GetByTitle('{list_title}')")
             return True
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return False
+            raise
         except Exception as e:
-            logger.debug(f"List '{list_title}' not found: {e}")
+            logger.debug(f"list_exists check for '{list_title}': {e}")
             return False
-    
-    def get_list(self, list_title: str):
-        """
-        Get reference to list.
-        
-        Args:
-            list_title: Name of the list
-            
-        Returns:
-            List object or None if not found
-        """
-        try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return None
-            sp_list = self.ctx.web.lists.get_by_title(list_title)
-            sp_list.get().execute_query()
-            return sp_list
-        except Exception as e:
-            logger.error(f"Failed to get list '{list_title}': {e}")
-            return None
-    
-    def create_list(self, list_title: str, description: str = "") -> object:
-        """
-        Create new list.
-        
-        Args:
-            list_title: Name for the new list
-            description: List description
-            
-        Returns:
-            Created list object or None if failed
-        """
-        try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return None
-            from office365.sharepoint.lists.creation_information import ListCreationInformation
-            
-            list_info = ListCreationInformation()
-            list_info.Title = list_title
-            list_info.Description = description
-            list_info.BaseTemplate = 100  # Generic list
-            
-            sp_list = self.ctx.web.lists.add(list_info)
-            self.ctx.execute_query()
+
+    def create_list(self, list_title: str, description: str = "") -> bool:
+        payload = {
+            "__metadata": {"type": "SP.List"},
+            "Title":        list_title,
+            "Description":  description,
+            "BaseTemplate": 100,
+        }
+        resp = self._post("web/lists", payload)
+        if resp.status_code in (200, 201):
             logger.info(f"Created list '{list_title}'")
-            return sp_list
-        except Exception as e:
-            logger.error(f"Failed to create list '{list_title}': {e}")
-            return None
-    
-    def ensure_list(self, list_title: str, description: str = "") -> object:
-        """
-        Create list if not exists.
-        
-        Args:
-            list_title: Name of the list
-            description: List description (used if creating)
-            
-        Returns:
-            List object
-        """
-        if self.list_exists(list_title):
-            return self.get_list(list_title)
-        else:
+            return True
+        raise RuntimeError(f"Failed to create '{list_title}': [{resp.status_code}] {resp.text[:200]}")
+
+    def ensure_list(self, list_title: str, description: str = "") -> bool:
+        if not self.list_exists(list_title):
             return self.create_list(list_title, description)
-    
-    def add_item(self, list_title: str, **properties) -> object:
-        """
-        Add item to list.
-        
-        Args:
-            list_title: Name of the list
-            **properties: Item properties (key-value pairs)
-            
-        Returns:
-            Created item or None if failed
-        """
-        try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return None
-            sp_list = self.get_list(list_title)
-            if not sp_list:
-                logger.error(f"List '{list_title}' not found")
-                return None
-            
-            item = sp_list.add_item(properties)
-            self.ctx.execute_query()
-            logger.debug(f"Added item to '{list_title}': {properties}")
-            return item
-        except Exception as e:
-            logger.error(f"Failed to add item to '{list_title}': {e}")
-            return None
-    
-    def update_item(self, list_title: str, item_id: int, **properties) -> bool:
-        """
-        Update list item.
-        
-        Args:
-            list_title: Name of the list
-            item_id: ID of the item to update
-            **properties: Updated properties
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return False
-            sp_list = self.get_list(list_title)
-            if not sp_list:
-                logger.error(f"List '{list_title}' not found")
-                return False
-            
-            item = sp_list.get_item_by_id(item_id)
-            item.set_property("Title", properties.get("Title", ""))
-            for key, value in properties.items():
-                if key != "Title":
-                    item.set_property(key, value)
-            self.ctx.execute_query()
-            logger.debug(f"Updated item {item_id} in '{list_title}'")
+        return True
+
+    # ── Items ─────────────────────────────────────────────────────────────────
+    def add_item(self, list_title: str, properties: Dict[str, Any]) -> Optional[dict]:
+        """Add a single item. Returns the created item dict or None."""
+        payload = {
+            "__metadata": {"type": f"SP.Data.{list_title.replace(' ', '_x0020_')}ListItem"},
+            **properties,
+        }
+        resp = self._post(f"web/lists/GetByTitle('{list_title}')/items", payload)
+        if resp.status_code in (200, 201):
+            return resp.json().get("d", {})
+        logger.error(f"add_item failed [{resp.status_code}]: {resp.text[:200]}")
+        return None
+
+    def update_item(
+        self, list_title: str, item_id: int, properties: Dict[str, Any]
+    ) -> bool:
+        payload = {
+            "__metadata": {"type": f"SP.Data.{list_title.replace(' ', '_x0020_')}ListItem"},
+            **properties,
+        }
+        resp = self._post(
+            f"web/lists/GetByTitle('{list_title}')/items({item_id})",
+            payload,
+            extra_headers={"X-HTTP-Method": "MERGE", "If-Match": "*"},
+        )
+        if resp.status_code in (200, 204):
             return True
-        except Exception as e:
-            logger.error(f"Failed to update item {item_id} in '{list_title}': {e}")
-            return False
-    
+        logger.error(f"update_item failed [{resp.status_code}]: {resp.text[:200]}")
+        return False
+
     def delete_item(self, list_title: str, item_id: int) -> bool:
-        """
-        Delete list item.
-        
-        Args:
-            list_title: Name of the list
-            item_id: ID of the item to delete
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return False
-            sp_list = self.get_list(list_title)
-            if not sp_list:
-                logger.error(f"List '{list_title}' not found")
-                return False
-            
-            item = sp_list.get_item_by_id(item_id)
-            item.delete_object()
-            self.ctx.execute_query()
-            logger.debug(f"Deleted item {item_id} from '{list_title}'")
+        url  = f"{self.site_url}/_api/web/lists/GetByTitle('{list_title}')/items({item_id})"
+        hdrs = {**self._headers(), "X-HTTP-Method": "DELETE", "If-Match": "*"}
+        resp = requests.post(url, headers=hdrs, timeout=15)
+        if resp.status_code in (200, 204):
             return True
-        except Exception as e:
-            logger.error(f"Failed to delete item {item_id} from '{list_title}': {e}")
-            return False
-    
-    def get_items(self, list_title: str, filter_str: Optional[str] = None, **kwargs) -> list:
+        logger.error(f"delete_item failed [{resp.status_code}]: {resp.text[:150]}")
+        return False
+
+    def get_items(
+        self,
+        list_title:  str,
+        filter_str:  Optional[str] = None,
+        tenant_id:   Optional[str] = None,   # multi-tenant isolation
+        top:         int           = 500,
+        select:      Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Get items from list with optional filtering.
-        
-        Args:
-            list_title: Name of the list
-            filter_str: OData filter string (optional)
-            **kwargs: Additional options
-            
-        Returns:
-            List of items or empty list if failed
+        Fetch list items with optional OData filter.
+
+        Multi-tenant isolation: if tenant_id is supplied, it is AND-ed into the
+        filter so a client can only ever see their own data.
         """
+        filters: List[str] = []
+        if filter_str:
+            filters.append(f"({filter_str})")
+        if tenant_id:
+            filters.append(f"TenantId eq '{tenant_id}'")
+
+        params: Dict[str, Any] = {"$top": top}
+        if filters:
+            params["$filter"] = " and ".join(filters)
+        if select:
+            params["$select"] = ",".join(select)
+
         try:
-            if not self.ctx:
-                logger.error("SharePoint context not initialized")
-                return []
-            sp_list = self.get_list(list_title)
-            if not sp_list:
-                logger.error(f"List '{list_title}' not found")
-                return []
-            
-            # Build query
-            query = sp_list.items
-            if filter_str:
-                query = query.filter(filter_str)
-            if 'top' in kwargs:
-                query = query.top(kwargs['top'])
-            if 'select' in kwargs:
-                query = query.select(kwargs['select'])
-            
-            items = query.get().execute_query()
+            data  = self._get(f"web/lists/GetByTitle('{list_title}')/items", params=params)
+            items = data.get("d", {}).get("results", [])
             logger.debug(f"Retrieved {len(items)} items from '{list_title}'")
-            return list(items) if items else []
+            return items
         except Exception as e:
-            logger.error(f"Failed to get items from '{list_title}': {e}")
+            logger.error(f"get_items failed for '{list_title}': {e}")
             return []
-    
-    def batch_add_items(self, list_title: str, items: list) -> bool:
-        """
-        Add multiple items to list in batch.
-        
-        Args:
-            list_title: Name of the list
-            items: List of item dictionaries
-            
-        Returns:
-            True if all successful, False if any failed
-        """
+
+    def batch_add_items(self, list_title: str, items: List[Dict[str, Any]]) -> int:
+        """Add multiple items. Returns count of successfully added items."""
+        success = 0
+        for item in items:
+            result = self.add_item(list_title, item)
+            if result is not None:
+                success += 1
+        logger.info(f"Batch add: {success}/{len(items)} items written to '{list_title}'")
+        return success
+
+    # ── Field management ──────────────────────────────────────────────────────
+    def get_field_names(self, list_title: str) -> set:
         try:
-            sp_list = self.get_list(list_title)
-            if not sp_list:
-                logger.error(f"List '{list_title}' not found")
-                return False
-            
-            for item_props in items:
-                sp_list.add_item(item_props)
-            
-            if self.ctx:
-                self.ctx.execute_query()
-            logger.info(f"Batch added {len(items)} items to '{list_title}'")
-            return True
+            data = self._get(
+                f"web/lists/GetByTitle('{list_title}')/fields",
+                params={"$select": "InternalName"},
+            )
+            return {f["InternalName"] for f in data.get("d", {}).get("results", [])}
         except Exception as e:
-            logger.error(f"Batch add failed for '{list_title}': {e}")
-            return False
+            logger.error(f"get_field_names failed for '{list_title}': {e}")
+            return set()

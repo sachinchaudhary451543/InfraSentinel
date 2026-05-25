@@ -7,7 +7,7 @@ All required data fetched in minimal queries instead of per-server lookups.
 
 import logging
 from datetime import datetime, timezone
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import joinedload
 
 from web.models import (
@@ -32,10 +32,11 @@ class OptimizedDashboardService:
         
         try:
             # ─── STEP 1: Get server list with permission filtering ───
+            query = db.session.query(Server)
             if current_user.is_superadmin:
-                servers = db.session.query(Server).all()
+                servers = query.all()
             elif current_user.tenant_id:
-                servers = db.session.query(Server).filter_by(tenant_id=current_user.tenant_id).all()
+                servers = query.filter_by(tenant_id=current_user.tenant_id).all()
             else:
                 servers = []
             
@@ -45,7 +46,7 @@ class OptimizedDashboardService:
             latest_metrics = {}
             if server_ids:
                 # Subquery to get latest metric per server
-                from sqlalchemy import func
+                
                 subq = db.session.query(
                     Metric.server_id,
                     func.max(Metric.id).label('max_id')
@@ -106,12 +107,17 @@ class OptimizedDashboardService:
                         'total_time': total_time
                     }
             
-            # ─── STEP 3: Fetch Azure devices with permission filtering ───
+            # ─── STEP 3: Fetch ACTIVE Azure devices only (exclude stale/inactive) ───
             if current_user.is_superadmin:
-                azure_devices = db.session.query(AzureDevice).all()
+                azure_devices = db.session.query(AzureDevice).filter(
+                    AzureDevice.is_active == 1,
+                    AzureDevice.device_status == 'active'
+                ).all()
             else:
-                azure_devices = db.session.query(AzureDevice).filter_by(
-                    tenant_id=current_user.tenant_id
+                azure_devices = db.session.query(AzureDevice).filter(
+                    AzureDevice.tenant_id == current_user.tenant_id,
+                    AzureDevice.is_active == 1,
+                    AzureDevice.device_status == 'active'
                 ).all()
             
             # ─── STEP 4: Build owner mappings (batch queries) ───
@@ -119,18 +125,20 @@ class OptimizedDashboardService:
             owner_by_server_id = {}
             
             if current_user.tenant_id:
-                # Fetch all Azure users once
-                azure_users = db.session.query(AzureUser).filter_by(
-                    tenant_id=current_user.tenant_id
+                # Fetch all ACTIVE Azure users only
+                azure_users = db.session.query(AzureUser).filter(
+                    AzureUser.tenant_id == current_user.tenant_id,
+                    AzureUser.is_active == 1,
+                    AzureUser.employment_status == 'active'
                 ).all()
-                user_by_uuid = {u.user_id: u for u in azure_users}
+                user_by_id = {u.id: u for u in azure_users}
                 
                 # Fetch all Azure device owners at once
                 azure_owners = db.session.query(AzureDeviceOwner).filter_by(
                     tenant_id=current_user.tenant_id
                 ).all()
                 for o in azure_owners:
-                    u = user_by_uuid.get(o.user_id)
+                    u = user_by_id.get(o.user_id)
                     if u:
                         owner_by_device_id[o.device_id] = u.display_name or u.email
                 
@@ -162,7 +170,6 @@ class OptimizedDashboardService:
                 ).scalar() or 0
             else:
                 # Join queries for tenant-specific counts
-                from sqlalchemy import func
                 vm_count = db.session.query(func.count(VM.id)).join(Server).filter(
                     Server.tenant_id == current_user.tenant_id
                 ).scalar() or 0
@@ -200,7 +207,11 @@ class OptimizedDashboardService:
                 # Resolve assigned user
                 assigned_user = owner_by_server_id.get(s.id)
                 if not assigned_user and s.azure_device_id:
-                    assigned_user = owner_by_device_id.get(s.azure_device_id)
+                    # Try to find the AzureDevice by its azure string ID to get the integer PK
+                    for adev in azure_devices:
+                        if adev.device_id == s.azure_device_id:
+                            assigned_user = owner_by_device_id.get(adev.id)
+                            break
                 
                 inventory.append({
                     'id': s.id,
@@ -246,7 +257,7 @@ class OptimizedDashboardService:
                         'cpu_percent': 0,
                         'memory_percent': 0,
                         'disk_percent': 0,
-                        'assigned_user': owner_by_device_id.get(dev.device_id),
+                        'assigned_user': owner_by_device_id.get(dev.id),
                         'azure_device_id': dev.device_id
                     })
             

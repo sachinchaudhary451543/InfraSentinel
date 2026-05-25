@@ -69,3 +69,21 @@ def dashboard():
                                online_count=0, alert_count=0,
                                vm_count=0, discovered_count=0,
                                user=current_user, now=datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+@main_bp.route('/licenses')
+@login_required
+def licenses_dashboard():
+    """Render License Management dashboard template (admins only)."""
+    try:
+        if not current_user.is_superadmin:
+            return redirect(url_for('main.dashboard'))
+        return render_template('licenses/dashboard.html')
+    except Exception as e:
+        logger.error(f"Error rendering licenses dashboard: {e}")
+        return redirect(url_for('main.dashboard'))
+
+@main_bp.route('/suspended')
+def suspended():
+    """Landing page for users of suspended or on-hold tenants."""
+    return render_template('suspended.html')

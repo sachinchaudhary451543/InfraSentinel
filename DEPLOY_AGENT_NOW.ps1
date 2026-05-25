@@ -33,8 +33,8 @@ else {
 # Get server URL or use localhost
 $serverUrl = $env:SERVER_URL
 if (-not $serverUrl) {
-    Write-Host "   SERVER_URL not set. Using: http://localhost:8080" -ForegroundColor Yellow
-    $env:SERVER_URL = "http://localhost:8080"
+    Write-Host "   SERVER_URL not set. Using: http://localhost:3000" -ForegroundColor Yellow
+    $env:SERVER_URL = "http://localhost:3000"
 }
 else {
     Write-Host "   SERVER_URL: $serverUrl" -ForegroundColor Green

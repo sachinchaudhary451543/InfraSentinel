@@ -41,7 +41,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, redirect, url_for, session, g, request
 from flask_login import LoginManager
 from flask_socketio import SocketIO
-from sqlalchemy import text
 
 # Configure logging
 logging.basicConfig(
@@ -156,6 +155,52 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 
+def format_seconds(value):
+    """Format seconds as HH:MM:SS for productivity labels."""
+    try:
+        seconds = int(value or 0)
+    except (TypeError, ValueError):
+        seconds = 0
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def format_minutes(value):
+    """Format minutes as HH:MM:SS for productivity labels (DeviceActivity model)."""
+    try:
+        minutes = float(value or 0)
+    except (TypeError, ValueError):
+        minutes = 0
+    total_seconds = int(minutes * 60)
+    hours = total_seconds // 3600
+    mins = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+    return f"{hours:02d}:{mins:02d}:{secs:02d}"
+
+
+app.add_template_filter(format_seconds, name='format_seconds')
+app.add_template_filter(format_minutes, name='format_minutes')
+
+
+def safe_url_for(endpoint, **kwargs):
+    """Safely build a URL for a possibly-missing endpoint.
+
+    Returns '#' when the endpoint cannot be built to avoid Jinja BuildError
+    when optional blueprints are not registered.
+    """
+    try:
+        return url_for(endpoint, **kwargs)
+    except Exception:
+        return '#'
+
+
+# Expose safe_url_for to Jinja templates so templates can use it when
+# optional blueprints/endpoints may not be present in all deployments.
+app.jinja_env.globals['safe_url_for'] = safe_url_for
+
+
 class TenantPathPrefixMiddleware:
     """Support path-based tenant routing: /t/<tenant_slug>/..."""
     _tenant_path_re = re.compile(r"^/t/([^/]+)(/.*)?$")
@@ -179,7 +224,7 @@ def _slugify_tenant(value):
     return slug.strip("-")
 
 # Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Enable /t/<tenant>/... path routing before Flask endpoint matching.
 app.wsgi_app = TenantPathPrefixMiddleware(app.wsgi_app)
@@ -236,14 +281,115 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data'
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, 'central.db')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
+# Support switching to Postgres in production via DATABASE_URL env var.
+DATABASE_URL = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# If using Postgres, tune engine options for production workloads
+if DATABASE_URL.startswith('postgres') or DATABASE_URL.startswith('postgresql'):
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+    # sensible defaults; can be tuned via env vars
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
+        'pool_size': int(os.environ.get('SQL_POOL_SIZE', '10')),
+        'max_overflow': int(os.environ.get('SQL_MAX_OVERFLOW', '20')),
+        'pool_pre_ping': True,
+        'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800'))
+    })
+    logging.info('Configured SQLAlchemy for Postgres with engine options')
+else:
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+    from sqlalchemy.pool import NullPool
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
+        'connect_args': {
+            'timeout': int(os.environ.get('SQLITE_BUSY_TIMEOUT_SECONDS', '120')),
+            'check_same_thread': False,
+        },
+        'poolclass': NullPool,  # Prevent connection pooling issues with SQLite
+        'pool_pre_ping': True,
+    })
+    logging.info('Using SQLite for development (DATABASE_URL not set to Postgres) - NullPool enabled for concurrent access')
 
 # Import database and models
 from web.models import db, User, Tenant
 
 # Initialize database with app
 db.init_app(app)
+
+# Enable SQLite WAL mode for concurrent read/write access
+if not (DATABASE_URL.startswith('postgres') or DATABASE_URL.startswith('postgresql')):
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    @event.listens_for(Engine, 'connect')
+    def _enable_sqlite_wal(dbapi_conn, connection_record):
+        """Enable Write-Ahead Logging (WAL) mode for SQLite to allow concurrent reads during writes.
+
+        Registered on the Engine class to avoid requiring an application context
+        when importing db.engine during module import.
+        """
+        try:
+            # Only apply PRAGMA to sqlite3 connections
+            # dbapi_conn is a sqlite3.Connection for SQLite
+            mod = getattr(dbapi_conn, '__class__', None)
+            if mod is not None and 'sqlite' in str(mod).lower():
+                # Some sqlite DB-API objects expose execute, others require cursor
+                try:
+                    dbapi_conn.execute('PRAGMA journal_mode=WAL')
+                except Exception:
+                    cur = dbapi_conn.cursor()
+                    cur.execute('PRAGMA journal_mode=WAL')
+                    cur.close()
+                try:
+                    dbapi_conn.execute('PRAGMA cache_size=-64000')
+                except Exception:
+                    cur = dbapi_conn.cursor()
+                    cur.execute('PRAGMA cache_size=-64000')
+                    cur.close()
+                try:
+                    dbapi_conn.execute('PRAGMA synchronous=NORMAL')
+                except Exception:
+                    cur = dbapi_conn.cursor()
+                    cur.execute('PRAGMA synchronous=NORMAL')
+                    cur.close()
+                logging.info('SQLite WAL mode enabled for concurrent access')
+        except Exception as e:
+            logging.warning(f'Could not enable SQLite WAL mode: {e}')
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if DATABASE_URL.startswith('sqlite'):
+        cursor = dbapi_connection.cursor()
+        # WAL mode allows readers and writers to coexist
+        cursor.execute("PRAGMA journal_mode=WAL")
+        # NORMAL is faster than FULL, still safe for our use case
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        # Match the connection timeout (120 seconds = 120000 ms)
+        cursor.execute(f"PRAGMA busy_timeout={int(os.environ.get('SQLITE_BUSY_TIMEOUT_SECONDS', '120')) * 1000}")
+        # Allow temp storage to overflow to disk for large operations
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.close()
+
+# Initialize Flask-Caching (Redis if configured, otherwise SimpleCache)
+try:
+    from flask_caching import Cache
+    cache_config = {}
+    if os.environ.get('REDIS_URL'):
+        cache_config['CACHE_TYPE'] = 'RedisCache'
+        cache_config['CACHE_REDIS_URL'] = os.environ.get('REDIS_URL')
+    else:
+        cache_config['CACHE_TYPE'] = os.environ.get('CACHE_TYPE', 'SimpleCache')
+        cache_config['CACHE_DEFAULT_TIMEOUT'] = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '60'))
+
+    app.config.update(cache_config)
+    cache = Cache(app)
+    logging.info('Flask-Caching initialized')
+except Exception:
+    cache = None
+    logging.info('Flask-Caching not available or failed to initialize; continuing without Redis cache')
 
 
 def _resolve_tenant_by_identifier(identifier):
@@ -322,6 +468,13 @@ def _resolve_request_tenant_context():
     # Skip static assets
     if request.path.startswith("/static/"):
         return None
+    
+    # Skip agent endpoints that don't require tenant resolution
+    if request.path.startswith("/api/v2/agent/"):
+        return None
+    
+    if request.path.startswith("/api/v2/agents/"):
+        return None
 
     header_value = request.headers.get("X-Tenant-ID") or request.headers.get("X-Tenant-Slug")
     path_slug = request.environ.get("sm.tenant_slug")
@@ -387,7 +540,7 @@ def on_join(data):
 # Register blueprints
 from web.routes import (
     auth_bp, users_bp, tenants_bp, agents_bp,
-    discovery_bp, deployment_bp, api_bp, main_bp
+    discovery_bp, deployment_bp, api_bp, main_bp,
 )
 from web.routes.admin import admin_bp
 from web.smart_analyzer import smart_analyzer
@@ -415,11 +568,37 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(smart_analyzer, url_prefix='/smart-analyzer')
 app.register_blueprint(sharepoint_bp)
 
+# Optional blueprints: import/register only if present to support trimmed deployments
+try:
+    from web.routes.analytics import analytics_bp
+    app.register_blueprint(analytics_bp)
+except Exception as e:
+    logging.info(f"Optional blueprint 'analytics' not loaded: {e}")
+
+try:
+    from web.routes.analytics_api import analytics_api_bp
+    app.register_blueprint(analytics_api_bp)
+except Exception as e:
+    logging.info(f"Optional blueprint 'analytics_api' not loaded: {e}")
+
+try:
+    from web.routes.license_management import license_bp
+    app.register_blueprint(license_bp)
+except Exception as e:
+    logging.info(f"Optional blueprint 'license_management' not loaded: {e}")
+
+try:
+    from web.routes.status_management import status_mgmt_bp
+    app.register_blueprint(status_mgmt_bp)
+except Exception as e:
+    logging.info(f"Optional blueprint 'status_management' not loaded: {e}")
+
 from web.routes.agent_portal import agent_portal_bp
 app.register_blueprint(agent_portal_bp)
 
 
 from flask import send_from_directory
+from flask import url_for
 
 @app.route("/")
 def index():
@@ -436,272 +615,35 @@ def favicon():
 def ensure_initial_setup():
     with app.app_context():
         db.create_all()
-        # Ensure new Tenant columns exist for migrations on older databases
-        conn = None
-        try:
-            conn = db.engine.connect()
-            res = conn.execute(text("PRAGMA table_info('tenant')"))
-            existing_cols = {r[1] for r in res.fetchall()}
-            # Add sharepoint_site_url if missing
-            if 'sharepoint_site_url' not in existing_cols:
-                try:
-                    conn.execute(text("ALTER TABLE tenant ADD COLUMN sharepoint_site_url VARCHAR(500)"))
-                    logging.info('Added missing column tenant.sharepoint_site_url')
-                except Exception:
-                    logging.exception('Failed to add tenant.sharepoint_site_url')
-            # Add sharepoint_connected if missing
-            if 'sharepoint_connected' not in existing_cols:
-                try:
-                    conn.execute(text("ALTER TABLE tenant ADD COLUMN sharepoint_connected INTEGER DEFAULT 0"))
-                    logging.info('Added missing column tenant.sharepoint_connected')
-                except Exception:
-                    logging.exception('Failed to add tenant.sharepoint_connected')
-            
-            if 'sharepoint_auto_sync' not in existing_cols:
-                try:
-                    conn.execute(text("ALTER TABLE tenant ADD COLUMN sharepoint_auto_sync INTEGER DEFAULT 0"))
-                except Exception:
-                    pass
-                    
-            if 'sharepoint_sync_interval_minutes' not in existing_cols:
-                try:
-                    conn.execute(text("ALTER TABLE tenant ADD COLUMN sharepoint_sync_interval_minutes INTEGER DEFAULT 60"))
-                except Exception:
-                    pass
-            
-            if 'last_sharepoint_sync_timestamp' not in existing_cols:
-                try:
-                    conn.execute(text("ALTER TABLE tenant ADD COLUMN last_sharepoint_sync_timestamp DATETIME"))
-                except Exception:
-                    pass
-                    
-            # Ensure azure_user.employee_id exists if table present
-            try:
-                res2 = conn.execute(text("PRAGMA table_info('azure_user')"))
-                cols2 = {r[1] for r in res2.fetchall()}
-                if 'employee_id' not in cols2:
-                    try:
-                        conn.execute(text("ALTER TABLE azure_user ADD COLUMN employee_id VARCHAR(255)"))
-                        logging.info('Added missing column azure_user.employee_id')
-                    except Exception:
-                        logging.exception('Failed to add azure_user.employee_id')
-            except Exception:
-                # table may not exist yet; ignore
-                pass
 
-            # Ensure server table columns for Hyper-V classification
+        # ── Safe column migrations for SQLite ─────────────────────────
+        # db.create_all() creates NEW tables but does NOT add columns to
+        # existing tables.  The helper below uses ALTER TABLE ADD COLUMN
+        # wrapped in try/except so it is fully idempotent.
+        _safe_migrations = [
+            # Phase 3 – RBAC
+            ("user",     "employee_id",      "INTEGER"),
+            ("employee", "manager_id",       "INTEGER"),
+            # Phase 4 – Device data quality
+            ("azure_device", "last_graph_sync",    "DATETIME"),
+            ("azure_device", "last_intune_sync",   "DATETIME"),
+            ("azure_device", "last_heartbeat",     "DATETIME"),
+            ("azure_device", "last_user_activity", "DATETIME"),
+        ]
+        for table, column, col_type in _safe_migrations:
             try:
-                res3 = conn.execute(text("PRAGMA table_info('server')"))
-                cols3 = {r[1] for r in res3.fetchall()}
-                if 'is_hyperv_host' not in cols3:
-                    try:
-                        conn.execute(text("ALTER TABLE server ADD COLUMN is_hyperv_host INTEGER DEFAULT 0"))
-                        logging.info('Added missing column server.is_hyperv_host')
-                    except Exception:
-                        logging.exception('Failed to add server.is_hyperv_host')
-                if 'server_type' not in cols3:
-                    try:
-                        conn.execute(text("ALTER TABLE server ADD COLUMN server_type VARCHAR(50) DEFAULT 'Endpoint'"))
-                        logging.info('Added missing column server.server_type')
-                    except Exception:
-                        logging.exception('Failed to add server.server_type')
+                db.session.execute(
+                    db.text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+                )
+                db.session.commit()
+                logging.info(f"Migration: added {table}.{column}")
             except Exception:
-                pass
+                db.session.rollback()  # column already exists — safe to ignore
 
-            # Ensure user.role exists for role-based onboarding
-            try:
-                res4 = conn.execute(text("PRAGMA table_info('user')"))
-                cols4 = {r[1] for r in res4.fetchall()}
-                if 'role' not in cols4:
-                    try:
-                        conn.execute(text("ALTER TABLE user ADD COLUMN role VARCHAR(50) DEFAULT 'user'"))
-                        logging.info('Added missing column user.role')
-                    except Exception:
-                        logging.exception('Failed to add user.role')
-                try:
-                    conn.execute(
-                        text("UPDATE user SET role = 'super_admin' WHERE is_superadmin = 1 AND (role IS NULL OR role = '' OR role = 'user')")
-                    )
-                    conn.execute(
-                        text("UPDATE user SET role = 'tenant_admin' WHERE is_superadmin = 0 AND (role IS NULL OR role = '')")
-                    )
-                except Exception:
-                    logging.exception('Failed backfilling user.role values')
-            except Exception:
-                pass
+        # Migration validation disabled: using db.create_all() directly
+        # Alembic migrations can be re-enabled later if needed
+        logging.info('Database initialized via db.create_all() - schema is current')
 
-            # ── Agent-Based Monitoring Architecture columns ──
-            try:
-                res5 = conn.execute(text("PRAGMA table_info('server')"))
-                cols5 = {r[1] for r in res5.fetchall()}
-                agent_cols = {
-                    'name': "VARCHAR(100) DEFAULT 'Unknown'",
-                    'type': "VARCHAR(20) DEFAULT 'agent'",
-                    'api_key': "VARCHAR(64)",
-                    'last_seen': "DATETIME",
-                    'source': "VARCHAR(20) DEFAULT 'agent'",
-                    'agent_installed': "INTEGER DEFAULT 0",
-                    'agent_version': "VARCHAR(50)",
-                    'monitoring_mode': "VARCHAR(20) DEFAULT 'full'",
-                    'azure_device_id': "VARCHAR(255)",
-                    'status': "VARCHAR(20) DEFAULT 'offline'",
-                }
-                for col_name, col_def in agent_cols.items():
-                    if col_name not in cols5:
-                        try:
-                            conn.execute(text(f"ALTER TABLE server ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column server.{col_name}')
-                        except Exception:
-                            logging.exception(f'Failed to add server.{col_name}')
-                
-                # Metric table updates
-                res_m = conn.execute(text("PRAGMA table_info('metric')"))
-                cols_m = {r[1] for r in res_m.fetchall()}
-                metric_cols = {
-                    'cpu': 'FLOAT', 'ram': 'FLOAT', 'disk': 'FLOAT',
-                    'cpu_util_percent': 'FLOAT', 'ram_util_percent': 'FLOAT',
-                    'ssd_util_percent': 'FLOAT'
-                }
-                for col_name, col_def in metric_cols.items():
-                    if col_name not in cols_m:
-                        try:
-                            conn.execute(text(f"ALTER TABLE metric ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column metric.{col_name}')
-                        except Exception:
-                            pass
-                
-                # VM table updates
-                res_v = conn.execute(text("PRAGMA table_info('vm')"))
-                cols_v = {r[1] for r in res_v.fetchall()}
-                vm_cols = {'cpu': 'FLOAT', 'ram': 'FLOAT', 'name': 'VARCHAR(100)', 'state': 'VARCHAR(50)'}
-                for col_name, col_def in vm_cols.items():
-                    if col_name not in cols_v:
-                        conn.execute(text(f"ALTER TABLE vm ADD COLUMN {col_name} {col_def}"))
-                        logging.info(f'Added missing column vm.{col_name}')
-                
-                # Backfill vm.name from vm_name if it existed
-                try:
-                    if 'vm_name' in cols_v and 'name' in cols_v:
-                        conn.execute(text("UPDATE vm SET name = vm_name WHERE name IS NULL AND vm_name IS NOT NULL"))
-                except Exception:
-                    pass
-                        
-                # Backfill: synchronize old columns with new columns
-                try:
-                    conn.execute(text(
-                        "UPDATE server SET "
-                        "name = coalesce(hostname, 'Unknown') WHERE name = 'Unknown' OR name IS NULL"
-                    ))
-                    conn.execute(text(
-                        "UPDATE server SET "
-                        "type = coalesce(source, 'agent') WHERE type = 'agent'"
-                    ))
-                    conn.execute(text(
-                        "UPDATE server SET "
-                        "last_seen = last_heartbeat WHERE last_seen IS NULL AND last_heartbeat IS NOT NULL"
-                    ))
-                    conn.execute(text(
-                        "UPDATE server SET agent_installed = 1, type = 'agent' "
-                        "WHERE last_seen IS NOT NULL AND (agent_installed IS NULL OR agent_installed = 0)"
-                    ))
-                    logging.info('Backfilled legacy data to new columns')
-                except Exception:
-                    logging.exception('Failed backfilling server legacy columns')
-            except Exception:
-                pass
-
-            # ── Screenshot configuration columns ──
-            try:
-                res6 = conn.execute(text("PRAGMA table_info('server')"))
-                cols6 = {r[1] for r in res6.fetchall()}
-                screenshot_cols = {
-                    'screenshot_enabled': "INTEGER DEFAULT 0",
-                    'screenshot_interval_minutes': "INTEGER DEFAULT 10",
-                }
-                for col_name, col_def in screenshot_cols.items():
-                    if col_name not in cols6:
-                        try:
-                            conn.execute(text(f"ALTER TABLE server ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column server.{col_name}')
-                        except Exception:
-                            logging.exception(f'Failed to add server.{col_name}')
-            except Exception:
-                pass
-
-            # ── Screenshot table columns ──
-            try:
-                res_ss = conn.execute(text("PRAGMA table_info('screenshot')"))
-                cols_ss = {r[1] for r in res_ss.fetchall()}
-                ss_extra_cols = {
-                    'local_file_path': "VARCHAR(500)",
-                }
-                for col_name, col_def in ss_extra_cols.items():
-                    if col_name not in cols_ss:
-                        try:
-                            conn.execute(text(f"ALTER TABLE screenshot ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column screenshot.{col_name}')
-                        except Exception:
-                            logging.exception(f'Failed to add screenshot.{col_name}')
-            except Exception:
-                pass  # table may not exist yet
-
-            # ── Custom Identification columns (Serial & Address) ──
-            try:
-                res7 = conn.execute(text("PRAGMA table_info('server')"))
-                cols7 = {r[1] for r in res7.fetchall()}
-                id_cols = {
-                    'serial_number': "VARCHAR(100)",
-                    'address': "VARCHAR(255)",
-                }
-                for col_name, col_def in id_cols.items():
-                    if col_name not in cols7:
-                        try:
-                            conn.execute(text(f"ALTER TABLE server ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column server.{col_name}')
-                        except Exception:
-                            logging.exception(f'Failed to add server.{col_name}')
-            except Exception:
-                pass
-
-            # ── Remote Command table columns ──
-            try:
-                res_rc = conn.execute(text("PRAGMA table_info('remote_command')"))
-                cols_rc = {r[1] for r in res_rc.fetchall()}
-                rc_cols = {
-                    'completed_at': "DATETIME",
-                    'output': "TEXT",
-                    'error_output': "TEXT",
-                    'exit_code': "INTEGER",
-                    'timeout_seconds': "INTEGER DEFAULT 120",
-                    'created_by': "VARCHAR(150)",
-                }
-                for col_name, col_def in rc_cols.items():
-                    if col_name not in cols_rc:
-                        try:
-                            conn.execute(text(f"ALTER TABLE remote_command ADD COLUMN {col_name} {col_def}"))
-                            logging.info(f'Added missing column remote_command.{col_name}')
-                        except Exception:
-                            logging.exception(f'Failed to add remote_command.{col_name}')
-            except Exception:
-                pass  # table may not exist yet
-
-            # Commit all DDL changes (required in SQLAlchemy 2.0+)
-            try:
-                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_metric_server_timestamp ON metric(server_id, timestamp DESC)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_employee_asset_tenant_email_host ON employee_asset_log(tenant_id, employee_email, hostname)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_azure_device_owner_tenant_user ON azure_device_owner(tenant_id, user_id)"))
-                logging.info('Ensured performance indexes for metrics/assets queries')
-            except Exception:
-                logging.exception('Failed creating performance indexes')
-
-            # Commit all DDL changes (required in SQLAlchemy 2.0+)
-            conn.commit()
-            
-        except Exception:
-            logging.exception('Error ensuring database columns')
-        finally:
-            if conn is not None:
-                conn.close()
         # Initialize default tenant if it doesn't exist
         default_tenant = Tenant.query.filter_by(name='Default Tenant').first()
         if not default_tenant:
@@ -711,7 +653,8 @@ def ensure_initial_setup():
             db.session.commit()
 
         # Initialize default admin if no users exist
-        if not User.query.filter_by(username='admin').first():
+        admin_exists = User.query.filter_by(username='admin').first()
+        if not admin_exists:
             from werkzeug.security import generate_password_hash
             admin_user = User()
             admin_user.username = 'admin'
@@ -727,6 +670,43 @@ def ensure_initial_setup():
 # Run setup on import as well (WSGI/waitress entrypoints do not execute __main__)
 ensure_initial_setup()
 
+
+def _run_smoke_tests():
+    """Run lightweight smoke checks validating blueprints are registered and
+    basic public endpoints respond. This avoids calling auth-protected APIs.
+    """
+    try:
+        client = app.test_client()
+        ok = True
+        # Root should redirect to login when not authenticated
+        r = client.get('/')
+        if r.status_code not in (302, 301, 200):
+            app.logger.warning('Smoke test: GET / returned %s', r.status_code)
+            ok = False
+        # Favicon should be reachable (static file handler)
+        r = client.get('/favicon.ico')
+        if r.status_code not in (200, 404):
+            app.logger.warning('Smoke test: GET /favicon.ico returned %s', r.status_code)
+            ok = False
+
+        # Verify expected blueprints are registered
+        expected = ['auth', 'main', 'api', 'agents', 'users', 'tenants']
+        missing = [b for b in expected if b not in app.blueprints]
+        if missing:
+            app.logger.warning('Smoke test: missing blueprints: %s', missing)
+            ok = False
+
+        if ok:
+            app.logger.info('Smoke tests passed')
+        else:
+            app.logger.warning('Smoke tests had warnings; inspect logs')
+    except Exception:
+        app.logger.exception('Exception while running smoke tests')
+
+
+# Run smoke tests after startup validation
+_run_smoke_tests()
+
 # Apply database optimizations (indexes, analysis)
 try:
     from web.db_optimizations import create_critical_indexes, analyze_database
@@ -735,6 +715,58 @@ try:
         analyze_database(db)
 except Exception as e:
     logging.warning(f"Database optimization warning: {e}")
+
+# ── Weekly License Auto-Sync Scheduler ──────────────────────────────────────
+def _start_license_sync_scheduler():
+    """Start a daemon thread that syncs Azure licenses weekly."""
+    import threading, time
+    if os.environ.get('LICENSE_SYNC_DISABLED', '').lower() in ('1', 'true', 'yes'):
+        logging.info('[LICENSE_SCHEDULER] Disabled by LICENSE_SYNC_DISABLED')
+        return
+    SYNC_INTERVAL = int(os.environ.get('LICENSE_SYNC_INTERVAL_SECONDS', 604800))  # 7 days
+    default_initial_delay = 300 if DATABASE_URL.startswith('sqlite') else 60
+    INITIAL_DELAY = int(os.environ.get('LICENSE_SYNC_INITIAL_DELAY_SECONDS', str(default_initial_delay)))
+
+    def _sync_loop():
+        time.sleep(INITIAL_DELAY)
+        while True:
+            try:
+                with app.app_context():
+                    from web.tasks.sync_licenses import run_license_sync
+                    logging.info('[LICENSE_SCHEDULER] Starting weekly license sync...')
+                    result = run_license_sync()
+                    logging.info('[LICENSE_SCHEDULER] Sync completed: %s', result)
+            except Exception:
+                logging.exception('[LICENSE_SCHEDULER] Weekly license sync failed')
+            time.sleep(SYNC_INTERVAL)
+
+    t = threading.Thread(target=_sync_loop, daemon=True, name='LicenseWeeklySync')
+    t.start()
+    logging.info('[LICENSE_SCHEDULER] Weekly license sync scheduled (interval=%ds)', SYNC_INTERVAL)
+
+try:
+    _start_license_sync_scheduler()
+except Exception as e:
+    logging.warning(f"License scheduler warning: {e}")
+
+# ── Azure AD Sync Service (Devices + Users auto-sync every 30 min) ──────────
+def _start_azure_sync_service():
+    """Start background Azure AD sync for devices and users."""
+    if os.environ.get('AZURE_SYNC_DISABLED', '').lower() in ('1', 'true', 'yes'):
+        logging.info('[AZURE_SYNC] Disabled by AZURE_SYNC_DISABLED')
+        return
+    try:
+        from core.azure_sync_service import init_sync_service
+        sync_minutes = int(os.environ.get('AZURE_SYNC_INTERVAL_MINUTES', '30'))
+        init_sync_service(app, sync_interval_minutes=sync_minutes)
+        logging.info('[AZURE_SYNC] Background device/user sync started (interval=%dm)', sync_minutes)
+    except Exception as e:
+        logging.warning(f'[AZURE_SYNC] Could not start sync service: {e}')
+
+try:
+    _start_azure_sync_service()
+except Exception as e:
+    logging.warning(f"Azure sync service warning: {e}")
 
 # Configure socket reuse to prevent "address already in use" errors on restart
 def configure_socket_reuse():
@@ -761,7 +793,7 @@ if __name__ == '__main__':
     # Full platform startup sequence
     run_platform_startup()
     
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
     
     # Configure socket reuse before starting server
@@ -777,14 +809,27 @@ if __name__ == '__main__':
     # binding to 0.0.0.0 can be blocked by security policies). Default remains 0.0.0.0
     bind_host = os.environ.get('BIND_HOST') or os.environ.get('HOST') or '0.0.0.0'
 
+    # Import scheduler shutdown function if available; fall back to no-op
     try:
         from web.jobs import shutdown_scheduler
+    except Exception:
+        def shutdown_scheduler():
+            try:
+                logging.info('shutdown_scheduler unavailable; skipping')
+            except Exception:
+                pass
+
+    try:
         socketio.run(
             app,
             host=bind_host,
             port=port,
             debug=debug,
-            allow_unsafe_werkzeug=True
+            allow_unsafe_werkzeug=True,
+            use_reloader=False
         )
     finally:
-        shutdown_scheduler()
+        try:
+            shutdown_scheduler()
+        except Exception:
+            logging.exception('Error while shutting down scheduler')

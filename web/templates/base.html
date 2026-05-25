@@ -577,19 +577,36 @@
             background: #0f172a !important;
             color: #22c55e !important;
         }
+
         /* Notification Panel Animation */
         @keyframes fadeSlideDown {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        
+
         #notifPanel:not(.hidden) {
             animation: fadeSlideDown 0.2s ease-out;
         }
-        
-        #notifList::-webkit-scrollbar { width: 4px; }
-        #notifList::-webkit-scrollbar-track { background: transparent; }
-        #notifList::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+
+        #notifList::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #notifList::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #notifList::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 4px;
+        }
     </style>
 </head>
 
@@ -641,14 +658,20 @@
                     <span>Device Management</span>
                 </a>
                 <a href="{{ url_for('asset_mgmt.system_controls') }}"
-                    class="nav-item {% if request.endpoint in ['asset_mgmt.system_controls','asset_mgmt.remote_control_server','asset_mgmt.remote_control_screenshots','asset_mgmt.remote_control_logs','asset_mgmt.remote_control_productivity'] %}active{% endif %}">
+                    class="nav-item {% if request.endpoint in ['asset_mgmt.system_controls','asset_mgmt.remote_control_server','asset_mgmt.remote_control_screenshots','asset_mgmt.remote_control_logs'] %}active{% endif %}">
                     <i class="fa-solid fa-terminal"></i>
                     <span>Remote Control</span>
                 </a>
                 <a href="{{ url_for('asset_mgmt.productivity_overview') }}"
-                    class="nav-item {% if request.endpoint == 'asset_mgmt.productivity_overview' %}active{% endif %}">
+                    class="nav-item {% if request.endpoint in ['asset_mgmt.productivity_overview', 'asset_mgmt.remote_control_productivity', 'asset_mgmt.productivity_screenshots'] %}active{% endif %}">
                     <i class="fa-solid fa-chart-simple"></i>
                     <span>Productivity</span>
+                </a>
+                {% set workforce_url = safe_url_for('analytics_api.workforce_dashboard') %}
+                <a href="{{ workforce_url if workforce_url != '#' else url_for('asset_mgmt.productivity_overview') }}"
+                    class="nav-item {% if request.endpoint == 'analytics_api.workforce_dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Workforce Intelligence</span>
                 </a>
                 <a href="{{ url_for('discovery.discover_domain') }}"
                     class="nav-item {% if request.endpoint and request.endpoint.startswith('discovery.') %}active{% endif %}">
@@ -660,6 +683,13 @@
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                     <span>Analytics</span>
                 </a>
+                {% if current_user.is_superadmin %}
+                <a href="{{ url_for('main.licenses_dashboard') }}"
+                    class="nav-item {% if request.endpoint == 'main.licenses_dashboard' %}active{% endif %}">
+                    <i class="fa-solid fa-id-card"></i>
+                    <span>License Management</span>
+                </a>
+                {% endif %}
                 <a href="{{ url_for('agents.list_keys') }}"
                     class="nav-item {% if request.endpoint == 'agents.list_keys' %}active{% endif %}">
                     <i class="fa-solid fa-key"></i>
@@ -670,6 +700,14 @@
                     <i class="fa-solid fa-robot"></i>
                     <span>Agent Portal</span>
                 </a>
+
+                {% if current_user.role == 'org_admin' %}
+                <a href="{{ url_for('tenants.tenant_settings') }}"
+                    class="nav-item {% if request.endpoint == 'tenants.tenant_settings' %}active{% endif %}">
+                    <i class="fa-solid fa-building-flag"></i>
+                    <span>Tenant Settings</span>
+                </a>
+                {% endif %}
 
                 {% if current_user.is_superadmin %}
                 <div class="nav-section-title">Administration</div>
@@ -691,12 +729,22 @@
                     <a href="{{ url_for('admin.admin_tenants') }}"
                         class="nav-item {% if request.path.startswith('/admin/tenants') %}active{% endif %}">
                         <i class="fa-solid fa-building"></i>
-                        <span>Tenants</span>
+                        <span>Tenant Dashboard</span>
+                    </a>
+                    <a href="{{ url_for('tenants.tenant_settings') }}"
+                        class="nav-item ml-6 {% if request.endpoint == 'tenants.tenant_settings' %}active{% endif %}">
+                        <i class="fa-solid fa-building-flag"></i>
+                        <span>Tenant Settings</span>
                     </a>
                     <a href="{{ url_for('admin.admin_users') }}"
                         class="nav-item {% if request.path.startswith('/admin/users') %}active{% endif %}">
                         <i class="fa-solid fa-users-gear"></i>
                         <span>Users</span>
+                    </a>
+                    <a href="{{ url_for('asset_mgmt.reports') }}"
+                        class="nav-item {% if request.path.startswith('/assets/reports') %}active{% endif %}">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>Reports</span>
                     </a>
                 </div>
                 {% endif %}
@@ -733,7 +781,8 @@
         <main class="main-content flex-1 flex flex-col">
             <!-- Top Action Bar with Notification Bell -->
             {% if current_user.is_authenticated %}
-            <div style="display:flex;align-items:center;justify-content:flex-end;padding:10px 24px 0;position:relative;z-index:10000;">
+            <div
+                style="display:flex;align-items:center;justify-content:flex-end;padding:10px 24px 0;position:relative;z-index:10000;">
                 <!-- Notification Bell -->
                 <div style="position:relative;" id="notifBellWrap">
                     <button onclick="toggleNotifPanel()" id="notifBellBtn"
@@ -749,7 +798,8 @@
                     <div id="notifPanel" class="hidden"
                         style="position:absolute;right:0;top:52px;width:380px;max-height:480px;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.15),0 0 0 1px rgba(0,0,0,0.05);z-index:10001;overflow:hidden;">
                         <!-- Header -->
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+                        <div
+                            style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #f1f5f9;background:#f8fafc;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <i class="fa-solid fa-bell" style="color:#6366f1;font-size:13px;"></i>
                                 <h4 style="font-size:14px;font-weight:700;color:#1e293b;margin:0;">Notifications</h4>
@@ -764,7 +814,8 @@
                         <!-- Notification Items -->
                         <div id="notifList" style="overflow-y:auto;max-height:400px;">
                             <div style="padding:32px;text-align:center;color:#94a3b8;font-size:13px;">
-                                <i class="fa-solid fa-bell-slash" style="font-size:24px;display:block;margin-bottom:8px;color:#cbd5e1;"></i>
+                                <i class="fa-solid fa-bell-slash"
+                                    style="font-size:24px;display:block;margin-bottom:8px;color:#cbd5e1;"></i>
                                 No notifications yet
                             </div>
                         </div>
@@ -875,11 +926,11 @@
             });
         });
     </script>
-    
+
     <!-- Notification System -->
     <script>
         let notifPanelOpen = false;
-        
+
         function toggleNotifPanel() {
             const panel = document.getElementById('notifPanel');
             notifPanelOpen = !notifPanelOpen;
@@ -890,7 +941,7 @@
                 panel.classList.add('hidden');
             }
         }
-        
+
         function loadNotifications() {
             fetch('/api/notifications')
                 .then(r => r.json())
@@ -899,9 +950,9 @@
                     updateBadge(data.unread_count);
                     renderNotifList(data.notifications);
                 })
-                .catch(() => {});
+                .catch(() => { });
         }
-        
+
         function updateBadge(count) {
             const badge = document.getElementById('notifBadge');
             const headerCount = document.getElementById('notifHeaderCount');
@@ -915,7 +966,7 @@
                 headerCount.classList.add('hidden');
             }
         }
-        
+
         function renderNotifList(items) {
             const list = document.getElementById('notifList');
             if (!items || items.length === 0) {
@@ -926,7 +977,7 @@
                     </div>`;
                 return;
             }
-            
+
             let html = '';
             items.forEach(n => {
                 const iconMap = {
@@ -937,7 +988,7 @@
                 const style = iconMap[n.category] || iconMap.sync;
                 const readClass = n.is_read ? 'opacity-60' : '';
                 const unreadDot = n.is_read ? '' : '<span class="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></span>';
-                
+
                 html += `
                     <div class="flex items-start gap-3 px-5 py-3 hover:bg-slate-50/80 transition-colors cursor-default ${readClass}">
                         <div class="w-8 h-8 rounded-lg ${style.bg} flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -955,7 +1006,7 @@
             });
             list.innerHTML = html;
         }
-        
+
         function markAllRead() {
             fetch('/api/notifications/mark_read', { method: 'POST' })
                 .then(r => r.json())
@@ -963,18 +1014,18 @@
                     updateBadge(0);
                     loadNotifications();
                 })
-                .catch(() => {});
+                .catch(() => { });
         }
-        
+
         // Close panel on outside click
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             const wrap = document.getElementById('notifBellWrap');
             if (wrap && notifPanelOpen && !wrap.contains(e.target)) {
                 document.getElementById('notifPanel').classList.add('hidden');
                 notifPanelOpen = false;
             }
         });
-        
+
         // Poll for new notifications every 30 seconds
         setInterval(() => {
             fetch('/api/notifications')
@@ -982,9 +1033,9 @@
                 .then(data => {
                     if (data.success) updateBadge(data.unread_count);
                 })
-                .catch(() => {});
+                .catch(() => { });
         }, 30000);
-        
+
         // Initial load on page ready
         document.addEventListener('DOMContentLoaded', () => {
             fetch('/api/notifications')
@@ -992,10 +1043,10 @@
                 .then(data => {
                     if (data.success) updateBadge(data.unread_count);
                 })
-                .catch(() => {});
+                .catch(() => { });
         });
     </script>
-    
+
     <!-- Load Chart.js synchronously (needed for dashboard charts) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <!-- Defer Socket.IO as it's not critical for initial render -->

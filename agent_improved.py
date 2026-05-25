@@ -54,7 +54,7 @@ def load_config():
     
     # Fall back to environment variables with validation
     agent_key = os.getenv('AGENT_KEY', os.getenv('SERVER_MONITOR_AGENT_KEY', '')).strip()
-    server_url = os.getenv('SERVER_URL', os.getenv('SERVER_MONITOR_URL', 'http://localhost:8080')).strip()
+    server_url = os.getenv('SERVER_URL', os.getenv('SERVER_MONITOR_URL', 'http://localhost:5000')).strip()
     interval = int(os.getenv('AGENT_INTERVAL', os.getenv('SERVER_MONITOR_INTERVAL', 30)))
     enable_screenshots = os.getenv('ENABLE_SCREENSHOTS', 'false').lower() == 'true'
     screenshot_interval = int(os.getenv('SCREENSHOT_INTERVAL', 300))
@@ -63,7 +63,7 @@ def load_config():
         logger.error("❌ CRITICAL: AGENT_KEY not set. Set AGENT_KEY environment variable.")
         sys.exit(1)
     
-    if not server_url or server_url == 'http://localhost:8080':
+    if not server_url or server_url == 'http://localhost:3000':
         logger.warning(f"⚠️  Using {server_url}. Set SERVER_URL for production.")
     
     return agent_key, server_url, interval, enable_screenshots, screenshot_interval
@@ -235,8 +235,9 @@ def capture_screenshot():
                     }
     except Exception as e:
         logger.error(f"Screenshot capture failed: {e}")
+        return {"success": False, "error": str(e)}
     
-    return {"success": False, "error": str(e)}
+    return {"success": False, "error": "Screenshot capture failed"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

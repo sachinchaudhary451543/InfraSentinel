@@ -145,44 +145,51 @@ def get_installed_software(server_id):
     Query params:
     - filter: optional search filter (case-insensitive)
     - limit: number of results (default 100)
+    - refresh: 'true' to force fetch fresh list from agent
     
-    Returns cached list from last agent report or queries for fresh list.
+    Returns cached list or empty if not yet available.
     """
     try:
+        from web.models import Metric
+        import json
+        
         server = Server.query.get(server_id)
         if not server or (not current_user.is_superadmin and server.tenant_id != current_user.tenant_id):
             return jsonify({'success': False, 'error': 'Unauthorized or server not found'}), 403
 
         search_filter = (request.args.get('filter') or '').strip().lower()
         limit = int(request.args.get('limit', 100))
+        refresh = request.args.get('refresh', '').lower() == 'true'
 
-        # Check if we have cached software list
-        software_cache = getattr(server, 'software_cache', None)
+        software_list = []
         
-        if software_cache:
+        # Try to get from latest metric
+        latest_metric = Metric.query.filter_by(server_id=server_id).order_by(Metric.timestamp.desc()).first()
+        if latest_metric and hasattr(latest_metric, 'installed_software') and latest_metric.installed_software:
             try:
-                import json
-                software_list = json.loads(software_cache) if isinstance(software_cache, str) else software_cache
-            except Exception:
-                software_list = []
-        else:
-            # Queue a command to get software list
-            # This will be executed by the agent next heartbeat
+                software_list = json.loads(latest_metric.installed_software) if isinstance(latest_metric.installed_software, str) else latest_metric.installed_software
+            except:
+                pass
+        
+        # If refresh requested or no cache, queue a fresh query
+        if refresh or not software_list:
             cmd = RemoteCommand()
             cmd.server_id = server_id
             cmd.command = "Get-WmiObject -Class Win32_Product | Select-Object Name,Version,Vendor | ConvertTo-Json"
             cmd.status = 'pending'
             cmd.created_at = datetime.utcnow()
+            cmd.created_by = 'system'
             db.session.add(cmd)
             db.session.commit()
-            
-            software_list = []
+            logger.info(f"Queued software list refresh for server {server_id}")
 
         # Filter results
         if search_filter:
             software_list = [s for s in software_list 
-                           if search_filter in s.get('name', '').lower() 
-                           or search_filter in s.get('vendor', '').lower()]
+                           if isinstance(s, dict) and (
+                               search_filter in s.get('name', '').lower() 
+                               or search_filter in s.get('vendor', '').lower()
+                           )]
 
         # Limit results
         software_list = software_list[:limit]
@@ -192,7 +199,7 @@ def get_installed_software(server_id):
             'server_id': server_id,
             'software_list': software_list,
             'total': len(software_list),
-            'is_cached': bool(software_cache),
+            'is_cached': bool(latest_metric),
             'message': f'Found {len(software_list)} software packages'
         })
     except Exception as e:

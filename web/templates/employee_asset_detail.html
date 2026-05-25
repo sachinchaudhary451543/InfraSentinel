@@ -283,14 +283,16 @@
                             </td>
                             <td class="px-5 py-3 text-slate-700 font-bold">
                                 {% if act.logout %}
-                                ~{{ (act.active_minutes + act.idle_minutes) | int }} m
+                                ~{{ (act.active_minutes + act.idle_minutes) | format_minutes }}
                                 {% else %}
                                 <span class="text-indigo-600 font-bold">Ongoing</span>
                                 {% endif %}
                             </td>
                             <td class="px-5 py-3 text-[0.7rem] text-slate-600 font-mono tracking-tight">
-                                Act: <span class="text-emerald-600 font-bold">{{ act.active_minutes | int }}m</span>
-                                &bull; Idl: <span class="text-amber-600 font-bold">{{ act.idle_minutes | int }}m</span>
+                                Act: <span class="text-emerald-600 font-bold">{{ act.active_minutes | format_minutes
+                                    }}</span>
+                                &bull; Idle: <span class="text-amber-600 font-bold">{{ act.idle_minutes | format_minutes
+                                    }}</span>
                             </td>
                             <td class="px-5 py-3">
                                 <span

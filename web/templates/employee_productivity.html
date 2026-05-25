@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.name }} - Productivity Detail{% endblock %}
+
+{% block content %}
+<div class="p-6 lg:p-8 max-w-7xl mx-auto">
+
+    <!-- Breadcrumb & Header -->
+    <div class="mb-8 animate-fade-up">
+        <div class="flex items-center gap-2 text-sm font-bold text-slate-500 mb-4">
+            <a href="{{ url_for('asset_mgmt.productivity_overview') }}"
+                class="hover:text-indigo-600 transition-colors"><i
+                    class="fa-solid fa-users-viewfinder mr-1"></i>Employee Productivity</a>
+            <i class="fa-solid fa-chevron-right text-[0.65rem] opacity-50"></i>
+            <span class="text-slate-800">{{ employee.name }}</span>
+        </div>
+
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div class="flex items-center gap-5">
+                <div
+                    class="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-500/30">
+                    {{ employee.name[0]|upper if employee.name else '?' }}
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-900" style="font-family:'Outfit',sans-serif">{{
+                        employee.name }}</h1>
+                    <div class="flex flex-wrap items-center gap-3 mt-2 text-sm">
+                        <span class="font-medium text-slate-600"><i
+                                class="fa-regular fa-envelope text-slate-400 mr-1.5"></i>{{ employee.email or 'No email'
+                            }}</span>
+                        <span class="text-slate-300">•</span>
+                        <span class="font-medium text-slate-600"><i
+                                class="fa-solid fa-briefcase text-slate-400 mr-1.5"></i>{{ employee.department or 'No
+                            Department' }}</span>
+                        {% if attendance and attendance.status == 'present' %}
+                        <span class="text-slate-300">•</span>
+                        <span
+                            class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active Today
+                        </span>
+                        {% if attendance_first_activity_display %}
+                        <span class="text-slate-300">•</span>
+                        <span class="font-medium text-slate-600"><i
+                                class="fa-regular fa-clock text-slate-400 mr-1.5"></i>First Active: {{
+                            attendance_first_activity_display.strftime('%I:%M %p') }}</span>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                <form method="GET" class="flex items-center gap-2">
+                    <input type="date" name="date" value="{{ selected_date }}"
+                        class="px-3 py-2 text-sm font-bold text-slate-700 bg-transparent outline-none cursor-pointer">
+                    <button type="submit"
+                        class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">
+                        View Date
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 animate-fade-up" style="animation-delay: 50ms;">
+        <div
+            class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-emerald-200 transition-all">
+            <div
+                class="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full blur-2xl group-hover:bg-emerald-100 transition-colors">
+            </div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Active Time</h3>
+                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center"><i
+                            class="fa-solid fa-keyboard"></i></div>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                        active_str }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-amber-200 transition-all">
+            <div
+                class="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full blur-2xl group-hover:bg-amber-100 transition-colors">
+            </div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Idle Time</h3>
+                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><i
+                            class="fa-solid fa-mug-hot"></i></div>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                        idle_str }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-indigo-200 transition-all">
+            <div
+                class="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full blur-2xl group-hover:bg-indigo-100 transition-colors">
+            </div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Productive Apps</h3>
+                    <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center"><i
+                            class="fa-solid fa-bullseye"></i></div>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                        prod_str }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Top Applications (2/3 width) -->
+        <div class="lg:col-span-2 space-y-6 animate-fade-up" style="animation-delay: 100ms;">
+            <div
+                class="bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-slate-100 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-indigo-500"></i> Applications Used
+                    </h3>
+                </div>
+                <div class="p-6">
+                    {% if top_apps %}
+                    <div class="space-y-4">
+                        {% for app in top_apps %}
+                        <div class="flex items-center gap-4 group">
+                            <div
+                                class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:scale-110 transition-transform">
+                                {% if 'chrome' in app.name.lower() or 'edge' in app.name.lower() or 'firefox' in
+                                app.name.lower() %}
+                                <i class="fa-brands fa-chrome"></i>
+                                {% elif 'code' in app.name.lower() or 'studio' in app.name.lower() %}
+                                <i class="fa-solid fa-code"></i>
+                                {% elif 'excel' in app.name.lower() or 'word' in app.name.lower() %}
+                                <i class="fa-solid fa-file-lines"></i>
+                                {% elif 'teams' in app.name.lower() or 'slack' in app.name.lower() or 'zoom' in
+                                app.name.lower() %}
+                                <i class="fa-solid fa-comments"></i>
+                                {% else %}
+                                <i class="fa-solid fa-window-maximize"></i>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex justify-between items-center mb-1.5">
+                                    <div class="font-bold text-sm text-slate-800">{{ app.name }}</div>
+                                    <div class="text-xs font-bold text-slate-500">{{ app.duration_str }}</div>
+                                </div>
+                                <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    {% set percent = (app.duration_min / active_min * 100) if active_min > 0 else 0 %}
+                                    {% set bar_color = 'bg-indigo-500' if app.classification == 'productive' else
+                                    ('bg-rose-400' if app.classification == 'non_productive' else 'bg-slate-400') %}
+                                    <div class="h-full rounded-full transition-all duration-1000 {{ bar_color }}"
+                                        style="width: {{ percent }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-10">
+                        <div
+                            class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mx-auto mb-3">
+                            <i class="fa-solid fa-ghost"></i>
+                        </div>
+                        <div class="text-sm font-bold text-slate-700">No Application Data</div>
+                        <div class="text-xs text-slate-500 mt-1">Application usage was not recorded for this date.</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Sessions Timeline (1/3 width) -->
+        <div class="space-y-6 animate-fade-up" style="animation-delay: 150ms;">
+            <div
+                class="bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-slate-100 overflow-hidden relative">
+                <div class="p-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
+                    <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-timeline text-indigo-500"></i> Session Timeline
+                    </h3>
+                </div>
+                <div class="p-6 max-h-[500px] overflow-y-auto">
+                    {% if sessions %}
+                    <div class="relative border-l-2 border-slate-100 ml-3 space-y-6 pb-4">
+                        {% for session in sessions %}
+                        <div class="relative pl-6">
+                            <div
+                                class="absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white 
+                              {% if session.idle_minutes > session.active_minutes %}bg-amber-400{% else %}bg-emerald-500{% endif %}">
+                            </div>
+
+                            <div class="text-xs font-bold text-slate-400 mb-1">
+                                {{ session.start_time_display.strftime('%I:%M %p') if session.start_time_display else
+                                session.start_time.strftime('%I:%M %p') }}
+                                {% if session.end_time_display %}
+                                - {{ session.end_time_display.strftime('%I:%M %p') }}
+                                {% else %}
+                                - Present
+                                {% endif %}
+                            </div>
+
+                            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                <div class="flex items-center gap-3 text-xs font-bold">
+                                    <div class="text-emerald-600"><i class="fa-solid fa-keyboard mr-1 opacity-50"></i>{{
+                                        session.active_str }} Active</div>
+                                    {% if session.idle_minutes %}
+                                    <div class="text-amber-500"><i class="fa-solid fa-mug-hot mr-1 opacity-50"></i>{{
+                                        session.idle_str }} Idle</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-10">
+                        <div class="text-sm font-bold text-slate-700">No Sessions Recorded</div>
+                        <div class="text-xs text-slate-500 mt-1">The agent didn't send heartbeat data on this date.
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

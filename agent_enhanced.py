@@ -81,7 +81,7 @@ class AgentConfig:
     """Configuration management with environment variable support"""
     
     # API Configuration
-    SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8080").rstrip('/')
+    SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:5000").rstrip('/')
     AGENT_KEY = os.environ.get("AGENT_KEY", "demo_mode_key")
     AGENT_ID = os.environ.get("AGENT_ID", socket.gethostname())
     

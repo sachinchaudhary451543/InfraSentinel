@@ -1,5 +1,6 @@
 import logging
 from web.models import db, Server, SystemAlert
+from web.services.notification_service import create_notification
 
 # Static rule definition for simplicity. In a real system, this would be a DB table `AlertRule`.
 ALERT_RULES = [
@@ -62,4 +63,12 @@ def evaluate_metric_for_alerts(metric):
 def send_notification(alert):
     """Stub for Email SMTP or Webhook logic"""
     logging.warning(f"ALERT TRIGGERED: [Tenant {alert.tenant_id}] Server {alert.server_id} - {alert.message}")
-    # Here you'd use smtplib or requests.post to a Slack webhook url stored in Tenant configuration
+    # Also create a SyncNotification so the UI bell shows the alert
+    try:
+        create_notification(alert.tenant_id or server.tenant_id if hasattr(alert, 'tenant_id') else None,
+                            'alert',
+                            f'Alert: {getattr(alert, "message", "System Alert")}',
+                            f"Server {getattr(alert, 'server_id', '')}: {getattr(alert, 'message', '')}",
+                            {'alert_id': getattr(alert, 'id', None)})
+    except Exception as e:
+        logging.debug(f"Failed to create UI notification for alert: {e}")
