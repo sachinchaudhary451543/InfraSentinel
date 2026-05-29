@@ -330,11 +330,13 @@ def ensure_initial_setup():
     """Initialize portal database and default records."""
     with app.app_context():
         # Ensure tenant table columns exist for Azure integration before creating tables
-        ensure_tenant_columns(DB_PATH)
+        if not os.environ.get('DATABASE_URL'):
+            ensure_tenant_columns(DB_PATH)
 
         # Create all database tables
         db.create_all()
-        ensure_user_columns(DB_PATH)
+        if not os.environ.get('DATABASE_URL'):
+            ensure_user_columns(DB_PATH)
         
         # Auto-create default admin user if no users exist
         if not User.query.first():
