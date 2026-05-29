@@ -9,6 +9,7 @@ services:
   - type: keyvalue
     name: servermonitor-redis
     plan: free
+    ipAllowList: []
 
   # Main Web Application (Performance Monitoring & Core APIs)
   - type: web
