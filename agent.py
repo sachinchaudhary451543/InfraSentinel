@@ -88,8 +88,13 @@ def get_idle_time():
             lastInputInfo = LASTINPUTINFO()
             lastInputInfo.cbSize = sizeof(lastInputInfo)
             if windll.user32.GetLastInputInfo(byref(lastInputInfo)):
-                millis = windll.kernel32.GetTickCount() - lastInputInfo.dwTime
-                return millis / 1000.0
+                tick64 = windll.kernel32.GetTickCount64()
+                # lastInputInfo.dwTime is 32-bit (unsigned), so we mask tick64 to 32-bit to compute the difference safely.
+                # Under 32-bit unsigned math, subtracting dwTime handles overflow perfectly.
+                diff = (tick64 & 0xFFFFFFFF) - lastInputInfo.dwTime
+                if diff < 0:
+                    diff += 0x100000000
+                return diff / 1000.0
             return 0
         else:
             return 0
@@ -187,12 +192,14 @@ def get_system_metrics():
         "ip": ip,
         "logged_in_user": logged_in_user,
         "idle_time_seconds": idle_seconds,
+        "interval_seconds": INTERVAL,
         "active_app": active_app,
         "window_title": window_title,
         "activity": {
             "app": active_app,
             "window_title": window_title,
-            "idle_seconds": idle_seconds
+            "idle_seconds": idle_seconds,
+            "interval_seconds": INTERVAL
         },
         "metrics": {
             "cpu_percent": cpu_percent,

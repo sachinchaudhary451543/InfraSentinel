@@ -183,7 +183,7 @@ class ActiveDataFilter:
         if tenant_id:
             query = query.filter(Server.tenant_id == tenant_id)
         
-        return query.order_by(Server.is_online.desc()).all()
+        return query.order_by(Server.last_seen.desc().nullslast()).all()
     
     @staticmethod
     def get_device_summary(db, tenant_id=None):

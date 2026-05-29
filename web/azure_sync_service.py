@@ -95,6 +95,9 @@ class AzureSyncService:
                     device.tenant_id = r['tenant_id']
                     device.device_id = r['device_id']
                     new_devices.append(device)
+                    synced_count += 1
+                else:
+                    updated_count += 1
                 # apply fields
                 device.display_name = r['display_name']
                 device.normalized_hostname = r['normalized_hostname']

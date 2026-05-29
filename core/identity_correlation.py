@@ -3,6 +3,7 @@ Identity Correlation Engine
 Resolves mapping between PowerShell Agents (Server), Azure/Intune Devices (AzureDevice),
 and Employees (AzureUser / Employee).
 """
+
 from datetime import datetime
 from sqlalchemy import or_
 import logging
@@ -10,6 +11,14 @@ import logging
 from web.models import db, EmployeeDeviceAssignment, Employee, Server, AzureDevice, AzureUser
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_hostname(hostname: str) -> str:
+    """Normalize hostname for consistent matching across services."""
+    if not hostname:
+        return ""
+    return hostname.lower().strip()
+
 
 class IdentityCorrelationService:
     
@@ -21,7 +30,7 @@ class IdentityCorrelationService:
         """
         if not logged_in_user:
             return
-            
+        
         # 1. Find or resolve the Employee
         # The logged_in_user might be DOMAIN\username, username, or email
         clean_user = logged_in_user.split("\\")[-1].lower() if "\\" in logged_in_user else logged_in_user.lower()
@@ -60,7 +69,7 @@ class IdentityCorrelationService:
                 )
                 db.session.add(employee)
                 db.session.commit()
-
+        
         # 2. Find AzureDevice (optional, best effort mapping by hostname)
         azure_device = AzureDevice.query.filter(
             AzureDevice.tenant_id == tenant_id,

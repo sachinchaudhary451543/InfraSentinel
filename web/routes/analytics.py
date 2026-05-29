@@ -3,10 +3,10 @@ Admin Analytics API - Complete Overview of Active/Inactive Systems and Users
 Provides comprehensive dashboard data for analysis
 """
 
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func
 import logging
 import time
 from flask import current_app
@@ -61,7 +61,7 @@ def get_overview():
         return jsonify({'error': 'Admin only'}), 403
     
     try:
-        from web.models import db, AzureDevice, AzureUser, Server, AzureLicense
+        from web.models import db, AzureDevice, AzureUser, Server
 
         # Try cached response first
         cache_key = f"overview:{current_user.tenant_id if not current_user.is_superadmin else 'global'}"
@@ -143,14 +143,16 @@ def get_overview():
                 Server.tenant_id == current_user.tenant_id
             ).count()
         
+        # Server.is_online is a property; check last_seen instead (within 60 seconds)
+        threshold = datetime.utcnow() - timedelta(seconds=60)
         online_servers = db.session.query(Server).filter(
-            Server.is_online == True
+            Server.last_seen >= threshold
         )
         if not current_user.is_superadmin and current_user.tenant_id:
             online_servers = online_servers.filter(Server.tenant_id == current_user.tenant_id)
         online_servers = online_servers.count()
         
-        return jsonify({
+        payload = {
             'success': True,
             'timestamp': datetime.utcnow().isoformat(),
             'devices': {
@@ -172,31 +174,18 @@ def get_overview():
                 'online': online_servers,
                 'offline': total_servers - online_servers
             }
-        })
+        }
+
         # set cache
-        _cache_set(cache_key, {
-            'success': True,
-            'timestamp': datetime.utcnow().isoformat(),
-            'devices': {
-                'total': total_devices,
-                'active': active_devices,
-                'inactive': inactive_devices,
-                'retired': retired_devices,
-                'active_percentage': round((active_devices / total_devices * 100) if total_devices > 0 else 0, 2)
-            },
-            'users': {
-                'total': total_users,
-                'active': active_users,
-                'terminated': terminated_users,
-                'onleave': onleave_users,
-                'active_percentage': round((active_users / total_users * 100) if total_users > 0 else 0, 2)
-            },
-            'servers': {
-                'total': total_servers,
-                'online': online_servers,
-                'offline': total_servers - online_servers
-            }
-        })
+        if cache:
+            try:
+                cache.set(cache_key, payload)
+            except Exception:
+                pass
+        else:
+            _cache_set(cache_key, payload)
+
+        return jsonify(payload)
     
     except Exception as e:
         logger.error(f"Error getting overview: {e}")
@@ -313,29 +302,6 @@ def get_employees_device_mapping():
             'total': total,
             'employees': employees
         }
-        payload = {
-            'success': True,
-            'timestamp': datetime.utcnow().isoformat(),
-            'devices': {
-                'total': total_devices,
-                'active': active_devices,
-                'inactive': inactive_devices,
-                'retired': retired_devices,
-                'active_percentage': round((active_devices / total_devices * 100) if total_devices > 0 else 0, 2)
-            },
-            'users': {
-                'total': total_users,
-                'active': active_users,
-                'terminated': terminated_users,
-                'onleave': onleave_users,
-                'active_percentage': round((active_users / total_users * 100) if total_users > 0 else 0, 2)
-            },
-            'servers': {
-                'total': total_servers,
-                'online': online_servers,
-                'offline': total_servers - online_servers
-            }
-        }
 
         if cache:
             try:
@@ -343,14 +309,27 @@ def get_employees_device_mapping():
             except Exception:
                 pass
         else:
-            if cache:
-                try:
-                    cache.set(cache_key, payload)
-                except Exception:
-                    pass
-            else:
-                _cache_set(cache_key, payload)
-            return jsonify(payload)
+            _cache_set(cache_key, payload)
+
+        return jsonify(payload)
+    
+    except Exception as e:
+        logger.error(f"Error getting employees device mapping: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analytics_bp.route('/employees/<int:employee_id>/devices', methods=['GET'])
+@login_required
+def get_employee_devices(employee_id):
+    """Get devices assigned to a specific employee"""
+    if not current_user.is_superadmin:
+        return jsonify({'error': 'Admin only'}), 403
+    
+    try:
+        from web.models import db, AzureUser, AzureDevice, AzureDeviceOwner
+        
+        employee = db.session.get(AzureUser, employee_id)
+        if not employee:
             return jsonify({'success': False, 'error': 'Employee not found'}), 404
         
         # Get devices for this employee
@@ -380,7 +359,7 @@ def get_employees_device_mapping():
         })
     
     except Exception as e:
-        logger.error(f"Error getting employee device details: {e}")
+        logger.error(f"Error getting employee devices: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

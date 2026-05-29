@@ -21,6 +21,20 @@ endblock %}
     </div>
 </div>
 
+<!-- Organization ID Card -->
+<div class="mb-6 max-w-2xl">
+    <div class="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+            <div class="text-xs text-slate-500">Organization ID</div>
+            <div class="font-mono font-semibold text-sm text-slate-800">{{ tenant.uuid or tenant.id }}</div>
+            <div class="text-xs text-slate-400">Share this ID with your users so they can sign into this organization's portal.</div>
+        </div>
+        <div>
+            <button class="btn btn-sm" onclick="navigator.clipboard.writeText('{{ tenant.uuid or tenant.id }}')">Copy</button>
+        </div>
+    </div>
+</div>
+
 <div class="flex flex-wrap gap-2 mb-6">
     <a href="{{ url_for('tenants.tenant_settings') }}"
         class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all {% if request.endpoint == 'tenants.tenant_settings' %}bg-indigo-600 text-white shadow-sm{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">

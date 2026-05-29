@@ -126,6 +126,7 @@ class Server(db.Model):
     source = db.Column(db.String(20), default='agent')  # origin of record: agent, azure, AD, etc.
     api_key = db.Column(db.String(64), index=True)
     last_seen = db.Column(db.DateTime)
+    device_active_status = db.Column(db.String(50), default='active')
     
     # Additional backwards compatibility fields
     status = db.Column(db.String(20), default="offline")
@@ -531,6 +532,7 @@ class Employee(db.Model):
     manager_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True) # Hierarchical RBAC
     created_at = db.Column(db.DateTime, server_default=db.func.now())
     is_active = db.Column(db.Boolean, default=True)
+    employment_status = db.Column(db.String(50), default='active')
 
     __table_args__ = (
         db.Index('idx_employee_tenant_azure_user', 'tenant_id', 'azure_user_id'),
@@ -619,6 +621,7 @@ class AzureDevice(db.Model):
     is_managed_by_intune = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Integer, default=1) # 1 for active, 0 for inactive
     device_status = db.Column(db.String(50), default='active')
+    disabled_at = db.Column(db.DateTime, nullable=True)
     last_activity = db.Column(db.DateTime, nullable=True)
     
     # Tracking

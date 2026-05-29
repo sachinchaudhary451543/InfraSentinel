@@ -18,7 +18,7 @@ def workforce_dashboard():
     today = datetime.utcnow().date()
     
     # Employee count
-    employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True).all()
+    employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True, employment_status='active').all()
     
     # Active assignments (correlated devices)
     assignments = EmployeeDeviceAssignment.query.filter_by(tenant_id=tenant_id, is_active=True).all()
@@ -35,11 +35,12 @@ def workforce_dashboard():
         ActivitySession.start_time <= day_end
     ).all()
     
+    # Note: We use the integer '*_minutes' columns to store SECONDS for higher precision without schema changes.
     total_active = sum(s.active_minutes or 0 for s in sessions)
     total_idle = sum(s.idle_minutes or 0 for s in sessions)
     total_productive = sum(s.productive_minutes or 0 for s in sessions)
     
-    # Format totals as HH:MM:SS
+    # Format totals as HH:MM:SS (since they are stored as seconds)
     total_active_str = f"{total_active // 3600:02d}:{(total_active % 3600) // 60:02d}:{total_active % 60:02d}"
     total_idle_str = f"{total_idle // 3600:02d}:{(total_idle % 3600) // 60:02d}:{total_idle % 60:02d}"
     total_productive_str = f"{total_productive // 3600:02d}:{(total_productive % 3600) // 60:02d}:{total_productive % 60:02d}"
@@ -60,8 +61,9 @@ def workforce_dashboard():
         device_ip = ''
         if assignment and assignment.server_id:
             srv = db.session.get(Server, assignment.server_id)
-            device_name = srv.hostname if srv else ''
-            device_ip = srv.ip if srv else ''
+            if srv and srv.device_active_status == 'active' and srv.agent_installed:
+                device_name = srv.hostname
+                device_ip = srv.ip
         
         first_act_str = '—'
         last_act_str = '—'
@@ -128,7 +130,7 @@ def get_timeline():
     else:
         if allowed_ids is None:
             # All employees in tenant
-            target_employees = [e.id for e in Employee.query.filter_by(tenant_id=tenant_id).all()]
+            target_employees = [e.id for e in Employee.query.filter_by(tenant_id=tenant_id, is_active=True, employment_status='active').all()]
         else:
             target_employees = allowed_ids
             

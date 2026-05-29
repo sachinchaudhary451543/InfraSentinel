@@ -1758,48 +1758,44 @@ def _time_ago(dt):
 def manual_azure_sync():
     """Manually trigger Azure AD synchronization for the current tenant."""
     try:
-        from core.azure_sync_service import get_token_silently, AzureSyncService
         from web.models import Tenant
+        from auth.msal_auth import get_azure_client
+        from web.azure_sync_service import AzureSyncService
+        from core.identity_correlation import IdentityCorrelationService
         
         tenant_id = current_user.tenant_id
         tenant = db.session.get(Tenant, tenant_id)
         if not tenant:
             return jsonify({'success': False, 'error': 'Tenant not found.'}), 404
             
-        token = get_token_silently()
-        
-        # Priority 1: Check if tenant has stored credentials
-        if not token and tenant.azure_client_id and tenant.azure_client_secret and tenant.azure_tenant_id:
-            from core.azure_graph import _get_app_token
-            token = _get_app_token(tenant.azure_client_id, tenant.azure_client_secret, tenant.azure_tenant_id)
+        if not tenant.azure_client_id or not tenant.azure_client_secret or not tenant.azure_tenant_id:
+            return jsonify({'success': False, 'error': 'Please configure and save your Azure App credentials first.'}), 400
             
-        if not token:
-            return jsonify({'success': False, 'error': 'Failed to obtain Azure AD access token. Please verify App Registration Details.'}), 401
-            
-        sync_service = AzureSyncService.__new__(AzureSyncService)
-        
-        from core.graph_integration import (
-            get_devices_from_graph,
-            get_users_from_graph,
-            sync_devices_to_database,
-            sync_users_to_database,
+        client = get_azure_client(
+            client_id=tenant.azure_client_id,
+            client_secret=tenant.azure_client_secret,
+            tenant_id=tenant.azure_tenant_id
         )
         
-        devices = get_devices_from_graph(token)
-        device_count = sync_devices_to_database(devices, tenant.id, db.session)
+        # Trigger full comprehensive sync
+        res = AzureSyncService.get_full_sync(db, tenant, client)
         
-        users = get_users_from_graph(token)
-        user_count = sync_users_to_database(users, tenant.id, db.session)
-        
-        sync_service._sync_user_registered_devices(tenant.id, devices, token)
-        
-        from core.identity_correlation import IdentityCorrelationService
+        if 'error' in res:
+            return jsonify({'success': False, 'error': res['error']}), 500
+            
+        # Resolve device ownership using identity correlation engine
         IdentityCorrelationService.resolve_device_ownership(tenant.id)
+        
+        # Extract count details
+        devices_count = res.get('devices', {}).get('synced', 0) + res.get('devices', {}).get('updated', 0)
+        users_count = res.get('users', {}).get('synced', 0) + res.get('users', {}).get('updated', 0)
+        licenses_count = res.get('licenses', {}).get('assignments', 0)
         
         return jsonify({
             'success': True,
-            'users': user_count,
-            'devices': device_count
+            'users': users_count,
+            'devices': devices_count,
+            'licenses': licenses_count
         })
         
     except Exception as e:

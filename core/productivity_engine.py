@@ -5,7 +5,7 @@ ActivitySession, AppUsage, FocusSession, and AttendanceRecord.
 """
 from datetime import datetime, timedelta
 import logging
-from web.models import db, EmployeeDeviceAssignment, ActivitySession, AppUsage, AttendanceRecord, ProductivityClassification
+from web.models import db, EmployeeDeviceAssignment, ActivitySession, AppUsage, AttendanceRecord, ProductivityClassification, EmployeeActivity
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,8 @@ class ProductivityEngine:
     @staticmethod
     def process_agent_activity(tenant_id: int, server_id: int, logged_in_user: str, 
                                active_app: str, window_title: str, browser_url: str, 
-                               idle_time_seconds: int, timestamp: datetime) -> None:
+                               idle_time_seconds: int, timestamp: datetime,
+                               interval_seconds: int = 30) -> None:
         """
         Process incoming agent activity.
         Must be called from within an active Flask app context.
@@ -73,15 +74,25 @@ class ProductivityEngine:
             ActivitySession.end_time.is_(None)
         ).order_by(ActivitySession.start_time.desc()).first()
         
+        # Determine last activity time from database
+        # Note: EmployeeActivity was committed right before this in api.py, so we search for the last one before current timestamp.
+        last_activity = EmployeeActivity.query.filter(
+            EmployeeActivity.server_id == server_id,
+            EmployeeActivity.timestamp < timestamp
+        ).order_by(EmployeeActivity.timestamp.desc()).first()
+        
+        last_activity_time = last_activity.timestamp if last_activity else None
+        
         # If we have a session, but it's too old or from a different day, close it
+        is_new_session = False
         if session:
             # Check if session is from a previous day
             if session.start_time.date() != timestamp.date():
-                session.end_time = session.start_time.replace(hour=23, minute=59, second=59)
+                session.end_time = last_activity_time or session.start_time.replace(hour=23, minute=59, second=59)
                 session = None
             # Check if session timeout exceeded
-            elif hasattr(session, 'last_ping') and session.last_ping < cutoff_time:
-                session.end_time = session.last_ping
+            elif last_activity_time and last_activity_time < cutoff_time:
+                session.end_time = last_activity_time
                 session = None
             
         if not session:
@@ -93,18 +104,14 @@ class ProductivityEngine:
             )
             db.session.add(session)
             db.session.flush() # get ID
+            is_new_session = True
             
-        # Temporarily store last ping on object to check next time (since this script runs per payload)
-        # Ideally, we should add last_activity to ActivitySession model or use end_time dynamically
-        session.last_ping = timestamp 
-        
         # We use the integer 'minutes' columns to store SECONDS for higher precision without schema changes.
-        duration_seconds = 30 # Default assumption if no previous ping
-        if hasattr(session, 'last_activity_time') and session.last_activity_time:
-            delta = int((timestamp - session.last_activity_time).total_seconds())
+        duration_seconds = interval_seconds # Default assumption
+        if not is_new_session and last_activity_time:
+            delta = int((timestamp - last_activity_time).total_seconds())
             if 0 < delta < 300: # Cap at 5 mins
                 duration_seconds = delta
-        session.last_activity_time = timestamp
         
         # Determine classification
         classification = 'neutral'

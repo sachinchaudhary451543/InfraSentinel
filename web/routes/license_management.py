@@ -14,6 +14,17 @@ logger = logging.getLogger("[LICENSE_MGMT]")
 license_bp = Blueprint('licenses', __name__, url_prefix='/api/v2/licenses')
 
 
+def is_azure_configured(tenant_id):
+    from web.models import Tenant, db
+    tenant = db.session.get(Tenant, tenant_id)
+    if not tenant:
+        return False
+    cid = (getattr(tenant, 'azure_client_id', None) or '').strip()
+    csecret = (getattr(tenant, 'azure_client_secret', None) or '').strip()
+    tid = (getattr(tenant, 'azure_tenant_id', None) or '').strip()
+    return bool(cid and csecret and tid)
+
+
 def _populate_license_assignments_from_graph(tenant_id, license_obj):
     """Best-effort drawer fallback: fetch assignedLicenses once and cache matching users."""
     from web.models import Tenant, AzureLicenseAssignment, AzureUser, db
@@ -97,6 +108,9 @@ def summary():
     from web.models import LicenseSku, LicenseAssignment
 
     tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+    if not is_azure_configured(tenant_id):
+        return jsonify({'success': True, 'skus': [], 'assignments': [], 'not_configured': True})
+
     skus = LicenseSku.query.filter_by(tenant_id=tenant_id).all()
     assigns = LicenseAssignment.query.filter_by(tenant_id=tenant_id).all()
 
@@ -142,6 +156,19 @@ def get_license_overview():
         from web.models import db, AzureLicense
         
         tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({
+                'success': True,
+                'not_configured': True,
+                'licenses': [],
+                'summary': {
+                    'total_licenses': 0,
+                    'assigned_licenses': 0,
+                    'available_licenses': 0,
+                    'utilization_percentage': 0
+                }
+            })
+
         licenses = db.session.query(AzureLicense).filter_by(tenant_id=tenant_id).all()
         
         total_assigned = sum(l.assigned_licenses or 0 for l in licenses)
@@ -185,11 +212,14 @@ def get_license_breakdown(license_id):
     try:
         from web.models import db, AzureLicense, AzureLicenseAssignment, AzureUser, LicenseAssignment, Employee
         
+        tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({'success': True, 'assigned_users': [], 'not_configured': True, 'assignment_count': 0})
+
         license_obj = db.session.get(AzureLicense, license_id)
         if not license_obj:
             return jsonify({'success': False, 'error': 'License not found'}), 404
         
-        tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
         if license_obj.tenant_id != tenant_id:
             return jsonify({'success': False, 'error': 'License not found'}), 404
         
@@ -293,6 +323,10 @@ def get_user_licenses(user_id):
     try:
         from web.models import db, AzureUser, AzureLicenseAssignment, AzureLicense
         
+        tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({'success': True, 'licenses': [], 'license_count': 0, 'not_configured': True})
+
         user = db.session.get(AzureUser, user_id)
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
@@ -345,6 +379,20 @@ def get_utilization_report():
         from web.models import db, AzureLicense
         
         tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({
+                'success': True,
+                'not_configured': True,
+                'summary': {
+                    'high_utilization': 0,
+                    'medium_utilization': 0,
+                    'low_utilization': 0
+                },
+                'high_utilization_licenses': [],
+                'medium_utilization_licenses': [],
+                'low_utilization_licenses': []
+            })
+
         licenses = db.session.query(AzureLicense).filter_by(tenant_id=tenant_id).all()
         
         # Group by utilization buckets
@@ -400,6 +448,14 @@ def get_sync_status():
         from web.models import db, AzureLicense
         
         tenant_id = getattr(g, 'request_tenant_id', None) or current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({
+                'success': True,
+                'not_configured': True,
+                'last_synced': None,
+                'message': 'Azure credentials are not configured.'
+            })
+
         latest_sync = db.session.query(AzureLicense).filter_by(tenant_id=tenant_id).order_by(
             AzureLicense.last_synced.desc()
         ).first()
@@ -433,6 +489,12 @@ def trigger_license_sync():
         from web.tasks.sync_licenses import run_license_sync
 
         tenant_id = current_user.tenant_id
+        if not is_azure_configured(tenant_id):
+            return jsonify({
+                'success': False,
+                'error': 'Azure credentials are not configured. Please go to Tenant Settings to configure them.'
+            }), 400
+
         logger.info(f"Manual license sync triggered by {current_user.username} for tenant {tenant_id}")
 
         result = run_license_sync(tenant_id=tenant_id)

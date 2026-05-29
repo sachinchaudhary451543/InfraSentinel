@@ -822,8 +822,9 @@ def agent_metrics():
         active_app = (activity_payload.get('app') or data.get('active_app') or '').strip()
         window_title = (activity_payload.get('window_title') or data.get('window_title') or '').strip()
         browser_url = (activity_payload.get('browser_url') or activity_payload.get('url') or data.get('browser_url') or '').strip()
+        interval_seconds = int(data.get('interval_seconds') or activity_payload.get('interval_seconds') or 30)
 
-        logger.info(f"Parsed: user={logged_in_user}, app={active_app}, idle={idle_time_seconds}")
+        logger.info(f"Parsed: user={logged_in_user}, app={active_app}, idle={idle_time_seconds}, interval={interval_seconds}")
         
         # ── Resolve the Server record ──────────────────────────────────────────
         server = None
@@ -971,7 +972,8 @@ def agent_metrics():
                     window_title=window_title,
                     browser_url=browser_url,
                     idle_time_seconds=int(max(0, idle_time_seconds)),
-                    timestamp=now
+                    timestamp=now,
+                    interval_seconds=interval_seconds
                 )
                 logger.info("ProductivityEngine processed successfully")
             except Exception as e:
@@ -1703,13 +1705,40 @@ def api_inventory_sync():
     tenant = db.session.get(Tenant, current_user.tenant_id)
     if not tenant or not tenant.azure_client_id:
         return jsonify({'success': False, 'error': 'Azure credentials not configured'})
-        
     try:
-        devices = azure_graph.get_devices(tenant)
+        # Attempt to acquire app-level token for diagnostics
+        token = None
+        token_error = None
+        try:
+            token = azure_graph._get_token_for_tenant(tenant)
+        except Exception as e:
+            token_error = str(e)
+
+        devices = []
+        devices_error = None
+        try:
+            devices = azure_graph.get_devices(tenant)
+        except Exception as e:
+            devices_error = str(e)
+
+        # If no devices from /devices, try Intune managed devices as fallback
+        managed_devices = []
+        managed_error = None
+        if not devices:
+            try:
+                managed_devices = azure_graph.get_managed_devices(tenant)
+            except Exception as e:
+                managed_error = str(e)
+
+        # Choose source
+        source_list = devices if devices else managed_devices
+
         synced = 0
-        for item in (devices or []):
-            did = item.get('id')
-            name = item.get('displayName')
+        new_items = []
+        for item in (source_list or []):
+            # Graph managedDevices use id/deviceName; normalize
+            did = item.get('id') or item.get('deviceId')
+            name = item.get('displayName') or item.get('deviceName')
             if not did or not name:
                 continue
             ad = AzureDevice.query.filter_by(device_id=did, tenant_id=tenant.id).first()
@@ -1718,15 +1747,85 @@ def api_inventory_sync():
                 ad.tenant_id = tenant.id
                 ad.device_id = did
                 db.session.add(ad)
-            
+                new_items.append(did)
+
             ad.display_name = name
-            ad.os_platform = item.get('operatingSystem', '')
-            ad.os_version = item.get('operatingSystemVersion', '')
+            ad.os_platform = item.get('operatingSystem', '') or item.get('osVersion', '')
+            ad.os_version = item.get('operatingSystemVersion', '') or item.get('osVersion', '')
             synced += 1
-        db.session.commit()
-        logger.info(f'[Azure Inventory Sync] {tenant.name}: {synced} devices synced manually')
-        return jsonify({'success': True, 'synced': synced})
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f'[Azure Inventory Sync] DB commit failed for {tenant.name}: {e}')
+            return jsonify({'success': False, 'error': 'Database commit failed', 'db_error': str(e)}), 500
+
+        logger.info(f'[Azure Inventory Sync] {tenant.name}: {synced} devices synced manually (source: {"devices" if devices else "managed_devices" if managed_devices else "none"})')
+        result = {
+            'success': True,
+            'synced': synced,
+            'token_acquired': bool(token),
+            'token_error': token_error,
+            'devices_returned': len(devices) if isinstance(devices, (list, tuple)) else 0,
+            'devices_error': devices_error,
+            'managed_devices_returned': len(managed_devices) if isinstance(managed_devices, (list, tuple)) else 0,
+            'managed_devices_error': managed_error,
+            'new_device_ids': new_items[:20]
+        }
+        return jsonify(result)
     except Exception as e:
         db.session.rollback()
         logger.error(f'[Azure Inventory Sync] Failed manual sync for {tenant.name}: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/v2/inventory/sync/debug', methods=['GET'])
+@login_required
+def api_inventory_sync_debug():
+    """Diagnostic endpoint to help debug Azure inventory sync failures.
+
+    Returns token acquisition status and a small sample from Microsoft Graph for the current tenant.
+    Admin-only: only users belonging to the tenant may call this while signed in.
+    """
+    from web.models import Tenant
+    try:
+        tenant = db.session.get(Tenant, current_user.tenant_id)
+        if not tenant:
+            return jsonify({'success': False, 'error': 'Tenant not found for current user'}), 404
+
+        # Try to acquire a token using the tenant app credentials
+        try:
+            from core import azure_graph
+            token = azure_graph._get_token_for_tenant(tenant)
+        except Exception as e:
+            token = None
+            token_err = str(e)
+        else:
+            token_err = None
+
+        # Try to call Graph /devices endpoint (will return empty list on failure)
+        try:
+            from core import azure_graph
+            devices = azure_graph.get_devices(tenant)
+        except Exception as e:
+            devices = []
+            devices_err = str(e)
+        else:
+            devices_err = None
+
+        data = {
+            'tenant': tenant.name,
+            'azure_configured': bool(tenant.azure_client_id and tenant.azure_client_secret and tenant.azure_tenant_id),
+            'token_acquired': bool(token),
+            'token_error': token_err,
+            'devices_count': len(devices) if isinstance(devices, (list, tuple)) else 0,
+            'devices_sample': devices[:5] if isinstance(devices, list) else [],
+            'devices_error': devices_err,
+        }
+
+        return jsonify({'success': True, 'diagnostic': data})
+
+    except Exception as e:
+        logger.error(f'[Azure Inventory Sync Debug] Unexpected error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

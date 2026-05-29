@@ -595,3 +595,13 @@ def acquire_token_by_auth_code(auth_code: str, redirect_uri: str, client_secret:
         logger.debug(f"Failed to persist MSAL cache after auth code exchange: {e}")
 
     return result
+
+
+def get_azure_client(client_id: str, client_secret: str, tenant_id: str):
+    """
+    Factory function to get an Azure Graph client wrapper.
+    Used by background jobs and tenant management services.
+    """
+    from core.azure_graph import AzureGraphClient
+    return AzureGraphClient(client_id, client_secret, tenant_id)
+

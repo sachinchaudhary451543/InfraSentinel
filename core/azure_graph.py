@@ -221,3 +221,62 @@ def get_organization(tenant_record: Optional[object] = None) -> List[Dict[str, A
     except Exception as e:
         logger.error(f"get_organization failed: {e}")
         return []
+
+
+def get_subscribed_skus(tenant_record: Optional[object] = None) -> List[Dict[str, Any]]:
+    """Fetch subscribed SKUs (licenses) for a tenant."""
+    token = _get_token_for_tenant(tenant_record)
+    if not token:
+        return []
+    try:
+        url = GRAPH_BASE + "/subscribedSkus"
+        return _paged_get(url, token)
+    except Exception as e:
+        logger.error(f"get_subscribed_skus failed: {e}")
+        return []
+
+
+def get_users_with_licenses(tenant_record: Optional[object] = None) -> List[Dict[str, Any]]:
+    """Fetch users and their assigned license details."""
+    token = _get_token_for_tenant(tenant_record)
+    if not token:
+        return []
+    try:
+        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,assignedLicenses"
+        return _paged_get(url, token)
+    except Exception as e:
+        logger.error(f"get_users_with_licenses failed: {e}")
+        return []
+
+
+class AzureGraphClient:
+    """Graph API client wrapper expected by AzureSyncService."""
+
+    def __init__(self, client_id: str, client_secret: str, tenant_id: str):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.tenant_id = tenant_id
+
+        # Class to mimic Tenant model for token retrieval
+        class DummyTenant:
+            def __init__(self, cid, csec, tid):
+                self.azure_client_id = cid
+                self.azure_client_secret = csec
+                self.azure_tenant_id = tid
+        self.tenant_record = DummyTenant(client_id, client_secret, tenant_id)
+
+    def get_devices(self) -> List[Dict[str, Any]]:
+        return get_devices(self.tenant_record)
+
+    def get_users(self) -> List[Dict[str, Any]]:
+        return get_users(self.tenant_record)
+
+    def get_subscribed_skus(self) -> List[Dict[str, Any]]:
+        return get_subscribed_skus(self.tenant_record)
+
+    def get_users_with_licenses(self) -> List[Dict[str, Any]]:
+        return get_users_with_licenses(self.tenant_record)
+
+    def get_device_owners(self, device_id: str) -> List[Dict[str, Any]]:
+        return get_device_owners(device_id, self.tenant_record)
+

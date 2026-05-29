@@ -32,7 +32,10 @@ class OptimizedDashboardService:
         
         try:
             # ─── STEP 1: Get server list with permission filtering ───
-            query = db.session.query(Server)
+            query = db.session.query(Server).filter(
+                Server.device_active_status == 'active',
+                Server.agent_installed == True
+            )
             if current_user.is_superadmin:
                 servers = query.all()
             elif current_user.tenant_id:
@@ -87,19 +90,31 @@ class OptimizedDashboardService:
                 activities = db.session.query(
                     EmployeeActivity.server_id,
                     func.count(EmployeeActivity.id).label('total_count'),
-                    func.sum(db.case((EmployeeActivity.idle_time < 60, 1), else_=0)).label('active_count')
+                    func.sum(db.case((EmployeeActivity.idle_time < 60, 1), else_=0)).label('active_count'),
+                    func.min(EmployeeActivity.timestamp).label('min_timestamp'),
+                    func.max(EmployeeActivity.timestamp).label('max_timestamp')
                 ).filter(
                     EmployeeActivity.server_id.in_(server_ids),
                     EmployeeActivity.timestamp >= today_start
                 ).group_by(EmployeeActivity.server_id).all()
                 
                 for act in activities:
-                    # Assume 10s intervals
                     active_count = act.active_count or 0
                     total_count = act.total_count or 0
+                    min_ts = act.min_timestamp
+                    max_ts = act.max_timestamp
                     
-                    active_time = int(active_count) * 10
-                    total_time = int(total_count) * 10
+                    # Estimate the agent reporting interval dynamically
+                    interval = 30
+                    if total_count > 1 and min_ts and max_ts:
+                        span_sec = (max_ts - min_ts).total_seconds()
+                        avg_diff = span_sec / (total_count - 1)
+                        # Cap the estimated interval to realistic agent ping frequencies (e.g. 10s to 60s)
+                        if 10 <= avg_diff <= 60:
+                            interval = int(round(avg_diff))
+                    
+                    active_time = int(active_count) * interval
+                    total_time = int(total_count) * interval
                     percent = int((active_time / total_time * 100)) if total_time > 0 else 0
                     productivity_stats[act.server_id] = {
                         'active_time_str': f"{active_time // 3600}h {(active_time % 3600) // 60}m",
@@ -235,31 +250,8 @@ class OptimizedDashboardService:
                     'azure_device_id': s.azure_device_id or ''
                 })
             
-            # Add Azure-only devices
-            for dev in azure_devices:
-                name_lower = (dev.display_name or '').lower()
-                if name_lower not in seen_names:
-                    inventory.append({
-                        'id': None,
-                        'hostname': dev.display_name,
-                        'os_info': dev.os_platform or 'Unknown',
-                        'server_type': dev.device_type or 'Endpoint',
-                        'agent_installed': False,
-                        'agent_version': None,
-                        'status_label': 'NOT MONITORED',
-                        'is_online': False,
-                        'type': 'azure',
-                        'ip': 'Unknown',
-                        'is_hyperv_host': False,
-                        'cpu': None,
-                        'ram': None,
-                        'disk': None,
-                        'cpu_percent': 0,
-                        'memory_percent': 0,
-                        'disk_percent': 0,
-                        'assigned_user': owner_by_device_id.get(dev.id),
-                        'azure_device_id': dev.device_id
-                    })
+            # Omitted adding Azure-only devices to monitoring dashboard as per requirements
+            pass
             
             # Sort online systems to top
             inventory.sort(key=lambda x: x.get('is_online', False), reverse=True)

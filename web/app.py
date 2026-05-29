@@ -16,6 +16,7 @@ import platform
 from datetime import datetime
 from urllib.parse import unquote
 
+
 # Load environment variables from .env file if it exists
 def load_env_file():
     """Load environment variables from .env file."""
@@ -41,6 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, redirect, url_for, session, g, request
 from flask_login import LoginManager
 from flask_socketio import SocketIO
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Configure logging
 logging.basicConfig(
@@ -153,6 +155,7 @@ def run_platform_startup():
 # Initialize Flask app
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+app.config['DEBUG'] = False
 
 
 def format_seconds(value):
@@ -224,10 +227,21 @@ def _slugify_tenant(value):
     return slug.strip("-")
 
 # Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Waitress does not support WebSocket upgrades in WSGI mode, so use polling-only transport
+# to keep the existing UI and Socket.IO routes functional under production deployment.
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='threading',
+    allow_upgrades=False,
+    transports=['polling'],
+)
 
 # Enable /t/<tenant>/... path routing before Flask endpoint matching.
 app.wsgi_app = TenantPathPrefixMiddleware(app.wsgi_app)
+
+# Security hardening: Fix proxy headers for proper X-Forwarded-* handling
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Enable HTTP response compression to reduce payload sizes (gzip/brotli)
 try:
@@ -501,6 +515,50 @@ def _resolve_request_tenant_context():
         g.request_tenant_source = source
 
 
+@app.before_request
+def _enforce_tenant_onboarding():
+    """Redirect users to tenant settings onboarding until Azure/SharePoint are registered.
+
+    Allows static assets, auth routes, logout and the tenant settings/manage_azure pages.
+    """
+    from flask_login import current_user
+
+    # Skip static and agent API endpoints
+    if request.path.startswith('/static/') or request.path.startswith('/api/v2/agent/') or request.path.startswith('/api/v2/agents/'):
+        return None
+
+    # If not logged in, nothing to enforce here
+    if not getattr(current_user, 'is_authenticated', False):
+        return None
+
+    try:
+        tenant = None
+        if getattr(current_user, 'tenant_id', None):
+            tenant = db.session.get(Tenant, int(current_user.tenant_id))
+
+        # If tenant cannot be determined, allow access (other checks will handle it)
+        if not tenant:
+            return None
+
+        # If tenant is active but Azure not registered yet, require setup before showing dashboards
+        if not getattr(tenant, 'azure_registered', False):
+            # Allowed endpoints while onboarding
+            allowed = {
+                'tenants.tenant_settings',
+                'tenants.manage_tenant_azure',
+                'auth.logout',
+                'auth.login',
+                'auth.register',
+            }
+
+            if request.endpoint not in allowed:
+                return redirect(url_for('tenants.tenant_settings'))
+
+    except Exception:
+        # On unexpected errors, do not block the request flow
+        return None
+
+
 def _get_default_branding():
     """Get default branding when no tenant is resolved"""
     return {
@@ -610,6 +668,11 @@ def index():
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static', 'favicon_io'),
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring uptime."""
+    return {"status": "ok"}, 200
 
 
 def ensure_initial_setup():
