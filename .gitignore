@@ -16,6 +16,9 @@ storedCred.xml
 
 # ── DATABASES (contain real org data) ───────────────────────────────────────
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.sqlite
 *.sqlite3
 data/*.db
@@ -23,6 +26,14 @@ data/*.log
 data/*.csv
 central.db
 server_monitor.db
+*(1).*
+*(2).*
+
+data/*.db
+data/*.db-wal
+data/*.db-shm
+.venv/
+__pycache__/
 
 # ── PYTHON ───────────────────────────────────────────────────────────────────
 __pycache__/
@@ -33,6 +44,7 @@ __pycache__/
 *.egg
 *.egg-info/
 dist/
+!web/static/dist/
 build/
 .eggs/
 .venv/
@@ -55,7 +67,8 @@ web/static/uploads/
 *.jpeg
 !web/static/images/login_hero.png
 !web/static/images/logo_icon.png
-!web/static/favicon_io/
+!web/static/images/BaffleSol.png
+!web/static/favicon_io/*
 
 # ── BACKUP / TEMP FILES ──────────────────────────────────────────────────────
 backups/
