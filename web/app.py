@@ -227,14 +227,20 @@ def _slugify_tenant(value):
     return slug.strip("-")
 
 # Initialize SocketIO
-# Waitress does not support WebSocket upgrades in WSGI mode, so use polling-only transport
-# to keep the existing UI and Socket.IO routes functional under production deployment.
+# Production uses Gunicorn + Gevent (with Redis message queue if available), development uses Waitress.
+# We enable standard upgrades to allow fast, persistent WebSocket connections sticky to the worker process,
+# and fall back to Redis-coordinated polling across multiple Gunicorn workers.
+redis_url = os.environ.get('REDIS_URL')
+socketio_kwargs = {
+    "cors_allowed_origins": "*"
+}
+if redis_url:
+    socketio_kwargs["message_queue"] = redis_url
+    logging.info("Socket.IO initialized with Redis Message Queue adapter")
+
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
-    async_mode='threading',
-    allow_upgrades=False,
-    transports=['polling'],
+    **socketio_kwargs
 )
 
 # Enable /t/<tenant>/... path routing before Flask endpoint matching.
