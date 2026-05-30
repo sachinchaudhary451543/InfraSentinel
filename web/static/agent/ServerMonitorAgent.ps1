@@ -174,6 +174,23 @@ function Send-Screenshot {
     }
 }
 
+# ── Productivity classification ──
+$ProductiveApps = @(
+    'chrome','firefox','msedge','brave','opera',   # browsers
+    'winword','excel','powerpnt','onenote','outlook','teams','zoom','slack','msteams',
+    'code','devenv','pycharm64','idea64','webstorm64','rider64','clion64',
+    'notepad++','sublime_text','atom','vim','nvim',
+    'cmd','powershell','pwsh','wt','WindowsTerminal',
+    'python','pythonw','node','java'
+)
+$IdleThresholdSeconds = 120   # 2 min without input = idle
+$TickSeconds          = 10    # loop sleep interval
+
+# ── Session time accumulators (reset on each boot / agent start) ──
+$sessionActiveSec     = 0
+$sessionIdleSec       = 0
+$sessionProductiveSec = 0
+
 # ── Main Loop ──
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  ServerMonitor Agent v3.1" -ForegroundColor Cyan
@@ -187,16 +204,49 @@ $loopCount = 0
 while ($true) {
     $loopCount++
 
+    # ── Resolve the interactive logged-in user ──
+    $activeUser = ""
+    try {
+        # Best source: WMI reports the console user even when running as SYSTEM
+        $activeUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    } catch {}
+    if (-not $activeUser) {
+        try {
+            # Fallback: owner of the Explorer shell process
+            $activeUser = (Get-Process -Name explorer -IncludeUserName -ErrorAction SilentlyContinue | Select-Object -First 1).UserName
+        } catch {}
+    }
+    if (-not $activeUser) { $activeUser = $env:USERNAME }
+    if ($activeUser -like "*\*") { $activeUser = $activeUser.Split("\")[-1] }
+
+    # ── Measure idle & productive time for this tick ──
+    $currentIdleSec = Get-IdleTime
+    $currentApp     = Get-ActiveApp
+
+    if ($currentIdleSec -ge $IdleThresholdSeconds) {
+        $sessionIdleSec += $TickSeconds
+    } else {
+        $sessionActiveSec += $TickSeconds
+        # Check if active app is productive
+        $appLower = $currentApp.ToLower()
+        $isProductive = $ProductiveApps | Where-Object { $appLower -like "*$_*" }
+        if ($isProductive) { $sessionProductiveSec += $TickSeconds }
+    }
+
     $payload = @{
-        api_key        = $ApiKey
-        hostname       = $env:COMPUTERNAME
-        logged_in_user = $env:USERNAME
-        metrics        = Get-Metrics
-        active_app     = Get-ActiveApp
-        window_title   = Get-ActiveWindowTitle
-        idle_time      = Get-IdleTime
-        running_apps   = Get-RunningApps
-        vms            = Get-VMs
+        api_key           = $ApiKey
+        hostname          = $env:COMPUTERNAME
+        logged_in_user    = $activeUser
+        metrics           = Get-Metrics
+        active_app        = $currentApp
+        window_title      = Get-ActiveWindowTitle
+        idle_time         = $currentIdleSec
+        running_apps      = Get-RunningApps
+        vms               = Get-VMs
+        # Cumulative session time (seconds since agent start)
+        active_time       = $sessionActiveSec
+        idle_time_total   = $sessionIdleSec
+        productive_time   = $sessionProductiveSec
     }
 
     try {

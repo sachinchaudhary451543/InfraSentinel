@@ -35,6 +35,10 @@ class IdentityCorrelationService:
         # The logged_in_user might be DOMAIN\username, username, or email
         clean_user = logged_in_user.split("\\")[-1].lower() if "\\" in logged_in_user else logged_in_user.lower()
         
+        # Skip system or background accounts
+        if clean_user in ('system', 'local system', 'network service', 'local service', 'administrator', 'admin'):
+            return
+        
         # Try to find Employee
         employee = Employee.query.filter_by(tenant_id=tenant_id, local_username=clean_user).first()
         if not employee:

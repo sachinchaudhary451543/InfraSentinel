@@ -199,15 +199,20 @@ $AgentSource = "{server_url}/static/agent/ServerMonitorAgent.ps1"
 Write-Host "Downloading agent payload from $AgentSource..."
 Invoke-WebRequest -Uri $AgentSource -OutFile "$AgentDir{bslash}ServerMonitorAgent.ps1" -TimeoutSec 30
 
-# Create scheduled task
+# Create scheduled task - run at logon of current user so Win32 idle/screenshot APIs work
 Write-Host "Registering persistent monitoring service..."
-$Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File $AgentDir{bslash}ServerMonitorAgent.ps1 -ApiKey `"$ApiKey`" -ServerUrl `"{server_url}`""
-$Trigger = New-ScheduledTaskTrigger -AtStartup
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName "ServerMonitorBot" -Action $Action -Trigger $Trigger -Settings $Settings -RunLevel Highest -Force
+$CurrentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$Action   = New-ScheduledTaskAction -Execute "powershell.exe" `
+               -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File `"$AgentDir{bslash}ServerMonitorAgent.ps1`" -ApiKey `"$ApiKey`" -ServerUrl `"{server_url}`""
+$Trigger  = New-ScheduledTaskTrigger -AtLogOn -User $CurrentUser
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit 0
+$Principal = New-ScheduledTaskPrincipal -UserId $CurrentUser -LogonType Interactive -RunLevel Highest
+Register-ScheduledTask -TaskName "ServerMonitorBot" -Action $Action -Trigger $Trigger `
+    -Settings $Settings -Principal $Principal -Force
 
-# Start immediately
-Start-ScheduledTask -TaskName "ServerMonitorBot"
+# Start immediately in current session
+Write-Host "Starting agent in current session..."
+Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File `"$AgentDir{bslash}ServerMonitorAgent.ps1`" -ApiKey `"$ApiKey`" -ServerUrl `"{server_url}`"" -WindowStyle Hidden
 Write-Host ""
 Write-Host "Bot successfully deployed and tracking started!" -ForegroundColor Green
 Write-Host "Your agent should appear in the portal within 30 seconds." -ForegroundColor Cyan

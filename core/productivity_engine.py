@@ -123,6 +123,26 @@ class ProductivityEngine:
             ).first()
             if rule:
                 classification = rule.category
+            else:
+                # Built-in fallback classification rules
+                app_lower = active_app.lower()
+                productive_keywords = [
+                    'code', 'studio', 'excel', 'word', 'teams', 'slack', 'zoom', 'powerpnt', 'outlook',
+                    'mstsc', 'chrome', 'msedge', 'pycharm', 'idea', 'git', 'docker', 'cmd', 'powershell',
+                    'bash', 'ssh', 'putty', 'notepad', 'sublime', 'postman', 'workbench', 'developer',
+                    'terminal', 'explorer', 'sourcetree'
+                ]
+                non_productive_keywords = [
+                    'netflix', 'youtube', 'facebook', 'instagram', 'twitter', 'tiktok', 'spotify',
+                    'steam', 'discord', 'game', 'xbox', 'candycrush', 'play', 'video'
+                ]
+                
+                # Check productive keywords first
+                if any(kw in app_lower for kw in productive_keywords):
+                    classification = 'productive'
+                # Check non-productive keywords
+                elif any(kw in app_lower for kw in non_productive_keywords):
+                    classification = 'non_productive'
                 
         # Update session aggregates (storing SECONDS in the minutes columns)
         if idle_time_seconds < 60:
