@@ -543,36 +543,42 @@ def sync_all_tenants():
                 m_count = service.sync_metrics_batch(minutes=batch_minutes)
             except Exception as e:
                 logger.error(f"[SharePoint Sync] Metrics failed: {e}")
+                db.session.rollback()
                 
             try:
                 logger.info(f"[SharePoint Sync] Syncing VM snapshots...")
                 v_count = service.sync_vms_snapshot()
             except Exception as e:
                 logger.error(f"[SharePoint Sync] VMs failed: {e}")
+                db.session.rollback()
                 
             try:
                 logger.info(f"[SharePoint Sync] Syncing activity logs...")
                 a_count = service.sync_activity_batch(minutes=batch_minutes)
             except Exception as e:
                 logger.error(f"[SharePoint Sync] Activity failed: {e}")
+                db.session.rollback()
                 
             try:
                 logger.info(f"[SharePoint Sync] Syncing screenshots...")
                 s_count = service.sync_screenshots_batch(minutes=batch_minutes)
             except Exception as e:
                 logger.error(f"[SharePoint Sync] Screenshots failed: {e}")
+                db.session.rollback()
                 
             try:
                 logger.info(f"[SharePoint Sync] Syncing audit logs...")
                 l_count = service.sync_logs_instant(minutes=batch_minutes)
             except Exception as e:
                 logger.error(f"[SharePoint Sync] Audit logs failed: {e}")
+                db.session.rollback()
                 
             try:
                 logger.info(f"[SharePoint Sync] Syncing employee directory...")
                 e_count = service.sync_employees()
             except Exception as e:
                 logger.error(f"[SharePoint Sync] Employees failed: {e}")
+                db.session.rollback()
             
             # Update last sync timestamp
             t.previous_sharepoint_sync_timestamp = t.last_sharepoint_sync_timestamp
@@ -663,31 +669,37 @@ def force_sync_tenant(tenant_id: int) -> Dict[str, Any]:
             m_count = service.sync_metrics_batch(minutes=minutes_back)
         except Exception as e:
             errors.append(f"Metrics Sync Error: {str(e)}")
+            db.session.rollback()
             
         try:
             v_count = service.sync_vms_snapshot()
         except Exception as e:
             errors.append(f"VM Sync Error: {str(e)}")
+            db.session.rollback()
             
         try:
             a_count = service.sync_activity_batch(minutes=minutes_back)
         except Exception as e:
             errors.append(f"Activity Sync Error: {str(e)}")
+            db.session.rollback()
             
         try:
             s_count = service.sync_screenshots_batch(minutes=minutes_back)
         except Exception as e:
             errors.append(f"Screenshot Sync Error: {str(e)}")
+            db.session.rollback()
             
         try:
             l_count = service.sync_logs_instant(minutes=minutes_back)
         except Exception as e:
             errors.append(f"Logs Sync Error: {str(e)}")
+            db.session.rollback()
             
         try:
             e_count = service.sync_employees()
         except Exception as e:
             errors.append(f"Employee Sync Error: {str(e)}")
+            db.session.rollback()
         
         # Update timestamps
         tenant.previous_sharepoint_sync_timestamp = tenant.last_sharepoint_sync_timestamp

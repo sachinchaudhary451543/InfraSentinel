@@ -679,29 +679,38 @@ def ensure_initial_setup():
     with app.app_context():
         db.create_all()
 
-        # ── Safe column migrations for SQLite ─────────────────────────
-        # db.create_all() creates NEW tables but does NOT add columns to
-        # existing tables.  The helper below uses ALTER TABLE ADD COLUMN
-        # wrapped in try/except so it is fully idempotent.
-        _safe_migrations = [
-            # Phase 3 – RBAC
-            ("user",     "employee_id",      "INTEGER"),
-            ("employee", "manager_id",       "INTEGER"),
-            # Phase 4 – Device data quality
-            ("azure_device", "last_graph_sync",    "DATETIME"),
-            ("azure_device", "last_intune_sync",   "DATETIME"),
-            ("azure_device", "last_heartbeat",     "DATETIME"),
-            ("azure_device", "last_user_activity", "DATETIME"),
-        ]
-        for table, column, col_type in _safe_migrations:
-            try:
-                db.session.execute(
-                    db.text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-                )
-                db.session.commit()
-                logging.info(f"Migration: added {table}.{column}")
-            except Exception:
-                db.session.rollback()  # column already exists — safe to ignore
+        # ── Safe dynamic database schema synchronization ───────────────
+        try:
+            from sqlalchemy import inspect
+            engine = db.engine
+            inspector = inspect(engine)
+            is_postgres = engine.dialect.name == 'postgresql'
+            logging.info(f"[DB-SYNC] Checking database schema (dialect={engine.dialect.name})...")
+            
+            for table_name, table in db.metadata.tables.items():
+                if not inspector.has_table(table_name):
+                    continue
+                    
+                existing_columns = {col['name'].lower() for col in inspector.get_columns(table_name)}
+                for col in table.columns:
+                    col_name = col.name
+                    if col_name.lower() not in existing_columns:
+                        sql_type = str(col.type.compile(dialect=engine.dialect))
+                        if is_postgres:
+                            if 'DATETIME' in sql_type.upper():
+                                sql_type = 'TIMESTAMP'
+                                
+                        alter_query = f"ALTER TABLE {table_name} ADD COLUMN {col_name} {sql_type}"
+                        logging.info(f"[DB-SYNC] Column '{col_name}' is missing in table '{table_name}'. Running: {alter_query}")
+                        try:
+                            db.session.execute(db.text(alter_query))
+                            db.session.commit()
+                            logging.info(f"[DB-SYNC] Successfully added column {table_name}.{col_name}")
+                        except Exception as inner_e:
+                            db.session.rollback()
+                            logging.error(f"[DB-SYNC] Failed to add column {table_name}.{col_name}: {inner_e}")
+        except Exception as e:
+            logging.error(f"[DB-SYNC] Schema synchronization failed: {e}")
 
         # Migration validation disabled: using db.create_all() directly
         # Alembic migrations can be re-enabled later if needed

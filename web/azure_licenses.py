@@ -47,10 +47,21 @@ def acquire_token(client_id: str, client_secret: str, tenant_id: str, scope: Lis
 
 
 def _get(url: str, token: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+    """HTTP GET wrapper that never raises for Graph permission errors.
+    On a 403 it logs a warning and returns an empty dict so callers can continue.
+    """
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    r = requests.get(url, headers=headers, params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except requests.HTTPError as http_err:
+        if r.status_code == 403:
+            LOG.warning(f"Graph API 403 forbidden for {url}: {http_err}")
+            return {}
+        else:
+            LOG.error(f"Graph API request failed for {url}: {http_err}")
+            raise
 
 
 def list_subscribed_skus(token: str) -> List[Dict[str, Any]]:

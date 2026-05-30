@@ -23,6 +23,27 @@ def normalize_hostname(hostname: str) -> str:
 class IdentityCorrelationService:
     
     @staticmethod
+    def _upsert_server(tenant_id: int, server_id: int, hostname: str, serial_number: str) -> Server:
+        """Helper to ensure server record exists and is updated."""
+        server = Server.query.filter_by(id=server_id, tenant_id=tenant_id).first()
+        if not server:
+            server = Server(
+                id=server_id, 
+                tenant_id=tenant_id, 
+                hostname=hostname, 
+                serial_number=serial_number, 
+                agent_installed=True, 
+                last_seen=datetime.utcnow()
+            )
+            db.session.add(server)
+        else:
+            server.hostname = hostname or server.hostname
+            server.serial_number = serial_number or server.serial_number
+            server.agent_installed = True
+            server.last_seen = datetime.utcnow()
+        return server
+
+    @staticmethod
     def correlate_agent_payload(tenant_id: int, server_id: int, hostname: str, serial_number: str, logged_in_user: str) -> None:
         """
         Called when an agent heartbeat or metrics payload is received.
@@ -31,12 +52,16 @@ class IdentityCorrelationService:
         if not logged_in_user:
             return
         
-        # 1. Find or resolve the Employee
+        # 1. Update/Create Server
+        IdentityCorrelationService._upsert_server(tenant_id, server_id, hostname, serial_number)
+        
+        # 2. Find or resolve the Employee
         # The logged_in_user might be DOMAIN\username, username, or email
         clean_user = logged_in_user.split("\\")[-1].lower() if "\\" in logged_in_user else logged_in_user.lower()
         
         # Skip system or background accounts
         if clean_user in ('system', 'local system', 'network service', 'local service', 'administrator', 'admin'):
+            db.session.commit()
             return
         
         # Try to find Employee
