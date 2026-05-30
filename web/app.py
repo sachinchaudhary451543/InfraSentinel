@@ -228,15 +228,23 @@ def _slugify_tenant(value):
 
 # Initialize SocketIO
 # Production uses Gunicorn + Gevent (with Redis message queue if available), development uses Waitress.
-# We enable standard upgrades to allow fast, persistent WebSocket connections sticky to the worker process,
-# and fall back to Redis-coordinated polling across multiple Gunicorn workers.
+# async_mode MUST be 'gevent' to match the GeventWebSocketWorker used in the Dockerfile.
+# Without it, flask-socketio auto-detects incorrectly and each worker's session store is isolated,
+# causing 400 Bad Request errors on cross-worker polling/upgrade requests.
 redis_url = os.environ.get('REDIS_URL')
 socketio_kwargs = {
-    "cors_allowed_origins": "*"
+    "cors_allowed_origins": "*",
+    "async_mode": "gevent",       # CRITICAL: must match gunicorn+gevent worker type
+    "logger": False,
+    "engineio_logger": False,
+    "ping_timeout": 60,
+    "ping_interval": 25,
 }
 if redis_url:
     socketio_kwargs["message_queue"] = redis_url
-    logging.info("Socket.IO initialized with Redis Message Queue adapter")
+    logging.info("Socket.IO initialized with Redis Message Queue adapter (gevent async_mode)")
+else:
+    logging.warning("Socket.IO running without Redis – WebSocket sessions are NOT shared across workers.")
 
 socketio = SocketIO(
     app,
