@@ -368,7 +368,7 @@ def api_server_screenshots(server_id):
         .order_by(db.func.date(Screenshot.captured_at).desc())
         .all()
     )
-    distinct_dates = [r.d for r in all_dates_rows if r.d]
+    distinct_dates = [str(r.d) for r in all_dates_rows if r.d]
 
     result = []
     for s in shots:
