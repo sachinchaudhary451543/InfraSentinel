@@ -21,7 +21,7 @@ from functools import wraps
 # CONFIGURATION
 # ============================================================================
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 REDIS_CONN = Redis.from_url(REDIS_URL)
 
 # Configure logging

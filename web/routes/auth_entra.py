@@ -35,7 +35,7 @@ def login():
     """Initiate Microsoft Entra ID login."""
     # TEMPORARY: Disabled until redirect URI is registered in Azure Portal
     from flask import flash
-    flash("Microsoft login is temporarily disabled. Please register 'http://localhost:8080/auth/entra/callback' in Azure Portal Authentication settings.", "warning")
+    flash("Microsoft login is temporarily disabled. Please register 'http://127.0.0.1:3000/auth/entra/callback' in Azure Portal Authentication settings.", "warning")
     return redirect(url_for('auth.login'))
     
     if not CLIENT_ID:
@@ -166,7 +166,7 @@ def logout():
     logger.info(f"User {email} logged out")
     return redirect(
         "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
-        "?post_logout_redirect_uri=http://localhost:8080/"
+        "?post_logout_redirect_uri=http://127.0.0.1:3000/"
     )
 
 

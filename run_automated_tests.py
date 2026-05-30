@@ -21,7 +21,7 @@ from web.models import db, Server, RemoteCommand, AgentKey
 # TEST CONFIGURATION
 # ============================================================================
 
-BACKEND_URL = "http://localhost:8080"
+BACKEND_URL = "http://localhost:3000"
 AGENT_KEY = "demo_mode_key"
 TEST_RESULTS = []
 

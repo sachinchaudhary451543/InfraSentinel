@@ -58,10 +58,13 @@ def _slugify_tenant(value):
     return slug.strip("-")
 
 # Configure database
-DB_PATH = os.path.join(os.path.dirname(__file__), 'instance', 'admin_portal.db')
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+db_url = os.environ.get('DATABASE_URL')
+if db_url:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), 'instance', 'admin_portal.db')
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Enable /t/<tenant>/... path routing before Flask endpoint matching.
@@ -327,11 +330,13 @@ def ensure_initial_setup():
     """Initialize portal database and default records."""
     with app.app_context():
         # Ensure tenant table columns exist for Azure integration before creating tables
-        ensure_tenant_columns(DB_PATH)
+        if not os.environ.get('DATABASE_URL'):
+            ensure_tenant_columns(DB_PATH)
 
         # Create all database tables
         db.create_all()
-        ensure_user_columns(DB_PATH)
+        if not os.environ.get('DATABASE_URL'):
+            ensure_user_columns(DB_PATH)
         
         # Auto-create default admin user if no users exist
         if not User.query.first():

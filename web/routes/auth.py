@@ -23,11 +23,26 @@ def login():
         return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
-        user = User.query.filter_by(username=request.form['username']).first()
-        if user and check_password_hash(user.password, request.form['password']):
+        org_id = (request.form.get('org_id') or '').strip()
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+
+        if not org_id:
+            flash('Organization ID is required to sign in.', 'danger')
+            return render_template('login.html'), 400
+
+        # Resolve tenant by UUID or name
+        tenant = Tenant.query.filter((Tenant.uuid == org_id) | (Tenant.name == org_id)).first()
+        if not tenant:
+            flash('Organization not found. Check your Organization ID.', 'danger')
+            return render_template('login.html'), 404
+
+        user = User.query.filter_by(username=username, tenant_id=tenant.id).first()
+        if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for('main.dashboard'))
-        flash('Invalid username or password', 'danger')
+
+        flash('Invalid username or password for the specified organization.', 'danger')
         return render_template('login.html'), 401
     return render_template('login.html')
 
@@ -137,9 +152,11 @@ def register():
     # Auto-login the new user and redirect to their dashboard
     new_user = User.query.filter_by(username=username).first()
     if new_user:
+        # Show the organization identifier (UUID) to the admin so they can distribute it to team members
+        org_id = tenant.uuid if getattr(tenant, 'uuid', None) else str(tenant.id)
         login_user(new_user)
-        flash(f'Welcome! Your organization "{tenant_name}" has been created successfully.', 'success')
-        return redirect(url_for('main.dashboard'))
+        flash(f'Welcome! Your organization "{tenant_name}" has been created successfully. Organization ID: {org_id} — please save this and share with your users.', 'success')
+        return redirect(url_for('tenants.tenant_settings'))
 
     # Fallback: redirect to login if auto-login fails
     flash('Registration successful. You can now sign in.', 'success')

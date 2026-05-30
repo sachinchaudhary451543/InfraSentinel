@@ -649,9 +649,9 @@ def download_analysis_report():
         print(f"download_analysis_report error: {e}")
         return jsonify({"error": str(e)}), 500
 
-logo_path = os.path.join(BASE_DIR, "static", "images", "BaffleSol.png")
+logo_path = os.path.join(BASE_DIR, "static", "images", "Bafflesol.png")
 if not os.path.exists(logo_path):
-    logo_path = os.path.join(BASE_DIR, "static", "images", "BaffleSol.jpg")
+    logo_path = os.path.join(BASE_DIR, "static", "images", "Bafflesol.jpg")
 @smart_analyzer.context_processor
 def inject_logo():
     if os.path.exists(logo_path):

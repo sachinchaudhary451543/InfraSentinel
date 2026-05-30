@@ -146,7 +146,9 @@ def admin_users():
     """Manage all users across tenants"""
     users = User.query.all()
     tenants = Tenant.query.all()
-    return render_template('admin/users.html', users=users, tenants=tenants)
+    from web.models import Employee
+    employees = Employee.query.all()
+    return render_template('admin/users.html', users=users, tenants=tenants, employees=employees)
 
 
 @admin_bp.route('/users/create', methods=['POST'])
@@ -159,6 +161,8 @@ def admin_create_user():
     password = request.form.get('password', '')
     tenant_id = request.form.get('tenant_id', type=int)
     is_superadmin = request.form.get('is_superadmin') == '1'
+    employee_id_raw = request.form.get('employee_id')
+    employee_id = int(employee_id_raw) if employee_id_raw and employee_id_raw.isdigit() else None
 
     if not username or not password:
         flash('Username and password are required', 'danger')
@@ -173,7 +177,8 @@ def admin_create_user():
         password=generate_password_hash(password),
         tenant_id=tenant_id,
         is_superadmin=is_superadmin,
-        role='super_admin' if is_superadmin else 'tenant_admin'
+        role='super_admin' if is_superadmin else 'tenant_admin',
+        employee_id=employee_id
     )
     db.session.add(user)
     db.session.commit()

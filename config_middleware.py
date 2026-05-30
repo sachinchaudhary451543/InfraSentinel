@@ -21,7 +21,7 @@ logger = logging.getLogger("ServerMonitor-Security")
 # REDIS & RATE LIMITING
 # ============================================================================
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
 REDIS_CONN = Redis.from_url(REDIS_URL)
 
 # Initialize rate limiter
@@ -253,7 +253,7 @@ def setup_cors(app):
     
     CORS(app, resources={
         r"/api/*": {
-            "origins": os.environ.get("CORS_ORIGINS", "http://localhost:*").split(","),
+            "origins": os.environ.get("CORS_ORIGINS", "*").split(","),
             "methods": ["GET", "POST", "PUT", "DELETE"],
             "allow_headers": ["Content-Type", "X-Agent-Key"],
             "max_age": 3600

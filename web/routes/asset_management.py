@@ -5,11 +5,16 @@ Employees, Devices, Login/Logout tracking, Software Deployment, and Remote Acces
 
 import logging
 from datetime import datetime
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort, flash, make_response
 from flask_login import login_required, current_user
+from web.utils import require_tenant_access
 
+import csv
+import io
+
+from web.active_agents_monitor import ActiveAgentsMonitor
 from web.models import (
-    db, Server, Metric, EmployeeAssetLog, DeviceActivity, 
+    db, Server, Metric, EmployeeAssetLog, DeviceActivity, EmployeeDeviceAssignment,
     SystemAlert, AuditLog, RemoteCommand, Tenant,
     AzureUser, AzureDevice, AzureDeviceOwner, Screenshot, Employee
 )
@@ -17,6 +22,312 @@ from web.models import (
 logger = logging.getLogger("[ASSET_MGMT]")
 
 asset_mgmt_bp = Blueprint('asset_mgmt', __name__)
+
+
+def _seconds_to_hms(value):
+    """Productivity columns currently store seconds despite legacy *_minutes names."""
+    seconds = int(value or 0)
+    return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+
+
+def _compact_identity(value):
+    return (value or '').lower().replace('.', '').replace('_', '').replace('-', '')
+
+
+def _build_employee_device_maps(tenant_id, day_start, day_end):
+    """Build caches to resolve employees to servers and Azure devices."""
+    assignments = EmployeeDeviceAssignment.query.filter_by(tenant_id=tenant_id, is_active=True).all()
+    servers = Server.query.filter_by(tenant_id=tenant_id).all()
+    server_map = {s.id: s for s in servers}
+    server_ids = [s.id for s in servers]
+
+    azure_devices = AzureDevice.query.filter_by(tenant_id=tenant_id).all()
+    azure_device_map = {d.id: d for d in azure_devices}
+
+    azure_users = AzureUser.query.filter_by(tenant_id=tenant_id).all()
+    azure_users_by_email = {u.email.lower(): u for u in azure_users if u.email}
+    azure_users_by_employee_id = {u.employee_id.lower(): u for u in azure_users if u.employee_id}
+    azure_users_by_mail_nickname = {u.mail_nickname.lower(): u for u in azure_users if u.mail_nickname}
+    azure_users_by_sam = {u.sam_account_name.lower(): u for u in azure_users if u.sam_account_name}
+
+    azure_owners = AzureDeviceOwner.query.filter_by(tenant_id=tenant_id).all()
+    owners_by_user_id = {}
+    for owner in azure_owners:
+        owners_by_user_id.setdefault(owner.user_id, []).append(owner)
+
+    latest_screenshot_by_server = {}
+    if server_ids:
+        screenshots = Screenshot.query.filter(Screenshot.server_id.in_(server_ids)).order_by(Screenshot.server_id.asc(), Screenshot.captured_at.desc()).all()
+        for screenshot in screenshots:
+            if screenshot.server_id not in latest_screenshot_by_server:
+                latest_screenshot_by_server[screenshot.server_id] = screenshot.id
+
+    assignment_by_emp = {a.employee_id: a for a in assignments}
+
+    activity_rows = DeviceActivity.query.filter(
+        DeviceActivity.server_id.in_(server_ids),
+        DeviceActivity.login_time >= day_start,
+        DeviceActivity.login_time <= day_end
+    ).order_by(DeviceActivity.login_time.desc()).all() if server_ids else []
+
+    latest_activity_by_user = {}
+    for act in activity_rows:
+        user_key = (act.session_user or '').strip().lower()
+        if user_key and user_key not in latest_activity_by_user:
+            latest_activity_by_user[user_key] = act
+
+    asset_logs = EmployeeAssetLog.query.filter_by(tenant_id=tenant_id).order_by(EmployeeAssetLog.login_timestamp.desc()).all()
+    latest_log_by_email = {}
+    for log in asset_logs:
+        if log.employee_email:
+            key = log.employee_email.lower()
+            if key not in latest_log_by_email:
+                latest_log_by_email[key] = log
+
+    return {
+        'server_map': server_map,
+        'azure_device_map': azure_device_map,
+        'azure_users_by_email': azure_users_by_email,
+        'azure_users_by_employee_id': azure_users_by_employee_id,
+        'azure_users_by_mail_nickname': azure_users_by_mail_nickname,
+        'azure_users_by_sam': azure_users_by_sam,
+        'owners_by_user_id': owners_by_user_id,
+        'assignment_by_emp': assignment_by_emp,
+        'latest_activity_by_user': latest_activity_by_user,
+        'latest_log_by_email': latest_log_by_email,
+        'latest_screenshot_by_server': latest_screenshot_by_server,
+    }
+
+
+def _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps):
+    """Try to resolve a device for an employee using assignment, Azure, activity, and asset logs."""
+    server = None
+    azure_device = None
+    source = 'unassigned'
+
+    assignment = device_maps['assignment_by_emp'].get(emp.id)
+    if assignment:
+        if assignment.server_id:
+            server = device_maps['server_map'].get(assignment.server_id)
+            source = 'assignment'
+        elif assignment.azure_device_id:
+            azure_device = device_maps['azure_device_map'].get(assignment.azure_device_id)
+            source = 'assignment'
+
+    if not server and not azure_device:
+        local_username = (emp.local_username or '').strip().lower()
+        username_candidates = [local_username]
+        if emp.email:
+            username_candidates.append(emp.email.split('@', 1)[0].lower())
+
+        for username in username_candidates:
+            if not username:
+                continue
+            activity = device_maps['latest_activity_by_user'].get(username)
+            if activity:
+                server = device_maps['server_map'].get(activity.server_id)
+                source = 'device_activity'
+                break
+
+    if not server and not azure_device and emp.email:
+        log = device_maps['latest_log_by_email'].get(emp.email.lower())
+        if log:
+            server = device_maps['server_map'].get(log.server_id)
+            source = 'employee_asset_log'
+            if not server:
+                return {
+                    'name': log.hostname,
+                    'ip': log.ip_address or '',
+                    'status': 'present',
+                    'source': source,
+                    'status_text': 'Present'
+                }
+
+    if not server and not azure_device:
+        azure_user = None
+        if emp.email:
+            azure_user = device_maps['azure_users_by_email'].get(emp.email.lower())
+        if not azure_user and emp.local_username:
+            azure_user = device_maps['azure_users_by_employee_id'].get(emp.local_username.lower())
+        if not azure_user and emp.local_username:
+            azure_user = device_maps['azure_users_by_mail_nickname'].get(emp.local_username.lower())
+        if not azure_user and emp.local_username:
+            azure_user = device_maps['azure_users_by_sam'].get(emp.local_username.lower())
+
+        if azure_user:
+            owners = device_maps['owners_by_user_id'].get(azure_user.id, [])
+            if owners:
+                owner = owners[0]
+                azure_device = device_maps['azure_device_map'].get(owner.device_id)
+                source = 'azure_mapping'
+
+    if server:
+        return {
+            'name': server.hostname,
+            'ip': server.ip or '',
+            'server_id': server.id,
+            'status': 'present' if getattr(server, 'is_online', False) else 'absent',
+            'source': source,
+            'status_text': 'Present' if getattr(server, 'is_online', False) else 'Absent'
+        }
+
+    if azure_device:
+        return {
+            'name': azure_device.display_name,
+            'ip': '',
+            'status': 'present' if azure_device.is_active == 1 else 'absent',
+            'source': source,
+            'status_text': 'Present' if azure_device.is_active == 1 else 'Absent'
+        }
+
+    return {
+        'name': '',
+        'ip': '',
+        'status': 'absent',
+        'source': source,
+        'status_text': 'Absent'
+    }
+
+
+def _find_employee_for_server(server, tenant_id):
+    """Resolve the employee linked to a server via assignment or Azure device mapping."""
+    if not server:
+        return None
+
+    assignment = EmployeeDeviceAssignment.query.filter_by(
+        tenant_id=tenant_id,
+        server_id=server.id,
+        is_active=True
+    ).first()
+    if assignment and assignment.employee_id:
+        return Employee.query.get(assignment.employee_id)
+
+    azure_device = AzureDevice.query.filter_by(
+        tenant_id=tenant_id,
+        display_name=server.hostname
+    ).first()
+    if not azure_device:
+        return None
+
+    owner = AzureDeviceOwner.query.filter_by(
+        tenant_id=tenant_id,
+        device_id=azure_device.id
+    ).first()
+    if not owner:
+        return None
+
+    # owner.user_id stores the AzureUser DB primary key (integer). Use that to fetch the AzureUser.
+    try:
+        azure_user = AzureUser.query.filter_by(
+            tenant_id=tenant_id,
+            id=int(owner.user_id)
+        ).first()
+    except Exception:
+        # In case owner.user_id is unexpectedly not an integer, avoid raising a server error and bail out.
+        return None
+    if not azure_user:
+        return None
+
+    if azure_user.email:
+        emp = Employee.query.filter_by(tenant_id=tenant_id, email=azure_user.email).first()
+        if emp:
+            return emp
+
+    if azure_user.employee_id:
+        emp = Employee.query.filter_by(tenant_id=tenant_id, local_username=azure_user.employee_id).first()
+        if emp:
+            return emp
+
+    if azure_user.sam_account_name:
+        emp = Employee.query.filter_by(tenant_id=tenant_id, local_username=azure_user.sam_account_name).first()
+        if emp:
+            return emp
+
+    return None
+
+
+def _build_productivity_rows(tenant_id, target_date):
+    from web.models import ActivitySession, AttendanceRecord
+
+    employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True).all()
+    attendance = AttendanceRecord.query.filter_by(tenant_id=tenant_id, date=target_date).all()
+    day_start = datetime.combine(target_date, datetime.min.time())
+    day_end = datetime.combine(target_date, datetime.max.time())
+    sessions = ActivitySession.query.filter(
+        ActivitySession.tenant_id == tenant_id,
+        ActivitySession.start_time >= day_start,
+        ActivitySession.start_time <= day_end
+    ).all()
+
+    device_maps = _build_employee_device_maps(tenant_id, day_start, day_end)
+    emp_rows = []
+
+    for emp in employees:
+        att = next((a for a in attendance if a.employee_id == emp.id), None)
+        emp_sessions = [s for s in sessions if s.employee_id == emp.id]
+        
+        # Only skip employees when there is no session, no attendance, and no assigned or mapped device.
+        device_info = _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps)
+        if not emp_sessions and not att and not device_info.get('name'):
+            continue
+        
+        active_sec = sum(s.active_minutes or 0 for s in emp_sessions)
+        idle_sec = sum(s.idle_minutes or 0 for s in emp_sessions)
+        prod_sec = sum(s.productive_minutes or 0 for s in emp_sessions)
+
+        import pytz
+        ist = pytz.timezone('Asia/Kolkata')
+        first_act_str = '—'
+        last_act_str = '—'
+        if att:
+            if att.first_activity:
+                first_act_str = att.first_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
+            if att.last_activity:
+                last_act_str = att.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
+        elif emp_sessions:
+            first_session = min(emp_sessions, key=lambda s: s.start_time or datetime.max)
+            last_session = max(emp_sessions, key=lambda s: s.end_time or (s.start_time or datetime.min))
+            if first_session and first_session.start_time:
+                first_act_str = first_session.start_time.strftime('%I:%M %p')
+            if last_session and last_session.end_time:
+                last_act_str = last_session.end_time.strftime('%I:%M %p')
+            elif last_session and last_session.start_time:
+                last_act_str = last_session.start_time.strftime('%I:%M %p')
+
+        # FIX: Status should be based on actual activity, not just device_info
+        row_status = 'absent'
+        
+        # If there are activity sessions, mark as present
+        if emp_sessions:
+            row_status = 'present'
+        # Otherwise use attendance record status if available
+        elif att and att.status:
+            row_status = att.status
+        # Finally check device status as fallback
+        elif device_info.get('status') == 'present':
+            row_status = 'present'
+
+        emp_rows.append({
+            'id': emp.id,
+            'name': emp.display_name or emp.name or emp.email or emp.local_username or 'Unknown',
+            'email': emp.email or '',
+            'department': emp.department or '',
+            'device': device_info.get('name', ''),
+            'device_ip': device_info.get('ip', ''),
+            'server_id': device_info.get('server_id'),
+            'screenshot_id': device_maps['latest_screenshot_by_server'].get(device_info.get('server_id')),
+            'status': row_status,
+            'first_activity': first_act_str,
+            'last_activity': last_act_str,
+            'active_sec': active_sec,
+            'active_str': _seconds_to_hms(active_sec),
+            'idle_str': _seconds_to_hms(idle_sec),
+            'productive_str': _seconds_to_hms(prod_sec),
+            'source': device_info.get('source', 'unassigned')
+        })
+
+    emp_rows.sort(key=lambda x: x['active_sec'], reverse=True)
+    return emp_rows
 
 
 @asset_mgmt_bp.route('/assets/employees')
@@ -35,14 +346,17 @@ def list_employees_assets():
         
         total_assets = EmployeeAssetLog.query.filter_by(tenant_id=current_user.tenant_id).count()
         
+        employees = Employee.query.filter_by(tenant_id=current_user.tenant_id).all()
+        
         return render_template(
             'asset_management.html',
             total_employees=total_employees,
-            total_assets=total_assets
+            total_assets=total_assets,
+            employees=employees
         )
     except Exception as e:
         logger.error(f"Error loading asset UI: {e}")
-        return render_template('asset_management.html', error=str(e))
+        return render_template('asset_management.html', error=str(e), employees=[])
 
 @asset_mgmt_bp.route('/api/v2/assets/live_activity')
 @login_required
@@ -131,18 +445,50 @@ def get_employees_scroll():
             ))
             
         azure_users = query.all()
+        manual_by_azure_id = {
+            (getattr(me, 'azure_user_id', None) or '').lower(): (me.email or '').lower()
+            for me in manual_list
+            if getattr(me, 'azure_user_id', None) and me.email
+        }
+        manual_by_local = {
+            _compact_identity(getattr(me, 'local_username', None)): (me.email or '').lower()
+            for me in manual_list
+            if getattr(me, 'local_username', None) and me.email
+        }
         for au in azure_users:
             email = (au.email or '').lower()
-            if email and email not in employee_dict:
-                employee_dict[email] = {
+            local_keys = {
+                _compact_identity(au.employee_id),
+                _compact_identity(au.mail_nickname),
+                _compact_identity(email.split('@', 1)[0] if email else ''),
+            }
+            merge_email = (
+                email if email in employee_dict else
+                manual_by_azure_id.get((au.user_id or '').lower()) or
+                next((manual_by_local[k] for k in local_keys if k in manual_by_local), None)
+            )
+
+            if email and not merge_email:
+                merge_email = email
+
+            if merge_email and merge_email not in employee_dict:
+                employee_dict[merge_email] = {
                     'email': au.email,
                     'name': au.display_name or 'Unknown',
                     'title': au.job_title or 'N/A',
                     'department': au.department or 'N/A',
                     'user_id': au.user_id,
+                    'azure_db_id': au.id,
                     'source': 'Azure',
                     'assets': []
                 }
+            elif merge_email:
+                employee_dict[merge_email]['user_id'] = au.user_id
+                employee_dict[merge_email]['azure_db_id'] = au.id
+                employee_dict[merge_email]['email'] = au.email or employee_dict[merge_email].get('email')
+                employee_dict[merge_email]['name'] = au.display_name or employee_dict[merge_email].get('name') or 'Unknown'
+                employee_dict[merge_email]['title'] = au.job_title or employee_dict[merge_email].get('title') or 'N/A'
+                employee_dict[merge_email]['department'] = au.department or employee_dict[merge_email].get('department') or 'N/A'
                 
         # 2. Fetch latest asset log per (employee_email, hostname) in one grouped query
         log_query = db.session.query(
@@ -216,41 +562,72 @@ def get_employees_scroll():
                 'device_type': log.device_type or 'Unknown',
                 'cpu_percent': cpu_pct,
                 'is_online': is_online,
-                'source': 'Agent'
+                'source': 'Agent',
+                'assigned_date': log.login_timestamp.isoformat() if log.login_timestamp else None
             }
             # Prevent duplicates
             if not any(a['hostname'] == log.hostname for a in employee_dict[emp_email]['assets']):
                 employee_dict[emp_email]['assets'].append(asset_entry)
                 
         # 3. Gather AzureDeviceOwner/AzureDevice mapping in bulk
-        user_ids = [e['user_id'] for e in employee_dict.values() if e.get('user_id')]
+        # azure_db_id holds the AzureUser DB PK (int). AzureUser.user_id holds the Azure AD object id (string).
+        # AzureDeviceOwner.user_id is an INTEGER FK to AzureUser.id — do NOT pass Azure AD UUID strings into it.
+        db_user_ids = [e['azure_db_id'] for e in employee_dict.values() if e.get('azure_db_id')]
+        # Collect any Azure AD object ids (strings) we have, and resolve them to DB ids before querying
+        azure_ad_ids = [e['user_id'] for e in employee_dict.values() if e.get('user_id')]
+
+        resolved_ids = []
+        if azure_ad_ids:
+            # Find corresponding AzureUser DB ids for these Azure AD object ids
+            matches = AzureUser.query.filter(
+                AzureUser.tenant_id == tenant_id,
+                AzureUser.user_id.in_(azure_ad_ids)
+            ).with_entities(AzureUser.id).all()
+            resolved_ids = [m.id for m in matches]
+
+        # Combine DB ids from both sources (deduplicated)
+        owner_user_ids = list({int(x) for x in (db_user_ids or []) + (resolved_ids or [])})
+
         owners = AzureDeviceOwner.query.filter(
             AzureDeviceOwner.tenant_id == tenant_id,
-            AzureDeviceOwner.user_id.in_(user_ids)
-        ).all() if user_ids else []
+            AzureDeviceOwner.user_id.in_(owner_user_ids)
+        ).all() if owner_user_ids else []
 
+        # Build owner lookup with linked_at dates
         owners_by_user = {}
+        owner_linked_at = {}  # (user_id, device_id) -> linked_at date
         device_ids = set()
+        graph_device_ids = set()
         for o in owners:
             owners_by_user.setdefault(o.user_id, []).append(o.device_id)
             if o.device_id:
-                device_ids.add(o.device_id)
+                if isinstance(o.device_id, int) or str(o.device_id).isdigit():
+                    device_ids.add(int(o.device_id))
+                else:
+                    graph_device_ids.add(o.device_id)
+            owner_linked_at[(o.user_id, o.device_id)] = o.linked_at
 
         devices = AzureDevice.query.filter(
             AzureDevice.tenant_id == tenant_id,
-            AzureDevice.device_id.in_(list(device_ids))
-        ).all() if device_ids else []
-        device_map = {d.device_id: d for d in devices}
+            db.or_(
+                AzureDevice.id.in_(list(device_ids)),
+                AzureDevice.device_id.in_(list(graph_device_ids))
+            )
+        ).all() if (device_ids or graph_device_ids) else []
+        device_map = {d.id: d for d in devices}
+        device_map.update({d.device_id: d for d in devices})
 
         for emp_email, emp_data in employee_dict.items():
-            uid = emp_data['user_id']
-            if not uid:
+            owner_keys = [v for v in (emp_data.get('azure_db_id'), emp_data.get('user_id')) if v]
+            if not owner_keys:
                 continue
-            for device_id in owners_by_user.get(uid, []):
+            for owner_key in owner_keys:
+              for device_id in owners_by_user.get(owner_key, []):
                 dev = device_map.get(device_id)
                 if dev:
                     # check dupes by name
                     if not any(a['hostname'].lower() == dev.display_name.lower() for a in emp_data['assets']):
+                        linked = owner_linked_at.get((owner_key, device_id))
                         emp_data['assets'].append({
                             'id': f"azure_{dev.id}",
                             'hostname': dev.display_name,
@@ -258,7 +635,8 @@ def get_employees_scroll():
                             'os_info': dev.os_platform or 'Unknown',
                             'device_type': dev.device_type or 'Unknown',
                             'cpu_percent': 0,
-                            'source': 'Intune/Entra'
+                            'source': 'Intune/Entra',
+                            'assigned_date': linked.isoformat() if linked else None
                         })
 
         # Apply final status filter & sort
@@ -458,10 +836,16 @@ def employee_asset_detail(email):
                 })
 
         # 3. Get Azure Managed Devices (Intune)
-        if azure_user and azure_user.user_id:
-            owners = AzureDeviceOwner.query.filter_by(tenant_id=tenant_id, user_id=azure_user.user_id).all()
+        if azure_user and azure_user.id:
+            # AzureDeviceOwner.user_id is an INTEGER FK to AzureUser.id — only compare integer IDs.
+            owners = AzureDeviceOwner.query.filter(
+                AzureDeviceOwner.tenant_id == tenant_id,
+                AzureDeviceOwner.user_id == azure_user.id
+            ).all()
             for o in owners:
-                dev = AzureDevice.query.filter_by(tenant_id=tenant_id, device_id=o.device_id).first()
+                dev = db.session.get(AzureDevice, int(o.device_id)) if str(o.device_id).isdigit() else None
+                if not dev:
+                    dev = AzureDevice.query.filter_by(tenant_id=tenant_id, device_id=o.device_id).first()
                 if dev and dev.display_name.lower() not in seen_hostnames:
                     seen_hostnames.add(dev.display_name.lower())
                     asset_details.append({
@@ -503,6 +887,35 @@ def employee_asset_detail(email):
         return redirect(url_for('asset_mgmt.list_employees_assets'))
 
 
+@asset_mgmt_bp.route('/assets/reports')
+@login_required
+def reports():
+    """Admin reports UI — allows downloading various CSV reports (productivity, device activity, audit logs)."""
+    # Only show to superadmins/tenant admins
+    if not current_user.is_superadmin:
+        return render_template('reports.html', error='Only super admins can access reports', users=[], default_start=None, default_end=None)
+
+    # Gather available users from EmployeeActivity for filter dropdown
+    try:
+        from web.models import EmployeeActivity, db, Server
+        # Restrict to tenant servers
+        server_q = Server.query.filter_by(tenant_id=current_user.tenant_id).with_entities(Server.id).all()
+        server_ids = [r.id for r in server_q]
+        users = []
+        if server_ids:
+            rows = db.session.query(EmployeeActivity.user).filter(EmployeeActivity.server_id.in_(server_ids)).distinct().all()
+            users = sorted([r[0] for r in rows if r[0]])
+    except Exception:
+        users = []
+
+    # Defaults for date range (today)
+    from datetime import date, timedelta
+    default_end = date.today().isoformat()
+    default_start = (date.today() - timedelta(days=7)).isoformat()
+
+    return render_template('reports.html', users=users, default_start=default_start, default_end=default_end)
+
+
 @asset_mgmt_bp.route('/assets/remote-control/<int:server_id>')
 @login_required
 def remote_control_server(server_id):
@@ -510,9 +923,13 @@ def remote_control_server(server_id):
     try:
         server = Server.query.get_or_404(server_id)
         
-        # Check authorization
+        # Check authorization - return HTML redirect for browsers (so anchors show a user-friendly message)
         if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
-            return jsonify({'error': 'Unauthorized'}), 403
+            # API clients expect JSON, but browser navigation expects an HTML response.
+            if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+                return jsonify({'error': 'Unauthorized'}), 403
+            flash('You are not authorized to view that system.', 'danger')
+            return redirect(url_for('asset_mgmt.system_controls'))
         
         # Get tenant for SharePoint status
         tenant = Tenant.query.get(server.tenant_id)
@@ -555,7 +972,7 @@ def remote_control_server(server_id):
     
     except Exception as e:
         logger.error(f"Error loading remote control: {e}")
-        return redirect(url_for('asset_mgmt.list_employees_assets'))
+        return redirect(url_for('asset_mgmt.system_controls'))
 
 
 @asset_mgmt_bp.route('/assets/system-controls')
@@ -563,10 +980,31 @@ def remote_control_server(server_id):
 def system_controls():
     """System controls landing page (per-tenant list of servers)."""
     try:
+        from web.models import EmployeeDeviceAssignment, Employee
         q = Server.query
-        if not current_user.is_superadmin:
-            q = q.filter_by(tenant_id=current_user.tenant_id)
+        tenant_id = current_user.tenant_id if not current_user.is_superadmin else None
+        
+        if tenant_id:
+            q = q.filter_by(tenant_id=tenant_id)
+            
         servers = q.order_by(Server.hostname.asc()).all()
+        
+        # Attach assignment data for the UI
+        assignments = []
+        employees = []
+        if tenant_id:
+            assignments = EmployeeDeviceAssignment.query.filter_by(tenant_id=tenant_id, is_active=True).all()
+            employees = Employee.query.filter_by(tenant_id=tenant_id).all()
+        else:
+            assignments = EmployeeDeviceAssignment.query.filter_by(is_active=True).all()
+            employees = Employee.query.all()
+            
+        emp_map = {e.id: e.name or e.email for e in employees}
+        assignment_map = {a.server_id: emp_map.get(a.employee_id) for a in assignments}
+        
+        for s in servers:
+            s.assigned_employee_name = assignment_map.get(s.id)
+            
         return render_template('system_controls.html', servers=servers)
     except Exception as e:
         logger.error(f"Error loading system controls: {e}")
@@ -576,90 +1014,244 @@ def system_controls():
 @asset_mgmt_bp.route('/assets/productivity')
 @login_required
 def productivity_overview():
-    """Productivity landing page (per-tenant list of servers)."""
+    """HR View: Employee Productivity List."""
     try:
-        from web.models import EmployeeActivity
-        from sqlalchemy import func
-
-        q = Server.query
-        if not current_user.is_superadmin:
-            q = q.filter_by(tenant_id=current_user.tenant_id)
-        servers = q.order_by(Server.hostname.asc()).all()
-        server_ids = [s.id for s in servers]
-
+        tenant_id = current_user.tenant_id
+        
+        # Get target date from query args or default to today
         date_str = (request.args.get('date') or '').strip()
-        user_filter = (request.args.get('user') or '').strip()
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+        except ValueError:
+            target_date = datetime.utcnow().date()
+            
+        emp_rows = _build_productivity_rows(tenant_id, target_date)
+        
+        return render_template(
+            'productivity_overview.html',
+            employees=emp_rows,
+            selected_date=target_date.strftime('%Y-%m-%d'),
+            page_title='Employee Productivity',
+            page_description='Employee productivity and linked agent system screenshots for the selected date.',
+            workforce_mode=False
+        )
+    except Exception as e:
+        logger.error(f"Error loading productivity view: {e}")
+        return render_template('productivity_overview.html', employees=[], selected_date='', error=str(e))
+
+
+@asset_mgmt_bp.route('/assets/productivity/report')
+@login_required
+def productivity_export():
+    """Export filtered productivity rows as CSV."""
+    try:
+        tenant_id = current_user.tenant_id
+        date_str = (request.args.get('date') or '').strip()
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
         except ValueError:
             target_date = datetime.utcnow().date()
 
-        day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
-        day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+        emp_rows = _build_productivity_rows(tenant_id, target_date)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            'Employee Name', 'Email', 'Department', 'Device', 'Device IP',
+            'Status', 'First Activity', 'Last Activity', 'Active Time', 'Idle Time',
+            'Productive Time', 'Device Source'
+        ])
+        for row in emp_rows:
+            writer.writerow([
+                row['name'], row['email'], row['department'], row['device'], row['device_ip'],
+                row['status'], row['first_activity'], row['last_activity'], row['active_str'],
+                row['idle_str'], row['productive_str'], row['source']
+            ])
 
-        stats = {}
-        if server_ids:
-            activity_filter = [
-                EmployeeActivity.server_id.in_(server_ids),
-                EmployeeActivity.timestamp >= day_start,
-                EmployeeActivity.timestamp <= day_end
-            ]
-            if user_filter:
-                activity_filter.append(EmployeeActivity.user == user_filter)
+        response = make_response(output.getvalue())
+        response.headers['Content-Disposition'] = f'attachment; filename=productivity_{target_date.strftime("%Y%m%d")}.csv'
+        response.mimetype = 'text/csv'
+        return response
+    except Exception as e:
+        logger.error(f"Error exporting productivity CSV: {e}")
+        return redirect(url_for('asset_mgmt.productivity_overview'))
 
-            rows = (
-                db.session.query(
-                    EmployeeActivity.server_id,
-                    func.count(EmployeeActivity.id).label('total_count'),
-                    func.sum(db.case((EmployeeActivity.idle_time < 60, 1), else_=0)).label('active_count')
-                )
-                .filter(*activity_filter)
-                .group_by(EmployeeActivity.server_id)
-                .all()
-            )
-            for r in rows:
-                active_count = int(r.active_count or 0)
-                total_count = int(r.total_count or 0)
-                active_time = active_count * 10
-                total_time = total_count * 10
-                percent = int((active_time / total_time * 100)) if total_time > 0 else 0
-                stats[int(r.server_id)] = {
-                    'percent': percent,
-                    'active_time_str': f"{active_time // 3600}h {(active_time % 3600) // 60}m",
-                    'total_samples': total_count,
-                }
 
-        # User dropdown: include everyone we've ever seen in activity, plus manually-maintained employee usernames.
-        users_set = set()
+@asset_mgmt_bp.route('/assets/productivity/screenshots')
+@login_required
+def productivity_screenshots():
+    """Tenant-level system screenshot gallery for productivity monitoring."""
+    try:
+        tenant_id = current_user.tenant_id
+        date_str = (request.args.get('date') or '').strip()
         try:
-            uq = db.session.query(EmployeeActivity.user).filter(EmployeeActivity.server_id.in_(server_ids)).distinct()
-            for u in uq.all():
-                if u and u[0]:
-                    users_set.add(u[0])
-        except Exception:
-            pass
-        try:
-            emp_q = Employee.query
-            if not current_user.is_superadmin:
-                emp_q = emp_q.filter_by(tenant_id=current_user.tenant_id)
-            for e in emp_q.all():
-                if getattr(e, 'local_username', None):
-                    users_set.add(e.local_username)
-        except Exception:
-            pass
-        users = sorted(users_set)
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+        except ValueError:
+            target_date = datetime.utcnow().date()
 
+        day_start = datetime.combine(target_date, datetime.min.time())
+        day_end = datetime.combine(target_date, datetime.max.time())
+
+        screenshots = Screenshot.query.filter(
+            Screenshot.tenant_id == tenant_id,
+            Screenshot.captured_at >= day_start,
+            Screenshot.captured_at <= day_end
+        ).order_by(Screenshot.captured_at.desc()).all()
+
+        active_agents = ActiveAgentsMonitor.get_active_agents_for_tenant(tenant_id)
         return render_template(
-            'productivity_overview.html',
-            servers=servers,
-            stats=stats,
-            users=users,
+            'productivity_screenshots.html',
+            screenshots=screenshots,
+            active_agents=active_agents,
             selected_date=target_date.strftime('%Y-%m-%d'),
-            selected_user=user_filter,
+            page_title='System Images',
+            page_description='Review system screenshots captured by active agents across managed devices.',
+            screenshot_mode=True,
+            workforce_mode=False
         )
     except Exception as e:
-        logger.error(f"Error loading productivity overview: {e}")
-        return render_template('productivity_overview.html', servers=[], stats={}, users=[], selected_date='', selected_user='', error=str(e))
+        logger.error(f"Error loading productivity screenshots: {e}")
+        return render_template(
+            'productivity_screenshots.html',
+            screenshots=[],
+            active_systems=[],
+            selected_date='',
+            page_title='System Images',
+            page_description='Unable to load system screenshots at this time.',
+            screenshot_mode=True,
+            workforce_mode=False,
+            error=str(e)
+        )
+
+
+@asset_mgmt_bp.route('/assets/productivity/<int:employee_id>')
+@login_required
+def employee_productivity_detail(employee_id):
+    """HR View: Deep dive into a specific employee's productivity."""
+    from web.models import ActivitySession, AttendanceRecord, AppUsage
+    try:
+        tenant_id = current_user.tenant_id
+        
+        # Verify employee ownership
+        emp = Employee.query.get_or_404(employee_id)
+        if emp.tenant_id != tenant_id:
+            abort(403)
+            
+        date_str = (request.args.get('date') or '').strip()
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+        except ValueError:
+            target_date = datetime.utcnow().date()
+            
+        attendance = AttendanceRecord.query.filter_by(employee_id=emp.id, date=target_date).first()
+        
+        import pytz
+        ist = pytz.timezone('Asia/Kolkata')
+        attendance_first_activity_display = None
+        attendance_last_activity_display = None
+        attendance_status = 'not_available'
+        if attendance:
+            attendance_status = 'recorded'
+            if attendance.first_activity:
+                attendance_first_activity_display = attendance.first_activity.replace(tzinfo=pytz.UTC).astimezone(ist)
+            if attendance.last_activity:
+                attendance_last_activity_display = attendance.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist)
+        
+        day_start = datetime.combine(target_date, datetime.min.time())
+        day_end = datetime.combine(target_date, datetime.max.time())
+        sessions = ActivitySession.query.filter(
+            ActivitySession.employee_id == emp.id,
+            ActivitySession.start_time >= day_start,
+            ActivitySession.start_time <= day_end
+        ).order_by(ActivitySession.start_time.asc()).all()
+        
+        # Aggregate totals (now stored as seconds due to ProductivityEngine precision change)
+        active_sec = sum(s.active_minutes or 0 for s in sessions)
+        idle_sec = sum(s.idle_minutes or 0 for s in sessions)
+        prod_sec = sum(s.productive_minutes or 0 for s in sessions)
+        
+        active_str = _seconds_to_hms(active_sec)
+        idle_str = _seconds_to_hms(idle_sec)
+        prod_str = _seconds_to_hms(prod_sec)
+        
+        # Add formatted strings to the object dynamically (assuming seconds)
+        for s in sessions:
+            if s.start_time:
+                s.start_time_display = s.start_time.replace(tzinfo=pytz.UTC).astimezone(ist)
+            if s.end_time:
+                s.end_time_display = s.end_time.replace(tzinfo=pytz.UTC).astimezone(ist)
+            
+            s_active_sec = s.active_minutes or 0
+            s_idle_sec = s.idle_minutes or 0
+            s.active_str = _seconds_to_hms(s_active_sec)
+            s.idle_str = _seconds_to_hms(s_idle_sec)
+
+        if not attendance and sessions:
+            attendance_status = 'sessions'
+            first_session = min((s for s in sessions if s.start_time), key=lambda x: x.start_time, default=None)
+            last_session = max((s for s in sessions if s.end_time or s.start_time), key=lambda x: x.end_time or x.start_time, default=None)
+            if first_session and first_session.start_time:
+                attendance_first_activity_display = first_session.start_time.replace(tzinfo=pytz.UTC).astimezone(ist)
+            if last_session:
+                if last_session.end_time:
+                    attendance_last_activity_display = last_session.end_time.replace(tzinfo=pytz.UTC).astimezone(ist)
+                elif last_session.start_time:
+                    attendance_last_activity_display = last_session.start_time.replace(tzinfo=pytz.UTC).astimezone(ist)
+        
+        # Get App Usage for the day
+        app_usages = []
+        if sessions:
+            session_ids = [s.id for s in sessions]
+            app_usages = AppUsage.query.filter(AppUsage.session_id.in_(session_ids)).all()
+            
+        # Aggregate apps
+        app_stats = {}
+        for app in app_usages:
+            name = app.app_name or 'Unknown'
+            if name not in app_stats:
+                app_stats[name] = {'duration': 0, 'classification': app.classification}
+            app_stats[name]['duration'] += (app.duration_seconds or 0)
+            
+        # Convert app_stats to list and sort
+        total_app_seconds = sum(data['duration'] for data in app_stats.values())
+        duration_scale = (active_sec / total_app_seconds) if active_sec > 0 and total_app_seconds > active_sec else 1
+        top_apps = []
+        for name, data in app_stats.items():
+            duration_seconds = int((data['duration'] or 0) * duration_scale)
+            duration_min = round(duration_seconds / 60)
+            top_apps.append({
+                'name': name,
+                'duration_min': duration_min,
+                'duration_str': _seconds_to_hms(duration_seconds),
+                'classification': data['classification']
+            })
+        top_apps.sort(key=lambda x: x['duration_min'], reverse=True)
+        
+        active_min = active_sec // 60
+        idle_min = idle_sec // 60
+        prod_min = prod_sec // 60
+        
+        return render_template(
+            'employee_productivity.html',
+            employee=emp,
+            attendance=attendance,
+            attendance_status=attendance_status,
+            sessions=sessions,
+            top_apps=top_apps,
+            active_min=active_min,
+            idle_min=idle_min,
+            prod_min=prod_min,
+            active_str=active_str,
+            idle_str=idle_str,
+            prod_str=prod_str,
+            attendance_first_activity_display=attendance_first_activity_display,
+            attendance_last_activity_display=attendance_last_activity_display,
+            selected_date=target_date.strftime('%Y-%m-%d'),
+            today=target_date.strftime('%b %d, %Y')
+        )
+    except Exception as e:
+        logger.error(f"Error loading employee productivity detail: {e}")
+        flash(f"Error loading details: {str(e)}", "error")
+        return redirect(url_for('asset_mgmt.productivity_overview'))
 
 
 @asset_mgmt_bp.route('/assets/remote-control/<int:server_id>/screenshots')
@@ -732,7 +1324,13 @@ def remote_control_productivity(server_id):
         if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
             abort(403)
 
+        employee = _find_employee_for_server(server, server.tenant_id)
         date_str = (request.args.get('date') or '').strip()
+        if employee:
+            if date_str:
+                return redirect(url_for('asset_mgmt.employee_productivity_detail', employee_id=employee.id, date=date_str))
+            return redirect(url_for('asset_mgmt.employee_productivity_detail', employee_id=employee.id))
+
         user_filter = (request.args.get('user') or '').strip()
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
@@ -780,97 +1378,6 @@ def remote_control_productivity(server_id):
     except Exception as e:
         logger.error(f"Error loading productivity page: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
-
-
-@asset_mgmt_bp.route('/api/v2/server/<int:server_id>/remote/software', methods=['POST'])
-@login_required
-def deploy_software(server_id):
-    """Deploy or uninstall software on a server"""
-    try:
-        server = Server.query.get_or_404(server_id)
-        
-        # Authorization check
-        if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
-            return jsonify({'error': 'Unauthorized'}), 403
-        
-        data = request.get_json()
-        action = data.get('action')  # install or uninstall
-        software = data.get('software')  # software name
-        
-        if not action or not software:
-            return jsonify({'error': 'Missing action or software name'}), 400
-        
-        # Create command for agent
-        remote_cmd = RemoteCommand()
-        remote_cmd.server_id = server_id
-        remote_cmd.command = f"{action.upper()} {software}"
-        remote_cmd.parameters = f'{{"action": "{action}", "software": "{software}", "requested_by": "{current_user.username}"}}'
-        remote_cmd.status = 'pending'
-        db.session.add(remote_cmd)
-        
-        # Log audit trail
-        audit = AuditLog()
-        audit.tenant_id = current_user.tenant_id
-        audit.user = current_user.username
-        audit.action = f'DEPLOY_SOFTWARE:{action}'
-        audit.resource = f'Server:{server.hostname}'
-        audit.details = f'{action} {software}'
-        audit.timestamp = datetime.utcnow()
-        audit.status = 'pending'
-        db.session.add(audit)
-        db.session.commit()
-        
-        logger.info(f"Software deployment queued: {action} {software} on {server.hostname}")
-        
-        return jsonify({
-            'success': True,
-            'command_id': remote_cmd.id,
-            'message': f'Software {action} queued for {server.hostname}'
-        })
-    
-    except Exception as e:
-        logger.error(f"Error deploying software: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@asset_mgmt_bp.route('/api/v2/server/<int:server_id>/remote/rdp', methods=['POST'])
-@login_required
-def get_rdp_access(server_id):
-    """Generate RDP connection details for remote access"""
-    try:
-        server = Server.query.get_or_404(server_id)
-        
-        # Authorization check
-        if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
-            return jsonify({'error': 'Unauthorized'}), 403
-        
-        # Log audit trail for RDP access
-        audit = AuditLog()
-        audit.tenant_id = current_user.tenant_id
-        audit.user = current_user.username
-        audit.action = 'REMOTE_ACCESS:RDP'
-        audit.resource = f'Server:{server.hostname}'
-        audit.details = f'RDP access initiated'
-        audit.timestamp = datetime.utcnow()
-        audit.status = 'accessed'
-        db.session.add(audit)
-        db.session.commit()
-        
-        logger.info(f"RDP access initiated for {server.hostname} by {current_user.username}")
-        
-        return jsonify({
-            'success': True,
-            'hostname': server.hostname,
-            'ip_address': server.ip,
-            'rdp_command': f'mstsc /v:{server.ip}',
-            'timestamp': datetime.utcnow().isoformat(),
-            'accessed_by': current_user.username
-        })
-    
-    except Exception as e:
-        logger.error(f"Error generating RDP access: {e}")
-        return jsonify({'error': str(e)}), 500
-
 
 
 @asset_mgmt_bp.route('/assets/api/v2/asset/<int:server_id>/status')
@@ -1087,6 +1594,8 @@ def add_employee():
         local_username = data.get('local_username')
         department = data.get('department')
         designation = data.get('designation')
+        manager_id_raw = data.get('manager_id')
+        manager_id = int(manager_id_raw) if manager_id_raw and manager_id_raw.isdigit() else None
         
         if not name or not email:
             return jsonify({'success': False, 'error': 'Name and Email are required'}), 400
@@ -1097,7 +1606,8 @@ def add_employee():
             email=email,
             local_username=local_username,
             department=department,
-            designation=designation
+            designation=designation,
+            manager_id=manager_id
         )
         db.session.add(emp)
         db.session.commit()
@@ -1242,3 +1752,52 @@ def _time_ago(dt):
         days = seconds // 86400
         return f'{days}d ago'
 
+@asset_mgmt_bp.route('/api/tenant/manual-azure-sync', methods=['POST'])
+@login_required
+@require_tenant_access
+def manual_azure_sync():
+    """Manually trigger Azure AD synchronization for the current tenant."""
+    try:
+        from web.models import Tenant
+        from auth.msal_auth import get_azure_client
+        from web.azure_sync_service import AzureSyncService
+        from core.identity_correlation import IdentityCorrelationService
+        
+        tenant_id = current_user.tenant_id
+        tenant = db.session.get(Tenant, tenant_id)
+        if not tenant:
+            return jsonify({'success': False, 'error': 'Tenant not found.'}), 404
+            
+        if not tenant.azure_client_id or not tenant.azure_client_secret or not tenant.azure_tenant_id:
+            return jsonify({'success': False, 'error': 'Please configure and save your Azure App credentials first.'}), 400
+            
+        client = get_azure_client(
+            client_id=tenant.azure_client_id,
+            client_secret=tenant.azure_client_secret,
+            tenant_id=tenant.azure_tenant_id
+        )
+        
+        # Trigger full comprehensive sync
+        res = AzureSyncService.get_full_sync(db, tenant, client)
+        
+        if 'error' in res:
+            return jsonify({'success': False, 'error': res['error']}), 500
+            
+        # Resolve device ownership using identity correlation engine
+        IdentityCorrelationService.resolve_device_ownership(tenant.id)
+        
+        # Extract count details
+        devices_count = res.get('devices', {}).get('synced', 0) + res.get('devices', {}).get('updated', 0)
+        users_count = res.get('users', {}).get('synced', 0) + res.get('users', {}).get('updated', 0)
+        licenses_count = res.get('licenses', {}).get('assignments', 0)
+        
+        return jsonify({
+            'success': True,
+            'users': users_count,
+            'devices': devices_count,
+            'licenses': licenses_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Manual Azure Sync failed: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500

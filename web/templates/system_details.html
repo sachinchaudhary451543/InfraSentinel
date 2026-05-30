@@ -278,8 +278,7 @@
             <img id="lightboxImg" src="" alt="Screenshot"
                 class="max-h-[78vh] max-w-full rounded-xl shadow-2xl object-contain transition-opacity duration-200"
                 style="opacity:0;">
-            <div id="lightboxSpinner"
-                class="absolute inset-0 flex items-center justify-center">
+            <div id="lightboxSpinner" class="absolute inset-0 flex items-center justify-center">
                 <div class="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
             </div>
         </div>
@@ -871,8 +870,25 @@
                 if (spinner) spinner.innerHTML = '<i class="fa-solid fa-server fa-fade"></i> Queued on server...';
 
                 window._pendingCommandId = data.command_id;
-                window._cmdTimeout = setTimeout(() => { if (commandRunning) { document.getElementById('cmdSpinner')?.remove(); appendToTerminal('<div class="text-amber-400"><i class="fa-solid fa-clock mr-1"></i>Command timed out (120s).</div>'); resetCommandState(); } }, 120000);
-            } catch (e) { document.getElementById('cmdSpinner')?.remove(); appendToTerminal(`<div class="text-rose-400"><i class="fa-solid fa-xmark mr-1"></i>Network error: ${escapeHtml(e.message)}</div>`); resetCommandState(); }
+
+                // START POLLING as fallback to WebSocket
+                if (window._pollInterval) clearInterval(window._pollInterval);
+                window._pollInterval = setInterval(() => pollCommandStatus(data.command_id), 2000);
+
+                window._cmdTimeout = setTimeout(() => {
+                    if (commandRunning) {
+                        clearInterval(window._pollInterval);
+                        document.getElementById('cmdSpinner')?.remove();
+                        appendToTerminal('<div class="text-amber-400"><i class="fa-solid fa-clock mr-1"></i>Command timed out (120s).</div>');
+                        resetCommandState();
+                    }
+                }, 120000);
+            } catch (e) {
+                clearInterval(window._pollInterval);
+                document.getElementById('cmdSpinner')?.remove();
+                appendToTerminal(`<div class="text-rose-400"><i class="fa-solid fa-xmark mr-1"></i>Network error: ${escapeHtml(e.message)}</div>`);
+                resetCommandState();
+            }
             cmdInput.value = '';
         }
         window.executeCommand = executeCommand;
@@ -891,6 +907,8 @@
         });
         socket.on('command_result', (data) => {
             if (data.server_id !== SERVER_ID) return;
+            clearTimeout(window._cmdTimeout);
+            clearInterval(window._pollInterval);
             document.getElementById('cmdSpinner')?.remove();
             const ts = data.executed_at ? new Date(data.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
             if (data.status === 'completed') {
@@ -907,12 +925,36 @@
             resetCommandState(); loadCommandHistory();
         });
 
+        // ── Command Polling Fallback ──
+        async function pollCommandStatus(commandId) {
+            if (!commandRunning || !commandId) return;
+            try {
+                const res = await fetch(`/api/v2/commands/${commandId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.success) return;
+
+                // Update UI based on status
+                const spinner = document.getElementById('cmdSpinner');
+                if (data.status === 'running' && spinner) {
+                    spinner.innerHTML = '<i class="fa-solid fa-hourglass-end fa-fade"></i> Executing...';
+                }
+
+                // If done, show results
+                if (data.status === 'completed' || data.status === 'failed') {
+                    socket.emit('command_result', { ...data, server_id: SERVER_ID });
+                }
+            } catch (e) { }
+        }
+        window.pollCommandStatus = pollCommandStatus;
+
         // ── Command History ──
         async function loadCommandHistory() {
             try {
-                const res = await fetch(`/api/v2/commands/history/${SERVER_ID}`);
+                const res = await fetch(`/api/v2/server/${SERVER_ID}/commands/history?limit=20`);
                 if (!res.ok) return;
-                const cmds = await res.json();
+                const data = await res.json();
+                const cmds = data.commands || [];
                 const list = document.getElementById('historyList');
                 list.innerHTML = '';
                 if (cmds.length === 0) { list.innerHTML = '<div class="p-3 text-slate-600 text-xs text-center">No command history</div>'; return; }
@@ -1085,9 +1127,9 @@
         // Keyboard navigation
         document.addEventListener('keydown', function (e) {
             if (document.getElementById('lightboxModal').classList.contains('hidden')) return;
-            if (e.key === 'Escape')      closeLightbox();
-            if (e.key === 'ArrowLeft')   lightboxNav(-1);
-            if (e.key === 'ArrowRight')  lightboxNav(1);
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') lightboxNav(-1);
+            if (e.key === 'ArrowRight') lightboxNav(1);
         });
 
         async function toggleScreenshotCapturing() {

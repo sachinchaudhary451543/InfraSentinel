@@ -13,8 +13,10 @@ Functions:
 """
 
 import logging
+import time
 from typing import List, Dict, Optional
 import requests
+from sqlalchemy.exc import OperationalError
 
 logger = logging.getLogger("[GRAPH-API]")
 
@@ -57,7 +59,10 @@ def _make_graph_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            logger.warning(f"Graph API error {response.status_code}: {response.text}")
+            if response.status_code == 403:
+                logger.warning(f"Graph API 403: Missing permissions for endpoint {endpoint}")
+            else:
+                logger.warning(f"Graph API error {response.status_code}: {response.text}")
             return None
             
     except Exception as e:
@@ -76,7 +81,7 @@ def get_devices_from_graph(access_token: str) -> List[Dict]:
         List of device objects
     """
     devices = []
-    next_url = "/devices"
+    next_url = "/devices?$select=id,displayName,operatingSystem,operatingSystemVersion,accountEnabled,deviceId"
     
     while next_url:
         result = _make_graph_request(next_url, access_token)
@@ -105,7 +110,8 @@ def get_users_from_graph(access_token: str) -> List[Dict]:
         List of user objects
     """
     users = []
-    next_url = "/users"
+    # Only fetch active (enabled) accounts to prevent importing stale data
+    next_url = "/users?$select=id,userPrincipalName,mail,displayName,jobTitle,department,mailNickname,onPremisesSamAccountName,accountEnabled&$filter=accountEnabled eq true"
     
     while next_url:
         result = _make_graph_request(next_url, access_token)
@@ -216,6 +222,26 @@ def search_devices_by_hostname(hostname: str, access_token: str) -> List[Dict]:
 # DATABASE SYNC
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _commit_with_retry(db_session, tenant_id, operation_name, retries=3, delay=1):
+    for attempt in range(retries):
+        try:
+            db_session.commit()
+            return True
+        except OperationalError as exc:
+            message = str(exc).lower()
+            db_session.rollback()
+            if 'database is locked' in message and attempt < retries - 1:
+                time.sleep(delay * (attempt + 1))
+                continue
+            logger.error(f"Failed to commit {operation_name} for tenant {tenant_id}: {exc}")
+            return False
+        except Exception as exc:
+            db_session.rollback()
+            logger.error(f"Failed to commit {operation_name} for tenant {tenant_id}: {exc}")
+            return False
+    return False
+
+
 def sync_devices_to_database(devices: List[Dict], tenant_id: str, db_session) -> int:
     """
     Sync devices from Graph API to local database.
@@ -229,6 +255,8 @@ def sync_devices_to_database(devices: List[Dict], tenant_id: str, db_session) ->
         Number of devices synced
     """
     from web.models import AzureDevice
+    from core.identity_correlation import normalize_hostname
+    from datetime import datetime
     
     synced_count = 0
     
@@ -236,45 +264,48 @@ def sync_devices_to_database(devices: List[Dict], tenant_id: str, db_session) ->
         try:
             device_id = device.get("id")
             hostname = device.get("displayName", "Unknown")
-            
-            # Check if device already exists
-            existing = AzureDevice.query.filter_by(
-                device_id=device_id,
-                tenant_id=tenant_id
-            ).first()
-            
+
+            with db_session.no_autoflush:
+                existing = db_session.query(AzureDevice).filter_by(
+                    device_id=device_id,
+                    tenant_id=tenant_id
+                ).first()
+
             if existing:
-                # Update existing
                 existing.display_name = hostname
+                existing.normalized_hostname = normalize_hostname(hostname)
                 existing.device_type = device.get("deviceType")
                 existing.os_version = device.get("operatingSystem")
+                existing.os_platform = device.get("operatingSystem")
                 existing.is_compliant = device.get("isCompliant", False)
+                existing.last_graph_sync = datetime.utcnow()
             else:
-                # Create new
                 new_device = AzureDevice(
                     tenant_id=tenant_id,
                     device_id=device_id,
                     display_name=hostname,
+                    normalized_hostname=normalize_hostname(hostname),
                     device_type=device.get("deviceType"),
                     os_version=device.get("operatingSystem"),
                     is_compliant=device.get("isCompliant", False),
-                    os_platform=device.get("osPlatform"),
-                    is_managed_by_intune=device.get("isManaged", False)
+                    os_platform=device.get("operatingSystem") or device.get("osPlatform"),
+                    is_managed_by_intune=device.get("isManaged", False),
+                    last_graph_sync=datetime.utcnow()
                 )
                 db_session.add(new_device)
-            
+
             synced_count += 1
-            
+
         except Exception as e:
             logger.error(f"Failed to sync device {device.get('id')}: {e}")
-    
-    try:
-        db_session.commit()
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+    if _commit_with_retry(db_session, tenant_id, 'device sync'):
         logger.info(f"Synced {synced_count} devices for tenant {tenant_id}")
-    except Exception as e:
-        logger.error(f"Failed to commit device sync: {e}")
-        db_session.rollback()
-    
+
     return synced_count
 
 
@@ -300,21 +331,24 @@ def sync_users_to_database(users: List[Dict], tenant_id: str, db_session) -> int
             user_id = user.get("id")
             email = user.get("userPrincipalName")
             display_name = user.get("displayName", "Unknown")
-            
-            existing = AzureUser.query.filter_by(
-                user_id=user_id,
-                tenant_id=tenant_id
-            ).first()
-            
+            prefix = (email or "").split("@", 1)[0]
+
+            with db_session.no_autoflush:
+                existing = db_session.query(AzureUser).filter_by(
+                    user_id=user_id,
+                    tenant_id=tenant_id
+                ).first()
+
             if existing:
-                # Update existing
                 existing.email = email
                 existing.display_name = display_name
                 existing.job_title = user.get("jobTitle")
                 existing.department = user.get("department")
+                existing.employee_id = prefix
+                existing.mail_nickname = user.get("mailNickname")
+                existing.sam_account_name = user.get("onPremisesSamAccountName")
                 existing.last_synced = datetime.utcnow()
             else:
-                # Create new
                 new_user = AzureUser(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -322,20 +356,23 @@ def sync_users_to_database(users: List[Dict], tenant_id: str, db_session) -> int
                     display_name=display_name,
                     job_title=user.get("jobTitle"),
                     department=user.get("department"),
+                    employee_id=prefix,
+                    mail_nickname=user.get("mailNickname"),
+                    sam_account_name=user.get("onPremisesSamAccountName"),
                     last_synced=datetime.utcnow()
                 )
                 db_session.add(new_user)
-            
+
             synced_count += 1
-            
+
         except Exception as e:
             logger.error(f"Failed to sync user {user.get('id')}: {e}")
-    
-    try:
-        db_session.commit()
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+    if _commit_with_retry(db_session, tenant_id, 'user sync'):
         logger.info(f"Synced {synced_count} users for tenant {tenant_id}")
-    except Exception as e:
-        logger.error(f"Failed to commit user sync: {e}")
-        db_session.rollback()
-    
+
     return synced_count

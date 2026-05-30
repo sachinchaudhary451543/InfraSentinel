@@ -14,11 +14,11 @@ logger = logging.getLogger("[DB_OPTIMIZATION]")
 
 def create_critical_indexes(db: SQLAlchemy):
     """Create missing indexes for query performance"""
+
     connection = db.engine.connect()
-    
-    # List of critical indexes to create if they don't exist
+
     indexes = [
-        # Metric table - Most critical for dashboard and forecast
+        # Metric table
         {
             "name": "idx_metric_server_timestamp",
             "table": "metric",
@@ -31,7 +31,8 @@ def create_critical_indexes(db: SQLAlchemy):
             "columns": ["timestamp"],
             "unique": False
         },
-        # Server table indexes
+
+        # Server table
         {
             "name": "idx_server_tenant_status",
             "table": "server",
@@ -44,14 +45,16 @@ def create_critical_indexes(db: SQLAlchemy):
             "columns": ["agent_installed"],
             "unique": False
         },
-        # AzureDevice indexes
+
+        # AzureDevice
         {
             "name": "idx_azure_device_tenant",
             "table": "azure_device",
             "columns": ["tenant_id"],
             "unique": False
         },
-        # SystemAlert indexes
+
+        # SystemAlert
         {
             "name": "idx_system_alert_is_active",
             "table": "system_alert",
@@ -64,21 +67,24 @@ def create_critical_indexes(db: SQLAlchemy):
             "columns": ["server_id", "is_active"],
             "unique": False
         },
-        # VM indexes
+
+        # VM
         {
             "name": "idx_vm_server",
             "table": "vm",
             "columns": ["server_id"],
             "unique": False
         },
-        # SystemDiscovery indexes
+
+        # SystemDiscovery
         {
             "name": "idx_system_discovery_tenant_status",
             "table": "system_discovery",
             "columns": ["tenant_id", "status"],
             "unique": False
         },
-        # EmployeeAssetLog indexes
+
+        # EmployeeAssetLog
         {
             "name": "idx_employee_asset_log_server",
             "table": "employee_asset_log",
@@ -91,62 +97,114 @@ def create_critical_indexes(db: SQLAlchemy):
             "columns": ["tenant_id"],
             "unique": False
         },
-        # AzureDeviceOwner indexes
+
+        # AzureDeviceOwner
         {
             "name": "idx_azure_device_owner_tenant",
             "table": "azure_device_owner",
             "columns": ["tenant_id"],
             "unique": False
-        },
+        }
     ]
-    
+
     created_count = 0
-    for idx_spec in indexes:
-        try:
-            # Check if index exists (SQLite specific)
-            check_sql = f"SELECT name FROM sqlite_master WHERE type='index' AND name='{idx_spec['name']}'"
-            result = connection.execute(text(check_sql)).fetchone()
-            
-            if not result:
-                # Create index
-                columns_str = ", ".join(idx_spec["columns"])
-                unique_str = "UNIQUE" if idx_spec.get("unique", False) else ""
-                create_sql = f"""
+
+    try:
+        for idx_spec in indexes:
+            try:
+                # PostgreSQL index existence check
+                check_sql = f"""
+                SELECT indexname
+                FROM pg_indexes
+                WHERE indexname = '{idx_spec["name"]}'
+                """
+
+                result = connection.execute(
+                    text(check_sql)
+                ).fetchone()
+
+                if not result:
+                    columns_str = ", ".join(idx_spec["columns"])
+                    unique_str = (
+                        "UNIQUE"
+                        if idx_spec.get("unique", False)
+                        else ""
+                    )
+
+                    create_sql = f"""
                     CREATE {unique_str} INDEX {idx_spec['name']}
                     ON {idx_spec['table']} ({columns_str})
-                """
-                connection.execute(text(create_sql))
-                connection.commit()
-                logger.info(f"✓ Created index: {idx_spec['name']}")
-                created_count += 1
-            else:
-                logger.debug(f"Index already exists: {idx_spec['name']}")
-        except Exception as e:
-            logger.warning(f"Failed to create index {idx_spec['name']}: {e}")
-    
-    connection.close()
-    logger.info(f"Database optimization complete. Created {created_count} new indexes.")
+                    """
+
+                    connection.execute(text(create_sql))
+                    connection.commit()
+
+                    logger.info(
+                        f"✓ Created index: {idx_spec['name']}"
+                    )
+
+                    created_count += 1
+
+                else:
+                    logger.debug(
+                        f"Index already exists: {idx_spec['name']}"
+                    )
+
+            except Exception as e:
+                connection.rollback()
+
+                logger.warning(
+                    f"Failed to create index {idx_spec['name']}: {e}"
+                )
+
+    finally:
+        connection.close()
+
+    logger.info(
+        f"Database optimization complete. "
+        f"Created {created_count} new indexes."
+    )
 
 
 def analyze_database(db: SQLAlchemy):
-    """Analyze database for query optimization (SQLite specific)"""
+    """Analyze PostgreSQL database"""
+
     try:
         connection = db.engine.connect()
-        connection.execute(text("ANALYZE"))
+
+        connection.execute(
+            text("ANALYZE")
+        )
+
         connection.commit()
         connection.close()
-        logger.info("✓ Database ANALYZE completed for query optimization")
+
+        logger.info(
+            "✓ Database ANALYZE completed"
+        )
+
     except Exception as e:
-        logger.warning(f"Failed to analyze database: {e}")
+        logger.warning(
+            f"Failed to analyze database: {e}"
+        )
 
 
 def enable_query_logging(app):
-    """Enable SQL query logging for debugging slow queries"""
+    """Enable SQL query logging"""
+
     if app.config.get('SQLALCHEMY_ECHO'):
-        # Already enabled
         return
-    
+
     import logging as py_logging
+
     py_logging.basicConfig()
-    py_logging.getLogger('sqlalchemy.engine').setLevel(py_logging.INFO)
-    logger.info("SQL query logging enabled")
+
+    py_logging.getLogger(
+        'sqlalchemy.engine'
+    ).setLevel(
+        py_logging.INFO
+    )
+
+    logger.info(
+        "SQL query logging enabled"
+    )

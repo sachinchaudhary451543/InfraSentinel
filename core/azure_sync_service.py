@@ -26,10 +26,10 @@ from auth.entra_auth import get_token_silently, get_msal_app
 from core.graph_integration import (
     get_devices_from_graph,
     get_users_from_graph,
-    get_device_owners,
     sync_devices_to_database,
     sync_users_to_database
 )
+from sqlalchemy.exc import OperationalError
 from web.models import db, Tenant, AzureDevice, AzureUser, AzureDeviceOwner
 
 logger = logging.getLogger("[AZURE-SYNC]")
@@ -114,34 +114,39 @@ class AzureSyncService:
     
     def sync_tenant(self, tenant):
         """
-        Sync a single tenant.
+        Sync a single tenant using its stored Azure credentials.
         
         Args:
             tenant: Tenant model instance
         """
         logger.info(f"Syncing tenant: {tenant.name}")
         
-        # Get access token for this tenant
-        # (This would need to use the tenant's Azure credentials)
-        # For now, assume we have the token from user session
+        cid = (getattr(tenant, 'azure_client_id', None) or '').strip()
+        csecret = (getattr(tenant, 'azure_client_secret', None) or '').strip()
+        tid = (getattr(tenant, 'azure_tenant_id', None) or '').strip()
         
-        # In a real scenario, you'd use the tenant's service principal
-        # credentials stored in Tenant.azure_client_id, etc.
-        
-        try:
-            # Get token (placeholder - would use tenant's credentials)
-            # token = self._get_tenant_token(tenant)
-            
-            # For now, skip if we can't get a token
+        if not (cid and csecret and tid):
             logger.warning(
                 f"Tenant {tenant.name} sync skipped: "
-                "Service principal setup needed"
+                "Azure credentials (client_id / client_secret / tenant_id) not configured"
             )
             return
+        
+        try:
+            from core.azure_graph import _get_app_token
+            token = _get_app_token(cid, csecret, tid)
+            if not token:
+                logger.error(f"Failed to acquire token for tenant {tenant.name}")
+                return
             
+            self.sync_tenant_with_token(tenant, token)
         except Exception as e:
-            logger.error(f"Failed to get token for tenant {tenant.id}: {e}")
-            return
+            logger.error(f"Failed to sync tenant {tenant.id}: {e}", exc_info=True)
+        finally:
+            try:
+                db.session.remove()
+            except Exception:
+                pass
     
     def sync_tenant_with_token(self, tenant, access_token: str):
         """
@@ -167,9 +172,9 @@ class AzureSyncService:
             user_count = sync_users_to_database(users, tenant.id, db.session)
             logger.info(f"Synced {user_count} users")
             
-            # Sync device-to-user relationships
-            logger.debug(f"Syncing device owners for tenant {tenant.id}...")
-            owner_count = self._sync_device_owners(
+            # Sync device-to-user relationships (device -> registeredOwners)
+            logger.debug(f"Syncing device ownership for tenant {tenant.id}...")
+            owner_count = self._sync_user_registered_devices(
                 tenant.id,
                 devices,
                 access_token
@@ -182,17 +187,25 @@ class AzureSyncService:
                 f"{device_count} devices, {user_count} users, {owner_count} owners"
             )
             
+            # Phase 2: Run Unified Identity Correlation to resolve backend models
+            try:
+                from core.identity_correlation import IdentityCorrelationService
+                IdentityCorrelationService.resolve_device_ownership(tenant.id)
+            except Exception as e:
+                logger.error(f"Identity correlation background resolution failed: {e}")
+            
+            
         except Exception as e:
             logger.error(f"Sync failed for tenant {tenant.name}: {e}", exc_info=True)
     
-    def _sync_device_owners(
+    def _sync_user_registered_devices(
         self,
         tenant_id: int,
         devices: list,
         access_token: str
     ) -> int:
         """
-        Sync device-to-user ownership relationships.
+        Sync device-to-user ownership by querying each device's registeredOwners.
         
         Args:
             tenant_id: Tenant ID
@@ -202,47 +215,102 @@ class AzureSyncService:
         Returns:
             Number of relationships synced
         """
-        owner_count = 0
+        from core.graph_integration import _make_graph_request
         
-        for device in devices:
+        owner_count = 0
+        with db.session.no_autoflush:
+            local_devices = {
+                device.device_id: device
+                for device in db.session.query(AzureDevice).filter_by(tenant_id=tenant_id).all()
+            }
+            local_users = {
+                user.user_id: user
+                for user in db.session.query(AzureUser).filter_by(tenant_id=tenant_id).all()
+            }
+
+        for graph_device in devices:
             try:
-                device_id = device.get("id")
-                
-                # Get device owners from Graph API
-                owners = get_device_owners(device_id, access_token)
-                
+                graph_device_id = graph_device.get("id")
+                if not graph_device_id:
+                    continue
+
+                local_device = local_devices.get(graph_device_id)
+                if not local_device:
+                    logger.warning("Device owner sync skipped unknown device %s", graph_device_id)
+                    continue
+
+                result = _make_graph_request(
+                    f"/devices/{graph_device_id}/registeredOwners",
+                    access_token
+                )
+
+                if result is None:
+                    logger.warning("Device owner sync preserved existing owners after failed Graph response for %s", graph_device_id)
+                    continue
+
+                owners = result.get("value", [])
+                with db.session.no_autoflush:
+                    db.session.query(AzureDeviceOwner).filter_by(
+                        tenant_id=tenant_id,
+                        device_id=local_device.id,
+                    ).delete()
+
                 for owner in owners:
                     try:
-                        owner_id = owner.get("id")
-                        owner_type = owner.get("@odata.type", "").split(".")[-1].lower()
-                        
-                        # Check if relationship already exists
-                        existing = AzureDeviceOwner.query.filter_by(
-                            tenant_id=tenant_id,
-                            device_id=device_id,
-                            user_id=owner_id
-                        ).first()
-                        
-                        if not existing:
-                            # Create relationship
-                            relationship = AzureDeviceOwner(
-                                tenant_id=tenant_id,
-                                device_id=device_id,
-                                user_id=owner_id,
-                                owner_type=owner_type or "primary"
+                        graph_user_id = owner.get("id")
+                        if not graph_user_id:
+                            continue
+
+                        local_user = local_users.get(graph_user_id)
+                        if not local_user:
+                            logger.warning(
+                                "Device owner sync skipped unknown user %s for device %s",
+                                graph_user_id,
+                                graph_device_id,
                             )
-                            db.session.add(relationship)
-                            owner_count += 1
-                        
+                            continue
+
+                        relationship = AzureDeviceOwner(
+                            tenant_id=tenant_id,
+                            device_id=local_device.id,
+                            user_id=local_user.id,
+                            owner_type="registeredOwner",
+                            linked_at=datetime.utcnow()
+                        )
+                        db.session.add(relationship)
+                        owner_count += 1
+
                     except Exception as e:
-                        logger.warning(f"Failed to sync owner {owner.get('id')}: {e}")
-                
-                db.session.commit()
-                
+                        logger.warning("Failed to sync owner %s for device %s: %s", owner.get("id"), graph_device_id, e)
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+
             except Exception as e:
-                logger.warning(f"Failed to sync owners for device {device_id}: {e}")
+                logger.warning("Failed to sync registered owners for device %s: %s", graph_device.get("id"), e)
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+
+        for attempt in range(3):
+            try:
+                db.session.commit()
+                break
+            except OperationalError as exc:
+                message = str(exc).lower()
                 db.session.rollback()
-        
+                if 'database is locked' in message and attempt < 2:
+                    time.sleep(1 * (attempt + 1))
+                    continue
+                logger.error(f"Failed to commit device-owner sync: {exc}")
+                break
+            except Exception as exc:
+                logger.error(f"Failed to commit device-owner sync: {exc}")
+                db.session.rollback()
+                break
+
         return owner_count
 
 

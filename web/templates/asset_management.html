@@ -495,6 +495,17 @@
                             style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
                     </div>
                 </div>
+                <div class="form-group">
+                    <label
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Reporting Manager</label>
+                    <select name="manager_id"
+                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                        <option value="">None (Top Level)</option>
+                        {% for mgr in employees %}
+                        <option value="{{ mgr.id }}">{{ mgr.name }} ({{ mgr.email }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 12px;">
                     <button type="button" onclick="document.getElementById('registerEmpModal').style.display='none'"
                         class="view-btn"
@@ -697,7 +708,11 @@
 
             let devicesHtml = '';
             if (hasDevices) {
-                const devs = emp.assets.map(d => `
+                const devs = emp.assets.map(d => {
+                    const assignedStr = d.assigned_date
+                        ? new Date(d.assigned_date).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'})
+                        : '—';
+                    return `
                     <div class="device-card">
                         <div class="device-icon">
                             ${renderDeviceIcon(d.device_type, d.os_info)}
@@ -711,12 +726,13 @@
                                 <span>${escapeHtml(d.ip_address)}</span> &bull; 
                                 <span title="${escapeHtml(d.os_info)}">${escapeHtml(d.os_info).split(' ')[0] || 'Unknown OS'}</span>
                             </div>
-                            <div style="margin-top:4px;">
+                            <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                                 <span class="device-source-badge">${escapeHtml(d.source)}</span>
+                                <span style="font-size:0.7rem;color:var(--ms-text-secondary)" title="Assigned Date"><i class="fas fa-calendar-check" style="margin-right:3px;color:#0078d4"></i>${assignedStr}</span>
                             </div>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
 
                 devicesHtml = `<div class="devices-grid">${devs}</div>`;
             }

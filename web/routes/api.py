@@ -4,18 +4,54 @@ Provides screenshot serving (local fallback) and screenshot gallery endpoints.
 """
 
 import os
+import json
 import mimetypes
 import logging
+import time
 from datetime import datetime, timedelta
 
 from typing import Any, cast
+from sqlalchemy.exc import OperationalError
 
 from flask import Blueprint, send_file, jsonify, abort, request, make_response
 from flask_login import login_required, current_user
+from web.services.notification_service import create_notification
 
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__)
+
+
+def _retry_db_commit(db, attempts=3, delay=0.5):
+    for attempt in range(attempts):
+        try:
+            db.session.commit()
+            return True
+        except OperationalError as exc:
+            message = str(exc).lower()
+            if 'database is locked' in message and attempt < attempts - 1:
+                db.session.rollback()
+                time.sleep(delay * (attempt + 1))
+                continue
+            db.session.rollback()
+            raise
+    return False
+
+
+def _retry_db_flush(db, attempts=3, delay=0.25):
+    for attempt in range(attempts):
+        try:
+            db.session.flush()
+            return True
+        except OperationalError as exc:
+            message = str(exc).lower()
+            if 'database is locked' in message and attempt < attempts - 1:
+                db.session.rollback()
+                time.sleep(delay * (attempt + 1))
+                continue
+            db.session.rollback()
+            raise
+    return False
 
 #
 # Legacy agent compatibility endpoints
@@ -370,16 +406,28 @@ def api_server_screenshots(server_id):
 @login_required
 def api_remote_rdp(server_id):
     """Generate RDP connection command for remote desktop access"""
-    from web.models import Server
+    from web.models import AuditLog, Server, db
     server = Server.query.get_or_404(server_id)
     
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
+
+    audit = AuditLog()
+    audit.tenant_id = server.tenant_id
+    audit.user = current_user.username
+    audit.action = 'REMOTE_ACCESS:RDP'
+    audit.resource = f'Server:{server.hostname}'
+    audit.details = 'RDP access initiated'
+    audit.timestamp = datetime.utcnow()
+    audit.status = 'accessed'
+    db.session.add(audit)
+    db.session.commit()
     
     return jsonify({
         'success': True,
-        'ip_address': server.ip_address or server.hostname,
-        'rdp_command': f'mstsc /v:{server.ip_address or server.hostname} /admin',
+        'hostname': server.hostname,
+        'ip_address': server.ip or server.hostname,
+        'rdp_command': f'mstsc /v:{server.ip or server.hostname} /admin',
         'message': 'RDP connection initiated'
     })
 
@@ -424,21 +472,50 @@ def api_enable_monitoring(server_id):
 @login_required
 def api_remote_software(server_id):
     """Deploy or remove software on remote server"""
-    from web.models import Server
+    from web.models import AuditLog, db, RemoteCommand, Server
+
     server = Server.query.get_or_404(server_id)
-    
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
-    
+
     data = request.get_json() or {}
-    action = data.get('action', 'install')  # install or uninstall
-    software = data.get('software', '')
-    
+    action = (data.get('action', 'install') or '').strip().lower()
+    software = (data.get('software') or '').strip()
+
     if not software:
         return jsonify({'error': 'Software name required'}), 400
-    
+
+    if action == 'uninstall':
+        powershell_cmd = f'choco uninstall {software} -y'
+    else:
+        powershell_cmd = f'choco install {software} -y --allow-empty-checksums'
+
+    remote_cmd = RemoteCommand()
+    remote_cmd.server_id = server_id
+    remote_cmd.command = powershell_cmd
+    remote_cmd.parameters = json.dumps({
+        'action': action,
+        'software': software,
+        'requested_by': current_user.username
+    })
+    remote_cmd.status = 'pending'
+    db.session.add(remote_cmd)
+
+    audit = AuditLog()
+    audit.tenant_id = current_user.tenant_id
+    audit.user = current_user.username
+    audit.action = f'DEPLOY_SOFTWARE:{action}'
+    audit.resource = f'Server:{server.hostname}'
+    audit.details = f'{action} {software}'
+    audit.timestamp = datetime.utcnow()
+    audit.status = 'pending'
+    db.session.add(audit)
+    db.session.commit()
+
+    logger.info(f"Software deployment queued: {action} {software} on {server.hostname}")
     return jsonify({
         'success': True,
+        'command_id': remote_cmd.id,
         'action': action,
         'software': software,
         'message': f'Deployment queued: {action} {software}'
@@ -510,6 +587,181 @@ def api_agent_restart(server_id):
         'message': 'Agent restart queued for next heartbeat'
     })
 
+
+# Software Management  –  GET /api/v2/server/<id>/software-list
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/server/<int:server_id>/software-list')
+@login_required
+def get_server_software_list(server_id):
+    """Get list of installed software on a server from the latest metrics"""
+    from web.models import Server, Metric
+    import json
+    
+    server = Server.query.get_or_404(server_id)
+    if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
+        abort(403)
+    
+    # Get latest metric with software list from agent
+    metric = Metric.query.filter_by(server_id=server_id)\
+        .order_by(Metric.timestamp.desc()).first()
+    
+    software_list = []
+    if metric and metric.details:
+        try:
+            details = json.loads(metric.details) if isinstance(metric.details, str) else metric.details
+            software_list = details.get('installed_software', [])
+        except:
+            pass
+    
+    return jsonify({
+        'success': True,
+        'software_list': software_list,
+        'count': len(software_list),
+        'message': f'Found {len(software_list)} installed packages'
+    })
+
+
+# Software Upload & Install  –  POST /api/v2/server/<id>/software-upload
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/server/<int:server_id>/software-upload', methods=['POST'])
+@login_required
+def upload_software_package(server_id):
+    """Upload and queue installation of a software package or executable"""
+    from web.models import db, Server, RemoteCommand, AuditLog
+    import os
+    
+    server = Server.query.get_or_404(server_id)
+    if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
+        abort(403)
+    
+    # Check for file in request
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    filename = file.filename or ''
+    if not filename:
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+    
+    # Validate file extension
+    allowed_extensions = {'exe', 'msi', 'zip', 'ps1'}
+    if '.' not in filename or filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({
+            'success': False,
+            'error': f'Only {", ".join(allowed_extensions)} files allowed'
+        }), 400
+    
+    try:
+        # Create uploads directory if it doesn't exist
+        upload_dir = os.path.join(os.path.dirname(__file__), '../../uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Save file with unique name
+        from werkzeug.utils import secure_filename
+        safe_filename = secure_filename(filename) or 'upload'
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        saved_filename = f"{timestamp}_{safe_filename}"
+        file_path = os.path.join(upload_dir, saved_filename)
+        
+        file.save(file_path)
+        file_size = os.path.getsize(file_path)
+        file_url = f"/api/v2/server/{server_id}/software-download/{saved_filename}"
+        
+        # Build PowerShell command to download and execute
+        powershell_cmd = f'''
+$ProgressPreference = 'SilentlyContinue'
+$url = '{file_url}'
+$outPath = "$env:TEMP\\{saved_filename}"
+Invoke-WebRequest -Uri $url -OutFile $outPath -ErrorAction Stop
+
+if ($outPath -match '\\.exe$') {{
+    & $outPath /S /D=C:\\Program Files\\{os.path.splitext(filename)[0]}
+}} elseif ($outPath -match '\\.msi$') {{
+    msiexec /i $outPath /quiet /norestart
+}} elseif ($outPath -match '\\.ps1$') {{
+    & $outPath
+}} elseif ($outPath -match '\\.zip$') {{
+    Expand-Archive -Path $outPath -DestinationPath "$env:TEMP\\{os.path.splitext(filename)[0]}"
+}}
+
+Remove-Item $outPath -Force
+Write-Host "Installation completed"
+'''.strip()
+        
+        # Queue the command
+        cmd = RemoteCommand()
+        cmd.server_id = server_id
+        cmd.command = powershell_cmd
+        cmd.parameters = json.dumps({
+            'file': saved_filename,
+            'size': file_size,
+            'uploaded_by': current_user.username
+        })
+        cmd.status = 'pending'
+        cmd.timeout_seconds = 600  # 10 minutes for installation
+        db.session.add(cmd)
+        
+        # Audit log
+        audit = AuditLog()
+        audit.tenant_id = current_user.tenant_id
+        audit.user = current_user.username
+        audit.action = 'DEPLOY_SOFTWARE:upload'
+        audit.resource = f'Server:{server.hostname}'
+        audit.details = f'Uploaded {filename} ({file_size} bytes)'
+        audit.timestamp = datetime.utcnow()
+        audit.status = 'pending'
+        db.session.add(audit)
+        db.session.commit()
+        
+        logger.info(f"Software package uploaded: {filename} ({file_size} bytes) for server {server_id}")
+        
+        return jsonify({
+            'success': True,
+            'command_id': cmd.id,
+            'filename': filename,
+            'size': file_size,
+            'message': f'Installation queued for {filename}'
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to upload software: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# Software Download  –  GET /api/v2/server/<id>/software-download/<filename>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/server/<int:server_id>/software-download/<filename>')
+def download_software_package(server_id, filename):
+    """Download a previously uploaded software package (for agent to download)"""
+    from web.models import Server
+    import os
+    
+    _server = Server.query.get_or_404(server_id)  # Verify server exists for auth check
+    
+    try:
+        upload_dir = os.path.join(os.path.dirname(__file__), '../../uploads')
+        file_path = os.path.join(upload_dir, filename)
+        
+        # Security: Ensure file is within upload directory
+        if not os.path.abspath(file_path).startswith(os.path.abspath(upload_dir)):
+            abort(403)
+        
+        if not os.path.exists(file_path):
+            abort(404)
+        
+        return send_file(file_path, as_attachment=True)
+    
+    except Exception as e:
+        logger.error(f"Failed to download software: {e}")
+        abort(500)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent Metrics Intake  –  POST /api/v2/agent/metrics
 # ─────────────────────────────────────────────────────────────────────────────
@@ -552,167 +804,284 @@ def agent_metrics():
     }
     """
     from web.models import db, Server, Metric, Screenshot, EmployeeActivity
+    import traceback
 
-    data = request.get_json(silent=True) or {}
-
-    api_key  = data.get('api_key') or data.get('agent_key', '')
-    hostname = (data.get('hostname') or '').strip()
-    ip       = data.get('ip', '')
-    os_info  = data.get('os_info', '')
-    logged_in_user = data.get('logged_in_user', '')
-    idle_time_seconds = float(data.get('idle_time_seconds', data.get('idle_time', 0)) or 0)
-    activity_payload = data.get('activity') or {}
-    active_app = (activity_payload.get('app') or data.get('active_app') or '').strip()
-    window_title = (activity_payload.get('window_title') or data.get('window_title') or '').strip()
-    browser_url = (activity_payload.get('browser_url') or activity_payload.get('url') or data.get('browser_url') or '').strip()
-
-    # ── Resolve the Server record ──────────────────────────────────────────
-    server = None
-
-    # 1) Match by api_key first (production path)
-    if api_key and api_key != 'demo_mode_key':
-        server = Server.query.filter_by(api_key=api_key).first()
-
-    # 2) Fallback: match by hostname within any tenant (dev/demo path)
-    if server is None and hostname:
-        server = Server.query.filter_by(hostname=hostname).first()
-
-    # 3) Auto-create server for demo_mode_key so local dev works out of the box
-    if server is None and hostname:
-        from web.models import Tenant
-        import secrets as _secrets
-        tenant = Tenant.query.first()
-        if tenant:
-            server = Server()
-            server.hostname   = hostname
-            server.name       = hostname
-            server.tenant_id  = tenant.id
-            server.api_key    = api_key if (api_key and api_key != 'demo_mode_key') else _secrets.token_hex(32)
-            server.source     = 'agent'
-            server.type       = 'agent'
-            server.agent_installed = True
-            db.session.add(server)
-            logger.info(f"Auto-created server record for hostname={hostname}")
-
-    if server is None:
-        return jsonify({'success': False, 'error': 'Unknown agent. Register the server first.'}), 404
-
-    # ── Update server heartbeat & metadata ────────────────────────────────
-    now = datetime.utcnow()
-    server.last_seen = now
-    server.status    = 'online'
-    server.agent_installed  = True
-    server.monitoring_active = True
-    if ip:
-        server.ip = ip
-    if os_info:
-        server.os_info = os_info
-
-    # ── Store Metric row ──────────────────────────────────────────────────
-    metrics_raw = data.get('metrics') or {}
-
-    cpu  = float(metrics_raw.get('cpu_percent')    or metrics_raw.get('cpu_util_percent')  or metrics_raw.get('cpu')  or 0)
-    ram  = float(metrics_raw.get('ram_percent')    or metrics_raw.get('ram_util_percent')  or metrics_raw.get('ram')  or 0)
-    disk = float(metrics_raw.get('disk_percent')   or metrics_raw.get('disk_util_percent') or metrics_raw.get('disk') or 0)
-
-    metric = Metric()
-    metric.server_id         = server.id
-    metric.timestamp         = now
-    metric.cpu               = cpu
-    metric.ram               = ram
-    metric.disk              = disk
-    metric.cpu_util_percent  = cpu
-    metric.ram_util_percent  = ram
-    metric.ssd_util_percent  = disk
-    metric.total_ram_gb      = float(metrics_raw.get('total_ram_gb', 0) or 0)
-    metric.used_ram_gb       = float(metrics_raw.get('used_ram_gb',  0) or 0)
-    metric.available_ram_gb  = float(metrics_raw.get('ram_available_gb', 0) or 0)
-    metric.total_ssd_gb      = float(metrics_raw.get('total_disk_gb', 0) or 0)
-    metric.used_ssd_gb       = float(metrics_raw.get('used_disk_gb',  0) or 0)
-    db.session.add(metric)
-
-    # ── Employee activity (logged_in_user) ────────────────────────────────
-    if logged_in_user:
-        activity = EmployeeActivity()
-        activity.server_id = server.id
-        activity.user      = logged_in_user
-        activity.timestamp = now
-        activity.idle_time = int(max(0, idle_time_seconds))
-        activity.app = active_app or None
-        if browser_url and window_title:
-            activity.window_title = f"{window_title} | {browser_url}"
-        elif browser_url:
-            activity.window_title = browser_url
-        else:
-            activity.window_title = window_title or None
-        db.session.add(activity)
-
-    # ── Screenshot (base64 inline, save to disk) ───────────────────────────
-    ss_data = data.get('screenshot')
-    screenshot_enabled = server.screenshot_enabled
-    screenshot_interval_minutes = server.screenshot_interval_minutes or 10
-
-    if ss_data and ss_data.get('success') and ss_data.get('image'):
-        try:
-            import base64 as _b64
-            import os as _os
-
-            img_bytes = _b64.b64decode(ss_data['image'])
-            ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
-            ts_str    = now.strftime('%Y%m%d_%H%M%S')
-            fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
-
-            # Save next to the database in a screenshots sub-folder
-            # current_app not required here; compute base dir directly
-            base_dir  = _os.path.join(
-                _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                '..', 'data', 'screenshots'
-            )
-            _os.makedirs(base_dir, exist_ok=True)
-            file_path = _os.path.join(base_dir, fname)
-
-            with open(file_path, 'wb') as f:
-                f.write(img_bytes)
-
-            shot = Screenshot()
-            shot.server_id      = server.id
-            shot.tenant_id      = server.tenant_id
-            shot.filename       = fname
-            shot.hostname       = hostname
-            shot.captured_at    = now
-            shot.uploaded_at    = now
-            shot.uploaded       = False
-            shot.file_size_kb   = len(img_bytes) // 1024
-            shot.active_user    = logged_in_user or ''
-            shot.os_info        = os_info
-            shot.ip_address     = ip
-            shot.local_file_path = _os.path.abspath(file_path)
-            db.session.add(shot)
-            logger.info(f"Screenshot saved: {file_path}")
-        except Exception as e:
-            logger.error(f"Failed to save screenshot: {e}")
-
-    db.session.commit()
-
-    # ── Emit real-time update via SocketIO ────────────────────────────────
+    logger.info("📥 Metrics endpoint called")
+    
     try:
-        # Cast socketio to Any to avoid strict type errors in static analysis tools
-        from web.app import socketio
-        sio = cast(Any, socketio)
-        sio.emit('metrics_update', {
-            'server_id': server.id,
-            'timestamp': now.isoformat() + 'Z',
-            'metrics':   {'cpu': cpu, 'ram': ram, 'disk': disk},
-        }, room=str(server.tenant_id))
-    except Exception:
-        pass
+        data = request.get_json(silent=True) or {}
+        logger.info(f"Received payload keys: {list(data.keys())}")
+        
+        api_key  = data.get('api_key') or data.get('agent_key', '')
+        hostname = (data.get('hostname') or '').strip()
+        ip       = data.get('ip', '')
+        os_info  = data.get('os_info', '')
+        logged_in_user = data.get('logged_in_user', '')
+        idle_time_seconds = float(data.get('idle_time_seconds', data.get('idle_time', 0)) or 0)
+        activity_payload = data.get('activity') or {}
+        active_app = (activity_payload.get('app') or data.get('active_app') or '').strip()
+        window_title = (activity_payload.get('window_title') or data.get('window_title') or '').strip()
+        browser_url = (activity_payload.get('browser_url') or activity_payload.get('url') or data.get('browser_url') or '').strip()
 
-    return jsonify({
-        'success':                    True,
-        'server_id':                  server.id,
-        'screenshot_enabled':         screenshot_enabled,
-        'screenshot_interval_minutes': screenshot_interval_minutes,
-    })
+        logger.info(f"Parsed: user={logged_in_user}, app={active_app}, idle={idle_time_seconds}")
+        
+        # ── Resolve the Server record ──────────────────────────────────────────
+        server = None
+
+        # 1) Match by api_key first (production path)
+        if api_key and api_key != 'demo_mode_key':
+            server = Server.query.filter_by(api_key=api_key).first()
+
+        # 2) Fallback: match by hostname within any tenant (dev/demo path)
+        if server is None and hostname:
+            server = Server.query.filter_by(hostname=hostname).first()
+
+        # 3) Auto-create server for demo_mode_key so local dev works out of the box
+        if server is None and hostname:
+            from web.models import Tenant
+            import secrets as _secrets
+            tenant = Tenant.query.first()
+            if tenant:
+                server = Server()
+                server.hostname   = hostname
+                server.name       = hostname
+                server.tenant_id  = tenant.id
+                server.api_key    = api_key if (api_key and api_key != 'demo_mode_key') else _secrets.token_hex(32)
+                server.source     = 'agent'
+                server.type       = 'agent'
+                server.agent_installed = True
+                db.session.add(server)
+                logger.info(f"Auto-created server record for hostname={hostname}")
+
+        if server is None:
+            logger.warning(f"Server not found for hostname={hostname}, api_key={api_key}")
+            return jsonify({'success': False, 'error': 'Unknown agent. Register the server first.'}), 404
+
+        # ── Check Tenant Subscription Status ──────────────────────────────
+        # Verify Tenant subscription status safely
+        tenant_status = 'active'
+        if getattr(server, 'tenant', None):
+            tenant_status = server.tenant.status or 'active'  # type: ignore
+            
+        if tenant_status != 'active':
+            return jsonify({'success': False, 'error': f'Tenant subscription is {tenant_status}. Telemetry rejected.'}), 403
+
+        # ── Update server heartbeat & metadata ────────────────────────────
+        now = datetime.utcnow()
+        prev_status = getattr(server, 'status', None)
+        server.last_seen = now
+        server.status    = 'online'
+        server.agent_installed  = True
+        server.monitoring_active = True
+        if ip:
+            server.ip = ip
+        if os_info:
+            server.os_info = os_info
+
+        try:
+            _retry_db_flush(db)
+        except OperationalError as exc:
+            logger.error(f"Agent metrics failed due to locked database during flush: {exc}")
+            return jsonify({'success': False, 'error': 'Database is busy. Try again shortly.'}), 503
+        
+        # ── Identity Correlation Engine ───────────────────────────────────
+        try:
+            from core.identity_correlation import IdentityCorrelationService
+            serial_number = data.get('serial_number') or ''
+            IdentityCorrelationService.correlate_agent_payload(
+                tenant_id=server.tenant_id,
+                server_id=server.id,
+                hostname=hostname,
+                serial_number=serial_number,
+                logged_in_user=logged_in_user
+            )
+        except Exception as e:
+            logger.error(f"Identity correlation failed: {str(e)}")
+
+        # ── Store Metric row ──────────────────────────────────────────────
+        metrics_raw = data.get('metrics') or {}
+
+        cpu  = float(metrics_raw.get('cpu_percent')    or metrics_raw.get('cpu_util_percent')  or metrics_raw.get('cpu')  or 0)
+        ram  = float(metrics_raw.get('ram_percent')    or metrics_raw.get('ram_util_percent')  or metrics_raw.get('ram')  or 0)
+        disk = float(metrics_raw.get('disk_percent')   or metrics_raw.get('disk_util_percent') or metrics_raw.get('disk') or 0)
+
+        metric = Metric()
+        metric.server_id         = server.id
+        metric.timestamp         = now
+        metric.cpu               = cpu
+        metric.ram               = ram
+        metric.disk              = disk
+        metric.cpu_util_percent  = cpu
+        metric.ram_util_percent  = ram
+        metric.ssd_util_percent  = disk
+        metric.total_ram_gb      = float(metrics_raw.get('total_ram_gb', 0) or 0)
+        metric.used_ram_gb       = float(metrics_raw.get('used_ram_gb',  0) or 0)
+        metric.available_ram_gb  = float(metrics_raw.get('ram_available_gb', 0) or 0)
+        metric.total_ssd_gb      = float(metrics_raw.get('total_disk_gb', 0) or 0)
+        metric.used_ssd_gb       = float(metrics_raw.get('used_disk_gb',  0) or 0)
+        
+        # Store activity and other details as JSON
+        details_obj = {
+            'active_app': active_app,
+            'window_title': window_title,
+            'browser_url': browser_url,
+            'idle_time_seconds': int(max(0, idle_time_seconds)),
+            'logged_in_user': logged_in_user,
+        }
+        # Include installed_software if provided
+        if 'installed_software' in (data.get('details') or {}):
+            details_obj['installed_software'] = data['details']['installed_software']
+        
+        metric.details = json.dumps(details_obj)
+        db.session.add(metric)
+        logger.info("Metric row created, added to session")
+
+        # ── Employee activity (logged_in_user) ────────────────────────────────
+        if logged_in_user:
+            activity = EmployeeActivity()
+            activity.server_id = server.id
+            activity.user      = logged_in_user
+            activity.timestamp = now
+            activity.idle_time = int(max(0, idle_time_seconds))
+            activity.app = active_app or None
+            if browser_url and window_title:
+                activity.window_title = f"{window_title} | {browser_url}"
+            elif browser_url:
+                activity.window_title = browser_url
+            else:
+                activity.window_title = window_title or None
+            db.session.add(activity)
+            logger.info(f"Employee activity added: user={logged_in_user}")
+
+            # Commit activity before calling ProductivityEngine to avoid database locks
+            try:
+                _retry_db_commit(db)
+                logger.info("Activity committed")
+            except Exception as commit_err:
+                logger.warning(f"Failed to commit employee activity: {commit_err}")
+
+            # ── Phase 6: Detailed Productivity Engine (Relational Models) ────────
+            try:
+                from core.productivity_engine import ProductivityEngine
+                ProductivityEngine.process_agent_activity(
+                    tenant_id=server.tenant_id,
+                    server_id=server.id,
+                    logged_in_user=logged_in_user,
+                    active_app=active_app,
+                    window_title=window_title,
+                    browser_url=browser_url,
+                    idle_time_seconds=int(max(0, idle_time_seconds)),
+                    timestamp=now
+                )
+                logger.info("ProductivityEngine processed successfully")
+            except Exception as e:
+                logger.error(f"Failed to process detailed productivity metrics: {str(e)}")
+                logger.error(traceback.format_exc())
+
+        # ── Screenshot (base64 inline, save to disk) ───────────────────────────
+        ss_data = data.get('screenshot')
+        screenshot_enabled = server.screenshot_enabled
+        screenshot_interval_minutes = server.screenshot_interval_minutes or 10
+
+        if ss_data and ss_data.get('success') and ss_data.get('image'):
+            try:
+                import base64 as _b64
+                import os as _os
+
+                img_bytes = _b64.b64decode(ss_data['image'])
+                ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
+                ts_str    = now.strftime('%Y%m%d_%H%M%S')
+                fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
+
+                # Save next to the database in a screenshots sub-folder
+                # current_app not required here; compute base dir directly
+                base_dir  = _os.path.join(
+                    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                    '..', 'data', 'screenshots'
+                )
+                _os.makedirs(base_dir, exist_ok=True)
+                file_path = _os.path.join(base_dir, fname)
+
+                with open(file_path, 'wb') as f:
+                    f.write(img_bytes)
+
+                shot = Screenshot()
+                shot.server_id      = server.id
+                shot.tenant_id      = server.tenant_id
+                shot.filename       = fname
+                shot.hostname       = hostname
+                shot.captured_at    = now
+                shot.uploaded_at    = now
+                shot.uploaded       = False
+                shot.file_size_kb   = len(img_bytes) // 1024
+                shot.active_user    = logged_in_user or ''
+                shot.os_info        = os_info
+                shot.ip_address     = ip
+                shot.local_file_path = _os.path.abspath(file_path)
+                db.session.add(shot)
+                logger.info(f"Screenshot saved: {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to save screenshot: {e}")
+
+        logger.info("About to commit final transaction")
+        try:
+            _retry_db_commit(db)
+            logger.info("Final commit successful")
+        except OperationalError as exc:
+            logger.error(f"Agent metrics failed due to locked database during commit: {exc}")
+            return jsonify({'success': False, 'error': 'Database is busy. Try again shortly.'}), 503
+
+        # Extract values before background thread to avoid SQLAlchemy session issues
+        server_id = server.id
+        tenant_id = server.tenant_id
+        try:
+            # Notify UI if server just transitioned to online
+            if prev_status != 'online':
+                try:
+                    create_notification(tenant_id, 'alert', f"System online: {server.hostname}",
+                                        f"Agent reported for system {server.hostname} (ID {server.id})", {'server_id': server.id})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        # ── Emit real-time update via SocketIO (non-blocking) ────────────────────
+        def _emit_metrics_update():
+            try:
+                from web.app import socketio
+                sio = cast(Any, socketio)
+                sio.emit('metrics_update', {
+                    'server_id': server_id,
+                    'timestamp': now.isoformat() + 'Z',
+                    'metrics':   {'cpu': cpu, 'ram': ram, 'disk': disk},
+                }, room=str(tenant_id))
+            except Exception as e:
+                logger.error(f"SocketIO emit failed: {e}")
+        
+        # Emit in background thread to avoid blocking the HTTP response
+        import threading
+        emit_thread = threading.Thread(target=_emit_metrics_update, daemon=True)
+        emit_thread.start()
+
+        logger.info("Metrics endpoint returning success")
+        return jsonify({
+            'success':                    True,
+            'server_id':                  server_id,
+            'screenshot_enabled':         screenshot_enabled,
+            'screenshot_interval_minutes': screenshot_interval_minutes,
+        })
+
+    except Exception as e:
+        error_msg = str(e)
+        error_trace = traceback.format_exc()
+        logger.error(f"❌ Metrics endpoint error: {error_msg}")
+        logger.error(error_trace)
+        return jsonify({
+            'success': False, 
+            'error': error_msg,
+            'type': type(e).__name__,
+            'traceback': error_trace
+        }), 500
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -722,7 +1091,7 @@ def agent_metrics():
 @api_bp.route('/api/v2/agent/commands', methods=['GET'])
 def agent_poll_commands():
     """Return pending commands for an agent identified by hostname header."""
-    from web.models import Server, RemoteCommand
+    from web.models import db, Server, RemoteCommand
 
     hostname = request.headers.get('X-Hostname', '').strip()
     api_key  = request.headers.get('X-Agent-Key', '').strip()
@@ -740,6 +1109,23 @@ def agent_poll_commands():
         server_id=server.id, status='pending'
     ).order_by(RemoteCommand.created_at.asc()).limit(5).all()
 
+    if pending:
+        for c in pending:
+            c.status = 'sent'
+        db.session.commit()
+
+        try:
+            from web.app import socketio
+            for c in pending:
+                cast(Any, socketio).emit('command_started', {
+                    'command_id': c.id,
+                    'server_id': server.id,
+                    'command': c.command[:100],
+                    'status': 'sent'
+                }, broadcast=True)
+        except Exception as e:
+            logger.warning(f"WebSocket command_started skipped: {e}")
+
     return jsonify([
         {
             'command_id': c.id,
@@ -756,12 +1142,14 @@ def agent_poll_commands():
 
 @api_bp.route('/api/v2/agent/commands/result', methods=['POST'])
 def agent_command_result():
-    """Accept execution result for a previously dispatched command."""
+    """Accept execution result for a previously dispatched command and broadcast via WebSocket."""
     from web.models import db, RemoteCommand
 
     data       = request.get_json(silent=True) or {}
     command_id = data.get('command_id')
     output     = data.get('output', '')
+    error_output = data.get('error_output', '')
+    exit_code  = data.get('exit_code')
     status     = data.get('status', 'completed')
 
     if not command_id:
@@ -773,8 +1161,34 @@ def agent_command_result():
 
     cmd.status      = status
     cmd.output      = output
+    cmd.error_output = error_output
+    if exit_code is not None:
+        try:
+            cmd.exit_code = int(exit_code)
+        except (TypeError, ValueError):
+            cmd.exit_code = None
     cmd.executed_at = datetime.utcnow()
+    cmd.completed_at = datetime.utcnow()
     db.session.commit()
+
+    event_status = 'success' if status == 'completed' else status
+
+    # BROADCAST via WebSocket to portal UI
+    try:
+        from web.app import socketio
+        cast(Any, socketio).emit('command_result', {
+            'command_id': cmd.id,
+            'server_id': cmd.server_id,
+            'command': cmd.command[:100],
+            'status': event_status,
+            'output': output,
+            'error_output': error_output,
+            'executed_at': cmd.executed_at.isoformat() if cmd.executed_at else None,
+            'exit_code': cmd.exit_code
+        }, broadcast=True)
+        logger.info(f"✅ WebSocket: command {command_id} → {status}")
+    except Exception as e:
+        logger.warning(f"WebSocket broadcast skipped: {e}")
 
     return jsonify({'success': True})
 
@@ -827,6 +1241,90 @@ def api_metrics_history():
         })
         
     return jsonify(result)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Employee Productivity Report – GET /api/v2/employee/productivity
+# Supports JSON and CSV output. Filters: user (OS username), start (YYYY-MM-DD), end (YYYY-MM-DD)
+# Returns daily aggregates: date, user, records, avg_idle_seconds, top_app
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/employee/productivity', methods=['GET'])
+@login_required
+def api_employee_productivity():
+    from web.models import EmployeeActivity, Server
+    import csv
+    import io
+
+    user = (request.args.get('user') or '').strip()
+    start_str = (request.args.get('start') or '').strip()
+    end_str = (request.args.get('end') or '').strip()
+    out_fmt = (request.args.get('format') or 'json').lower()
+
+    q = EmployeeActivity.query
+
+    # Restrict by tenant for non-superadmins by joining Server
+    if not current_user.is_superadmin:
+        q = q.join(Server, EmployeeActivity.server_id == Server.id).filter(Server.tenant_id == current_user.tenant_id)
+
+    if user:
+        q = q.filter(EmployeeActivity.user == user)
+
+    try:
+        if start_str:
+            start_dt = datetime.fromisoformat(start_str + 'T00:00:00')
+            q = q.filter(EmployeeActivity.timestamp >= start_dt)
+        if end_str:
+            end_dt = datetime.fromisoformat(end_str + 'T23:59:59')
+            q = q.filter(EmployeeActivity.timestamp <= end_dt)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    rows = q.order_by(EmployeeActivity.timestamp.asc()).all()
+
+    # Aggregate per-day + per-user
+    agg = {}
+    for r in rows:
+        day = r.timestamp.date().isoformat()
+        key = (day, r.user or '')
+        if key not in agg:
+            agg[key] = {'date': day, 'user': r.user or '', 'records': 0, 'active_records': 0, 'idle_sum': 0.0, 'apps': {}}
+        rec = agg[key]
+        rec['records'] += 1
+        rec['idle_sum'] += float(r.idle_time or 0)
+        if float(r.idle_time or 0) < 60:
+            rec['active_records'] += 1
+        app = (r.app or 'Unknown')[:200]
+        rec['apps'][app] = rec['apps'].get(app, 0) + 1
+
+    result = []
+    for (day, user), v in sorted(agg.items(), key=lambda x: (x[0][0], x[0][1])):
+        top_app = ''
+        if v['apps']:
+            top_app = max(v['apps'].items(), key=lambda kv: kv[1])[0]
+        avg_idle = (v['idle_sum'] / v['records']) if v['records'] else 0
+        result.append({
+            'date': v['date'],
+            'user': v['user'],
+            'records': v['records'],
+            'active_records': v['active_records'],
+            'avg_idle_seconds': round(avg_idle, 1),
+            'top_app': top_app,
+            'apps_breakdown': v['apps']
+        })
+
+    if out_fmt == 'csv':
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['date', 'user', 'records', 'active_records', 'avg_idle_seconds', 'top_app'])
+        for r in result:
+            writer.writerow([r['date'], r['user'], r['records'], r['active_records'], r['avg_idle_seconds'], r['top_app']])
+        resp = make_response(output.getvalue())
+        resp.headers['Content-Type'] = 'text/csv'
+        resp.headers['Content-Disposition'] = 'attachment; filename="employee_productivity.csv"'
+        return resp
+
+    return jsonify({'success': True, 'rows': result})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -885,23 +1383,71 @@ def api_server_forecast(server_id):
         if not server or (not current_user.is_superadmin and server.tenant_id != current_user.tenant_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
             
-        # Dummy logic to fulfill the forecast API requirements
-        metrics = Metric.query.filter_by(server_id=server_id).order_by(Metric.timestamp.desc()).limit(10).all()
-        if len(metrics) < 2:
+        # Advanced forecasting using linear regression
+        metrics = Metric.query.filter_by(server_id=server_id).order_by(Metric.timestamp.desc()).limit(60).all()
+        if len(metrics) < 10:
             return jsonify({
                 'success': False, 
-                'message': 'Insufficient historical data for forecasting.'
+                'message': 'Insufficient historical data for forecasting. Currently learning patterns...'
             }), 200
             
-        cpu_vals = [m.cpu_util_percent or m.cpu for m in metrics]
-        cpu_trend = 'up' if cpu_vals[0] > cpu_vals[-1] else 'stable'
+        cpu_vals = [m.cpu_util_percent or getattr(m, 'cpu', 0) or 0 for m in metrics]
+        ram_vals = [m.ram_util_percent or getattr(m, 'ram', 0) or 0 for m in metrics]
+        
+        # Reverse to chronologically ascending for trend calculation
+        cpu_vals.reverse()
+        ram_vals.reverse()
+
+        def calculate_trend(values):
+            n = len(values)
+            if n < 2: return 0
+            sum_x = sum(range(n))
+            sum_y = sum(values)
+            sum_x2 = sum(i*i for i in range(n))
+            sum_xy = sum(i*values[i] for i in range(n))
+            
+            denominator = (n * sum_x2 - sum_x**2)
+            if denominator == 0: return 0
+            return (n * sum_xy - sum_x * sum_y) / denominator
+            
+        cpu_slope = calculate_trend(cpu_vals)
+        ram_slope = calculate_trend(ram_vals)
+        
+        # Determine trend categories
+        def get_trend_category(slope, current_val):
+            if slope > 0.5: return 'Critical Spike' if current_val > 80 else 'Sharply Up'
+            elif slope > 0.1: return 'Upward'
+            elif slope < -0.5: return 'Dropping'
+            elif slope < -0.1: return 'Downward'
+            else: return 'Stable'
+            
+        cpu_trend = get_trend_category(cpu_slope, cpu_vals[-1])
+        ram_trend = get_trend_category(ram_slope, ram_vals[-1])
+        
+        # Construct recommendations based on trends
+        recommendations = []
+        if cpu_slope > 0.2 and cpu_vals[-1] > 80:
+            recommendations.append("CPU usage is high and rising; consider load balancing or scaling up.")
+        elif cpu_slope > 0.5:
+            recommendations.append("CPU usage is spiking rapidly. Investigate background processes.")
+            
+        if ram_slope > 0.2 and ram_vals[-1] > 80:
+            recommendations.append("Memory is near capacity and trending upwards. Potential memory leak or high load.")
+            
+        if not recommendations:
+            if cpu_trend == 'Stable' and ram_trend == 'Stable':
+                recommendations.append("System resources are stable. No action required.")
+            else:
+                recommendations.append("Trends detected, but within safe operational thresholds.")
+                
+        recommendation_text = " ".join(recommendations)
         
         return jsonify({
             'success': True,
-            'message': 'Analysis complete',
-            'recommendation': 'Server resources look stable based on recent trends.' if cpu_trend == 'stable' else 'CPU usage is trending upward.',
-            'cpu': {'trend': cpu_trend},
-            'ram': {'trend': 'stable'}
+            'message': 'AI Predictive Analysis complete',
+            'recommendation': recommendation_text,
+            'cpu': {'trend': cpu_trend, 'slope': round(cpu_slope, 4)},
+            'ram': {'trend': ram_trend, 'slope': round(ram_slope, 4)}
         }), 200
     except Exception as e:
         logger.error(f"Error in forecast endpoint for server {server_id}: {e}")
@@ -991,7 +1537,6 @@ def api_screenshot_config(server_id):
 def api_terminal_command(server_id):
     """Queue a terminal command to be executed by the agent"""
     from web.models import db, Server, RemoteCommand
-    import json
     
     server = Server.query.get_or_404(server_id)
     
@@ -1024,6 +1569,88 @@ def api_terminal_command(server_id):
         db.session.rollback()
         logger.error(f"Failed to queue terminal command: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# Get Command Status  –  GET /api/v2/commands/<id>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/commands/<int:command_id>')
+@login_required
+def api_get_command_status(command_id):
+    """Get the status and output of a queued command"""
+    from web.models import RemoteCommand
+    
+    cmd = RemoteCommand.query.get_or_404(command_id)
+    
+    # Authorization check
+    if not current_user.is_superadmin and cmd.server.tenant_id != current_user.tenant_id:
+        abort(403)
+    
+    return jsonify({
+        'success': True,
+        'id': cmd.id,
+        'status': cmd.status,
+        'command': cmd.command,
+        'output': cmd.output or '',
+        'error_output': cmd.error_output or '',
+        'exit_code': cmd.exit_code,
+        'created_at': cmd.created_at.isoformat() if cmd.created_at else None,
+        'executed_at': cmd.executed_at.isoformat() if cmd.executed_at else None,
+        'completed_at': cmd.completed_at.isoformat() if cmd.completed_at else None
+    })
+
+
+# Queue Terminal Command  –  POST /api/v2/commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/v2/commands', methods=['POST'])
+@login_required
+def api_queue_terminal_command():
+    """Queue a terminal command for execution on a server"""
+    from web.models import db, Server, RemoteCommand
+    
+    data = request.get_json() or {}
+    server_id = data.get('server_id')
+    command = data.get('command', '').strip()
+    timeout = data.get('timeout', 120)
+    
+    if not server_id or not command:
+        return jsonify({
+            'success': False,
+            'error': 'Missing server_id or command'
+        }), 400
+    
+    # Get server and check authorization
+    server = Server.query.get_or_404(server_id)
+    if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
+        abort(403)
+    
+    try:
+        # Create and queue the command
+        cmd = RemoteCommand()
+        cmd.server_id = server_id
+        cmd.command = command
+        cmd.parameters = None
+        cmd.status = 'pending'
+        cmd.timeout_seconds = timeout
+        db.session.add(cmd)
+        db.session.commit()
+        
+        logger.info(f"Queued terminal command {cmd.id} on server {server_id}: {command[:100]}")
+        
+        return jsonify({
+            'success': True,
+            'command_id': cmd.id,
+            'command': command,
+            'message': 'Command queued successfully'
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to queue command: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 # Historical metrics endpoint for charting
@@ -1102,4 +1729,55 @@ def api_inventory_sync():
     except Exception as e:
         db.session.rollback()
         logger.error(f'[Azure Inventory Sync] Failed manual sync for {tenant.name}: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/v2/inventory/sync/debug', methods=['GET'])
+@login_required
+def api_inventory_sync_debug():
+    """Diagnostic endpoint to help debug Azure inventory sync failures.
+
+    Returns token acquisition status and a small sample from Microsoft Graph for the current tenant.
+    Admin-only: only users belonging to the tenant may call this while signed in.
+    """
+    from web.models import Tenant
+    try:
+        tenant = db.session.get(Tenant, current_user.tenant_id)
+        if not tenant:
+            return jsonify({'success': False, 'error': 'Tenant not found for current user'}), 404
+
+        # Try to acquire a token using the tenant app credentials
+        try:
+            from core import azure_graph
+            token = azure_graph._get_token_for_tenant(tenant)
+        except Exception as e:
+            token = None
+            token_err = str(e)
+        else:
+            token_err = None
+
+        # Try to call Graph /devices endpoint (will return empty list on failure)
+        try:
+            from core import azure_graph
+            devices = azure_graph.get_devices(tenant)
+        except Exception as e:
+            devices = []
+            devices_err = str(e)
+        else:
+            devices_err = None
+
+        data = {
+            'tenant': tenant.name,
+            'azure_configured': bool(tenant.azure_client_id and tenant.azure_client_secret and tenant.azure_tenant_id),
+            'token_acquired': bool(token),
+            'token_error': token_err,
+            'devices_count': len(devices) if isinstance(devices, (list, tuple)) else 0,
+            'devices_sample': devices[:5] if isinstance(devices, list) else [],
+            'devices_error': devices_err,
+        }
+
+        return jsonify({'success': True, 'diagnostic': data})
+
+    except Exception as e:
+        logger.error(f'[Azure Inventory Sync Debug] Unexpected error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500

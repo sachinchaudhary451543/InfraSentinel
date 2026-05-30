@@ -58,18 +58,18 @@
         color: #646363 !important;
     }
 
-    /* Kill base data-table light overrides inside noc-page */
+    /* Ensure tables have clean light theme styling */
     .noc-page .data-table thead th,
     .noc-page .noc-table thead th {
-        color: #64748b !important;
-        border-bottom: 1px solid rgba(56, 189, 248, 0.06) !important;
-        background: rgba(13, 20, 34, 0.8) !important;
+        color: #475569 !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+        background: #f8fafc !important;
     }
 
     .noc-page .data-table tbody td,
     .noc-page .noc-table tbody td {
-        color: #e2e8f0 !important;
-        border-bottom: 1px solid rgba(56, 189, 248, 0.04) !important;
+        color: #0f172a !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
     }
 
     .noc-page .data-table tbody tr:hover,
@@ -101,7 +101,7 @@
 
     /* Kill base border-white/x overrides inside noc-page */
     .noc-page [class*="border-white/"] {
-        border-color: rgba(56, 189, 248, 0.08) !important;
+        border-color: rgba(148, 163, 184, 0.2) !important;
     }
 
     /* Main content padding — let noc-page handle its own */
@@ -111,7 +111,9 @@
 
     /* Fallback for browsers without :has() */
     .noc-page {
-        margin: -24px -32px !important;
+        margin: 0 !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* Selection highlights for inventory filtering */
@@ -131,30 +133,30 @@
 {% block content %}
 
 <style>
-    /* ── NOC Dark Theme Variables ── */
+    /* ── NOC Light Theme Variables ── */
     :root {
-        --noc-bg: #fbfcff;
-        --noc-surface: #f4f4f4;
-        --noc-surface-2: #f0f0f0;
-        --noc-border: rgba(56, 189, 248, 0.08);
-        --noc-border-bright: rgba(56, 189, 248, 0.18);
-        --noc-cyan: #22d3ee;
-        --noc-cyan-dim: rgba(34, 211, 238, 0.12);
-        --noc-indigo: #818cf8;
-        --noc-indigo-dim: rgba(129, 140, 248, 0.12);
-        --noc-emerald: #34d399;
-        --noc-emerald-dim: rgba(52, 211, 153, 0.1);
-        --noc-amber: #fbbf24;
-        --noc-amber-dim: rgba(251, 191, 36, 0.1);
-        --noc-rose: #fb7185;
-        --noc-rose-dim: rgba(251, 113, 133, 0.1);
-        --noc-violet: #a78bfa;
-        --noc-text-primary: #052145;
-        --noc-text-secondary: #2d2d2d;
-        --noc-text-muted: #07090b;
-        --noc-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.15), 0 0 40px rgba(34, 211, 238, 0.05);
-        --noc-glow-indigo: 0 0 20px rgba(129, 140, 248, 0.15);
-        --noc-glow-emerald: 0 0 20px rgba(52, 211, 153, 0.15);
+        --noc-bg: #fbfcfd;
+        --noc-surface: #ffffff;
+        --noc-surface-2: #f8fafc;
+        --noc-border: rgba(148, 163, 184, 0.2);
+        --noc-border-bright: rgba(56, 189, 248, 0.4);
+        --noc-cyan: #0284c7;
+        --noc-cyan-dim: rgba(2, 132, 199, 0.08);
+        --noc-indigo: #4f46e5;
+        --noc-indigo-dim: rgba(79, 70, 229, 0.08);
+        --noc-emerald: #059669;
+        --noc-emerald-dim: rgba(5, 150, 105, 0.08);
+        --noc-amber: #d97706;
+        --noc-amber-dim: rgba(217, 119, 6, 0.08);
+        --noc-rose: #e11d48;
+        --noc-rose-dim: rgba(225, 29, 72, 0.08);
+        --noc-violet: #7c3aed;
+        --noc-text-primary: #0f172a;
+        --noc-text-secondary: #475569;
+        --noc-text-muted: #64748b;
+        --noc-glow-cyan: 0 4px 12px rgba(2, 132, 199, 0.1);
+        --noc-glow-indigo: 0 4px 12px rgba(79, 70, 229, 0.1);
+        --noc-glow-emerald: 0 4px 12px rgba(5, 150, 105, 0.1);
     }
 
     /* ── Scoped to this page only ── */
@@ -168,7 +170,7 @@
         box-sizing: border-box;
     }
 
-    /* ── Scanline overlay ── */
+    /* ── Scanline overlay (disabled) ──
     .noc-scanlines::before {
         content: '';
         position: fixed;
@@ -176,11 +178,12 @@
         background: repeating-linear-gradient(0deg,
                 transparent,
                 transparent 2px,
-                rgba(0, 0, 0, 0.03) 2px;
+                rgba(0, 0, 0, 0.03) 2px,
                 rgba(0, 0, 0, 0.03) 4px);
         pointer-events: none;
         z-index: 9999;
     }
+    */
 
     /* ── NOC Panel ── */
     .noc-panel {
@@ -192,14 +195,7 @@
     }
 
     .noc-panel::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--noc-cyan), transparent);
-        opacity: 0.4;
+        display: none;
     }
 
     .noc-panel-bright {
@@ -317,14 +313,9 @@
         border: 1px solid rgba(251, 191, 36, 0.2);
     }
 
-    /* .badge-offline {
+    .badge-offline {
         background: rgba(51, 65, 85, 0.5);
         color: #64748b;
-        border: 1px solid rgba(51, 65, 85, 0.8);
-    } */
-    .badge-offline {
-        background: rgb(171 171 172 / 50%);
-        color: #060606;
         border: 1px solid rgba(51, 65, 85, 0.8);
     }
 
@@ -359,7 +350,7 @@
     }
 
     .noc-table thead tr {
-        background: rgba(13, 20, 34, 0.8);
+        background: #f1f5f9;
         border-bottom: 1px solid var(--noc-border);
     }
 
@@ -989,13 +980,13 @@
 
     /* ── Terminal-style script block ── */
     .noc-terminal {
-        background: #020509;
-        border: 1px solid rgba(34, 211, 238, 0.15);
-        border-radius: 3px;
+        background: #1e293b;
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
         padding: 16px;
         font-family: 'JetBrains Mono', 'Fira Code', monospace;
         font-size: 0.7rem;
-        color: #22d3ee;
+        color: #e2e8f0;
         overflow-x: auto;
         max-height: 240px;
         overflow-y: auto;
@@ -1080,14 +1071,7 @@
     }
 
     .telemetry-header::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--noc-cyan), var(--noc-indigo), transparent);
-        opacity: 0.5;
+        display: none;
     }
 
     /* ── Filter bar ── */
@@ -1173,27 +1157,27 @@
 
     @media (max-width: 1280px) {
         .noc-grid-4 {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, 1fr) !important;
         }
     }
 
     @media (max-width: 900px) {
         .noc-grid-4 {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, 1fr) !important;
         }
 
         .noc-grid-2 {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
         }
 
         .noc-grid-12 {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
         }
     }
 
     @media (max-width: 600px) {
         .noc-grid-4 {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr !important;
         }
 
         .noc-page-header {
@@ -1235,7 +1219,7 @@
                     <i class="fa-solid fa-warehouse" style="margin-right:5px;"></i>Inventory
                 </button>
                 <button onclick="switchTab('live')" id="tab-btn-live" class="noc-tab">
-                    <i class="fa-solid fa-wave-square" style="margin-right:5px;"></i>Live Monitor
+                    <i class="fa-solid fa-wave-square" style="margin-right:5px;"></i>Live Monitoring
                 </button>
                 <a href="{{ url_for('agent_mgmt.agent_portal') }}" class="noc-tab" style="text-decoration:none;">
                     <i class="fa-solid fa-robot" style="margin-right:5px;"></i>Agent Portal
@@ -1597,7 +1581,7 @@
 
             <!-- Detail Chart -->
             <div style="background:var(--noc-bg); padding:12px; border-radius:4px; border:1px solid var(--noc-border);">
-                <canvas id="selected-chart-canvas" style="max-height:320px;"></canvas>
+                <canvas id="selected-chart-canvas" style="max-height:420px; min-height:250px;"></canvas>
             </div>
         </div>
 
@@ -1665,40 +1649,31 @@
                         </div>
                     </div>
 
-                    <!-- Charts Row: CPU + RAM -->
-                    <div class="noc-grid-2" style="margin-bottom:14px;">
-                        <!-- CPU Chart -->
+                    <!-- Combined Charts Row: CPU + RAM -->
+                    <div style="margin-bottom:14px;">
                         <div class="chart-panel">
                             <div class="chart-header">
                                 <div class="chart-label">
-                                    <i class="fa-solid fa-microchip" style="color:var(--noc-indigo);"></i>
-                                    CPU Utilization
+                                    <i class="fa-solid fa-chart-line" style="color:var(--noc-cyan);"></i>
+                                    System Performance
                                 </div>
-                                <span class="chart-value" id="live-cpu-val-{{ server.id }}"
-                                    style="color:var(--noc-indigo);">
-                                    {% if server.cpu_percent %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
-                                </span>
-                            </div>
-                            <div style="height:130px; position:relative;">
-                                <canvas id="chart-cpu-{{ server.id }}"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- RAM Chart -->
-                        <div class="chart-panel">
-                            <div class="chart-header">
-                                <div class="chart-label">
-                                    <i class="fa-solid fa-memory" style="color:var(--noc-emerald);"></i>
-                                    Memory Utilization
+                                <div style="display:flex; gap:16px;">
+                                    <span class="chart-value" id="live-cpu-val-{{ server.id }}"
+                                        style="color:var(--noc-indigo);">
+                                        <i class="fa-solid fa-microchip"
+                                            style="font-size:0.8rem; margin-right:4px;"></i>{% if server.cpu_percent
+                                        %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
+                                    </span>
+                                    <span class="chart-value" id="live-ram-val-{{ server.id }}"
+                                        style="color:var(--noc-emerald);">
+                                        <i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>{%
+                                        if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
+                                        endif %}
+                                    </span>
                                 </div>
-                                <span class="chart-value" id="live-ram-val-{{ server.id }}"
-                                    style="color:var(--noc-emerald);">
-                                    {% if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
-                                    endif %}
-                                </span>
                             </div>
-                            <div style="height:130px; position:relative;">
-                                <canvas id="chart-ram-{{ server.id }}"></canvas>
+                            <div style="height:320px; position:relative;">
+                                <canvas id="chart-combined-{{ server.id }}"></canvas>
                             </div>
                         </div>
                     </div>
@@ -1746,20 +1721,7 @@
                         </div>
                     </div>
 
-                    <!-- Screenshot Preview -->
-                    {% if server.latest_screenshot_url %}
-                    <div class="screenshot-panel" style="margin-bottom:14px;">
-                        <div class="screenshot-header">
-                            <i class="fa-solid fa-camera"></i> Latest Screen Capture
-                        </div>
-                        <div style="height:80px; overflow:hidden;">
-                            <img src="{{ server.latest_screenshot_url }}"
-                                style="width:100%; height:100%; object-fit:cover; opacity:0.75; transition:opacity 0.2s;"
-                                onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75"
-                                alt="Latest Screenshot">
-                        </div>
-                    </div>
-                    {% endif %}
+
 
                     <!-- AI Forecast -->
                     <div class="forecast-panel"
@@ -2476,6 +2438,130 @@
         }
 
         // ── Disk Doughnut (NOC dark) ──
+        // ── Real-Time COMBINED Line Chart Factory ──
+        function createCombinedLineChart(canvasId, labelsArray, cpuData, ramData) {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; cannot render combined chart');
+                return null;
+            }
+            const el = document.getElementById(canvasId);
+            if (!el) return null;
+            const ctx = el.getContext('2d');
+
+            const cpuColor = '#818cf8';
+            const ramColor = '#34d399';
+
+            const gradientCpu = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 300);
+            gradientCpu.addColorStop(0, cpuColor + '20');
+            gradientCpu.addColorStop(1, cpuColor + '00');
+
+            const gradientRam = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 300);
+            gradientRam.addColorStop(0, ramColor + '20');
+            gradientRam.addColorStop(1, ramColor + '00');
+
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsArray,
+                    datasets: [
+                        {
+                            label: 'CPU',
+                            data: cpuData,
+                            borderColor: cpuColor,
+                            backgroundColor: gradientCpu,
+                            borderWidth: 1.5,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHoverBackgroundColor: cpuColor,
+                            pointHoverBorderColor: '#0d1422',
+                            pointHoverBorderWidth: 2
+                        },
+                        {
+                            label: 'RAM',
+                            data: ramData,
+                            borderColor: ramColor,
+                            backgroundColor: gradientRam,
+                            borderWidth: 1.5,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHoverBackgroundColor: ramColor,
+                            pointHoverBorderColor: '#0d1422',
+                            pointHoverBorderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 400, easing: 'easeOutQuart' },
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
+                            ticks: {
+                                font: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                                color: '#334155',
+                                stepSize: 25,
+                                callback: v => v + '%'
+                            },
+                            border: { display: false }
+                        },
+                        x: {
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
+                            ticks: {
+                                color: '#334155',
+                                font: { size: 8, weight: '700', family: "'JetBrains Mono', monospace" },
+                                autoSkip: true,
+                                maxTicksLimit: 8,
+                                maxRotation: 0,
+                                callback: function (value, index) {
+                                    const raw = this.getLabelForValue(value) || '';
+                                    if (!raw) return '';
+                                    const parts = raw.split(', ');
+                                    if (parts.length >= 2) {
+                                        const datePart = parts[0].substring(0, 5);
+                                        const timePart = parts[1].replace(/:00 /, ' ');
+                                        return datePart + ' ' + timePart;
+                                    }
+                                    return raw;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#64748b', font: { size: 10, family: "'JetBrains Mono', monospace" }, boxWidth: 10 } },
+                        tooltip: {
+                            backgroundColor: '#0d1422',
+                            borderColor: 'rgba(34,211,238,0.2)',
+                            borderWidth: 1,
+                            titleFont: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                            bodyFont: { size: 10, family: "'JetBrains Mono', monospace" },
+                            titleColor: '#64748b',
+                            bodyColor: '#e2e8f0',
+                            padding: 10,
+                            cornerRadius: 3,
+                            displayColors: true,
+                            callbacks: {
+                                title: items => {
+                                    const lbl = items?.[0]?.label || '';
+                                    return lbl ? lbl + ' IST' : '';
+                                },
+                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function createDiskDoughnut(canvasId, val) {
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js not loaded; cannot render doughnut chart');
@@ -2513,7 +2599,7 @@
         }
 
         function initChartsForServer(serverId) {
-            const server = serverData.find(s => s.id === serverId);
+            const server = serverData.find(s => String(s.id) === String(serverId));
             if (!server) return;
 
             let buf = historyBuffers[serverId];
@@ -2522,11 +2608,8 @@
                 historyBuffers[serverId] = buf;
             }
 
-            if (!charts['cpu-' + serverId]) {
-                charts['cpu-' + serverId] = createLineChart('chart-cpu-' + serverId, '#818cf8', buf.liveCpu, buf.labels, 'CPU Live');
-            }
-            if (!charts['ram-' + serverId]) {
-                charts['ram-' + serverId] = createLineChart('chart-ram-' + serverId, '#34d399', buf.liveRam, buf.labels, 'RAM Live');
+            if (!charts['combined-' + serverId]) {
+                charts['combined-' + serverId] = createCombinedLineChart('chart-combined-' + serverId, buf.labels, buf.liveCpu, buf.liveRam);
             }
             if (!charts['disk-' + serverId]) {
                 charts['disk-' + serverId] = createDiskDoughnut('chart-disk-' + serverId, server.disk);
@@ -2595,17 +2678,12 @@
                 liveRam: [...ram]
             };
 
-            const cpuChart = charts['cpu-' + serverId];
-            const ramChart = charts['ram-' + serverId];
-            if (cpuChart) {
-                cpuChart.data.labels = labels;
-                cpuChart.data.datasets[0].data = [...cpu];
-                cpuChart.update('none');
-            }
-            if (ramChart) {
-                ramChart.data.labels = labels;
-                ramChart.data.datasets[0].data = [...ram];
-                ramChart.update('none');
+            const combinedChart = charts['combined-' + serverId];
+            if (combinedChart) {
+                combinedChart.data.labels = labels;
+                combinedChart.data.datasets[0].data = [...cpu];
+                combinedChart.data.datasets[1].data = [...ram];
+                combinedChart.update('none');
             }
         }
 
@@ -2747,15 +2825,11 @@
                     buf.baselineRam.shift();
                 }
 
-                if (charts['cpu-' + sid]) {
-                    charts['cpu-' + sid].data.labels = buf.labels;
-                    charts['cpu-' + sid].data.datasets[0].data = buf.liveCpu;
-                    charts['cpu-' + sid].update('none');
-                }
-                if (charts['ram-' + sid]) {
-                    charts['ram-' + sid].data.labels = buf.labels;
-                    charts['ram-' + sid].data.datasets[0].data = buf.liveRam;
-                    charts['ram-' + sid].update('none');
+                if (charts['combined-' + sid]) {
+                    charts['combined-' + sid].data.labels = buf.labels;
+                    charts['combined-' + sid].data.datasets[0].data = buf.liveCpu;
+                    charts['combined-' + sid].data.datasets[1].data = buf.liveRam;
+                    charts['combined-' + sid].update('none');
                 }
 
                 if (charts['disk-' + sid]) {
