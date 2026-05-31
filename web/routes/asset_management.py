@@ -266,8 +266,15 @@ def _build_productivity_rows(tenant_id, target_date):
         att = next((a for a in attendance if a.employee_id == emp.id), None)
         emp_sessions = [s for s in sessions if s.employee_id == emp.id]
         
-        # Only skip employees when there is no session, no attendance, and no assigned or mapped device.
+        # Resolve device for this employee
         device_info = _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps)
+        
+        # FILTER: Only show employees from agent-installed servers (not Azure-only)
+        # If server_id is missing, it means the device is Azure-only (no agent), so skip
+        if not device_info.get('server_id'):
+            continue
+        
+        # Only skip employees when there is no session, no attendance, and no assigned or mapped device.
         if not emp_sessions and not att and not device_info.get('name'):
             continue
         
@@ -307,6 +314,13 @@ def _build_productivity_rows(tenant_id, target_date):
         elif device_info.get('status') == 'present':
             row_status = 'present'
 
+        # Check if agent is online
+        is_agent_online = False
+        server_id = device_info.get('server_id')
+        if server_id:
+            server = device_maps['server_map'].get(server_id)
+            is_agent_online = getattr(server, 'is_online', False) if server else False
+
         emp_rows.append({
             'id': emp.id,
             'name': emp.display_name or emp.name or emp.email or emp.local_username or 'Unknown',
@@ -323,10 +337,12 @@ def _build_productivity_rows(tenant_id, target_date):
             'active_str': _seconds_to_hms(active_sec),
             'idle_str': _seconds_to_hms(idle_sec),
             'productive_str': _seconds_to_hms(prod_sec),
-            'source': device_info.get('source', 'unassigned')
+            'source': device_info.get('source', 'unassigned'),
+            'is_agent_online': is_agent_online
         })
 
-    emp_rows.sort(key=lambda x: x['active_sec'], reverse=True)
+    # SORT: Online agents' employees first, then by active time descending
+    emp_rows.sort(key=lambda x: (-x['is_agent_online'], -x['active_sec']))
     return emp_rows
 
 

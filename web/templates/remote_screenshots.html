@@ -284,16 +284,17 @@
                 const full = s.image_url || s.sharepoint_url || url || '';
                 const title = s.filename || `Screenshot ${s.id}`;
                 const meta = `${fmt(s.captured_at)} • ${s.active_user || '—'}`;
+                // Properly escape for inline onclick
+                const onClickCode = `openLb('${full.replace(/'/g, "\\'")}','${title.replace(/'/g, "\\'")}','${meta.replace(/'/g, "\\'")}')`;
                 return `
                     <button style="border-radius: 0.75rem; overflow: hidden; border: 1px solid #cbd5e1; background: #1e293b; cursor: pointer; display: flex; flex-direction: column; text-align: left; transition: all 0.2s; position: relative;"
                         onmouseover="this.style.borderColor='#818cf8'; this.style.boxShadow='0 10px 15px rgba(0,0,0,0.1)';" 
                         onmouseout="this.style.borderColor='#cbd5e1'; this.style.boxShadow='none';"
-                        data-full="${encodeURIComponent(full)}" data-title="${encodeURIComponent(title)}" data-meta="${encodeURIComponent(meta)}"
-                        onclick="openLb(this.dataset.full,this.dataset.title,this.dataset.meta)" title="Click to view full size">
+                        onclick="${onClickCode}" title="Click to view full size">
                         <div style="position: relative; width: 100%; padding-bottom: 62.5%; background: #0f172a; overflow: hidden; flex-grow: 0; flex-shrink: 0;">
                             <img src="${url}" alt="${title}" loading="lazy" decoding="async" fetchpriority="low"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0f172a;"
-                                onerror="this.parentElement.style.background='#0f172a'; this.style.display='none'; this.parentElement.innerHTML='<div style=\\\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#64748b;font-size:0.75rem;\\\">⚠ Failed</div>'">
+                                onerror="const parent = this.parentElement; parent.style.background='#0f172a'; this.style.display='none'; parent.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#64748b;font-size:0.75rem;&quot;>⚠ Failed</div>'">
                         </div>
                         <div style="padding: 0.5rem; background: white; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
                             <div style="font-size: 0.65rem; font-weight: 900; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; line-height: 1;">${title}</div>

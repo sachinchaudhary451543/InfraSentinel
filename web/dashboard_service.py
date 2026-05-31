@@ -33,8 +33,7 @@ class OptimizedDashboardService:
         try:
             # ─── STEP 1: Get server list with permission filtering ───
             query = db.session.query(Server).filter(
-                Server.device_active_status == 'active',
-                Server.agent_installed == True
+                Server.status.in_(['online', 'idle', 'active', None])
             )
             if current_user.is_superadmin:
                 servers = query.all()
