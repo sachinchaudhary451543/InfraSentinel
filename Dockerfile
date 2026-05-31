@@ -43,16 +43,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/api/v2/health || exit 1
 
 # Run with Gunicorn + Gevent for production
-CMD ["gunicorn", \
-    "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", \
-    "-w", "4", \
-    "-b", "0.0.0.0:8080", \
-    "--access-logfile", "-", \
-    "--error-logfile", "-", \
-    "--log-level", "info", \
-    "--timeout", "120", \
-    "--graceful-timeout", "30", \
-    "--keep-alive", "10", \
-    "--max-requests", "1000", \
-    "--max-requests-jitter", "50", \
-    "web.app:app"]
+# Use a single worker by default when Redis is unavailable, since Flask-SocketIO
+# requires a shared message queue across workers for stable polling/upgrade behavior.
+CMD ["sh", "-lc", "gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w ${GUNICORN_WORKERS:-1} -b 0.0.0.0:8080 --access-logfile - --error-logfile - --log-level info --timeout 120 --graceful-timeout 30 --keep-alive 10 --max-requests 1000 --max-requests-jitter 50 web.app:app"]
