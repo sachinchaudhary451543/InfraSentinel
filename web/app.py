@@ -39,6 +39,12 @@ load_env_file()
 # Add parent directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception:
+    pass
+
 from flask import Flask, redirect, url_for, session, g, request
 from flask_login import LoginManager
 from flask_socketio import SocketIO
@@ -229,8 +235,8 @@ def _slugify_tenant(value):
 # Initialize SocketIO
 # Production uses Gunicorn + Gevent (with Redis message queue if available), development uses Waitress.
 # async_mode MUST be 'gevent' to match the GeventWebSocketWorker used in the Dockerfile.
-# Without it, flask-socketio auto-detects incorrectly and each worker's session store is isolated,
-# causing 400 Bad Request errors on cross-worker polling/upgrade requests.
+# Gevent monkey patching is required for compatibility with RedisManager and websocket upgrades.
+# Without it, Redis-backed Socket.IO will fail with runtime errors and connections may return 400/401.
 redis_url = os.environ.get('REDIS_URL')
 socketio_kwargs = {
     "cors_allowed_origins": "*",

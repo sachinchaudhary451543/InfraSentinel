@@ -1351,13 +1351,15 @@ def remote_control_screenshots(server_id):
         tenant = Tenant.query.get(server.tenant_id)
         sharepoint_configured = (tenant and tenant.sharepoint_connected and tenant.sharepoint_site_url)
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_screenshots.html',
             server=server,
             sharepoint_configured=sharepoint_configured,
             screenshot_enabled=bool(server.screenshot_enabled),
             screenshot_interval=int(server.screenshot_interval_minutes or 10),
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading screenshots page: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
@@ -1385,13 +1387,15 @@ def remote_control_logs(server_id):
 
         commands = RemoteCommand.query.filter_by(server_id=server_id).order_by(RemoteCommand.created_at.desc()).limit(50).all()
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_logs.html',
             server=server,
             logs=paginated.items,
             pagination=paginated,
             commands=commands,
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading remote logs: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
@@ -1449,7 +1453,7 @@ def remote_control_productivity(server_id):
             if u and u[0]
         ])
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_productivity.html',
             server=server,
             percent=percent,
@@ -1459,7 +1463,9 @@ def remote_control_productivity(server_id):
             users=users,
             selected_date=target_date.strftime('%Y-%m-%d'),
             selected_user=user_filter,
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading productivity page: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))

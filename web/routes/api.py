@@ -335,8 +335,8 @@ def api_screenshot_view(screenshot_id):
         as_attachment=False,
         download_name=shot.filename or os.path.basename(serve_path),
     ))
-    # Cache aggressively; filenames are unique per capture timestamp.
-    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    # Cache by URL token; the client receives a unique timestamp query parameter per screenshot.
+    resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'
     return resp
 
 
@@ -420,8 +420,10 @@ def api_server_screenshots(server_id):
     for s in shots:
         local_path = _resolve_screenshot_local_path(s, update_db=True)
         has_local = bool(local_path)
-        image_url = f'/api/screenshot/{s.id}' if (has_local or bool(s.sharepoint_url)) else None
-        thumb_url = f'/api/screenshot/{s.id}?size=thumb' if image_url else None
+        ts = int((s.uploaded_at or s.captured_at or datetime.utcnow()).timestamp())
+        image_url = f'/api/screenshot/{s.id}?t={ts}' if (has_local or bool(s.sharepoint_url)) else None
+        thumb_url = f'/api/screenshot/{s.id}?size=thumb&t={ts}' if image_url else None
+
         result.append({
             'id':            s.id,
             'filename':      s.filename,
@@ -435,7 +437,7 @@ def api_server_screenshots(server_id):
             'has_image':     bool(image_url),
         })
 
-    return jsonify({
+    resp = jsonify({
         'success':     True,
         'total':       total,
         'page':        page,
@@ -443,6 +445,8 @@ def api_server_screenshots(server_id):
         'dates':       distinct_dates,
         'screenshots': result,
     })
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
