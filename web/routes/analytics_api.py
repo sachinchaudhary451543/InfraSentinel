@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 
 from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, AzureDevice, Screenshot
+from web.routes.api import _resolve_screenshot_local_path
 from web.utils import require_role, get_allowed_employee_ids
 
 analytics_api_bp = Blueprint('analytics_api', __name__)
@@ -78,8 +79,10 @@ def workforce_dashboard():
 
                 latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
                 if latest_ss:
-                    screenshot_available = bool(latest_ss.sharepoint_url or latest_ss.local_file_path)
-                    screenshot_thumb = latest_ss.sharepoint_url or f"/api/screenshot/{latest_ss.id}?size=thumb"
+                    local_path = _resolve_screenshot_local_path(latest_ss)
+                    screenshot_available = bool(local_path or latest_ss.sharepoint_url)
+                    if screenshot_available:
+                        screenshot_thumb = f"/api/screenshot/{latest_ss.id}?size=thumb"
 
         first_act_str = '—'
         last_act_str = '—'

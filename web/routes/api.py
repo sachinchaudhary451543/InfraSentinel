@@ -77,6 +77,11 @@ def _resolve_screenshot_local_path(shot, update_db=False):
             if os.path.isfile(candidate):
                 if update_db and candidate != path:
                     shot.local_file_path = candidate
+                    try:
+                        from web.models import db
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
                 return candidate
 
         if path:
@@ -84,6 +89,11 @@ def _resolve_screenshot_local_path(shot, update_db=False):
             if os.path.isfile(candidate):
                 if update_db and candidate != path:
                     shot.local_file_path = candidate
+                    try:
+                        from web.models import db
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
                 return candidate
     except Exception:
         pass
@@ -408,10 +418,10 @@ def api_server_screenshots(server_id):
 
     result = []
     for s in shots:
-        local_path = _resolve_screenshot_local_path(s)
+        local_path = _resolve_screenshot_local_path(s, update_db=True)
         has_local = bool(local_path)
-        # Only expose local thumbnails as image src to avoid hotlinking to SharePoint.
-        thumb_url = f'/api/screenshot/{s.id}?size=thumb' if has_local else None
+        image_url = f'/api/screenshot/{s.id}' if (has_local or bool(s.sharepoint_url)) else None
+        thumb_url = f'/api/screenshot/{s.id}?size=thumb' if image_url else None
         result.append({
             'id':            s.id,
             'filename':      s.filename,
@@ -420,9 +430,9 @@ def api_server_screenshots(server_id):
             'active_user':   s.active_user or '',
             'file_size_kb':  s.file_size_kb or 0,
             'sharepoint_url': s.sharepoint_url or None,
-            'image_url':     f'/api/screenshot/{s.id}' if has_local else None,
+            'image_url':     image_url,
             'thumb_url':     thumb_url,
-            'has_image':     bool(s.sharepoint_url or has_local),
+            'has_image':     bool(image_url),
         })
 
     return jsonify({
