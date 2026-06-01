@@ -166,53 +166,107 @@ function filterWfRows() {
   });
 }
 </script>
+
 <script>
 ;(function(){
-  const pathname = window.location.pathname || '';
-  const parts = pathname.split('/').filter(Boolean);
-  let basePath = '';
-  if (parts.length >= 2 && parts[0] === 't') {
-    basePath = `/${parts[0]}/${parts[1]}`;
-  }
-  const socketPath = `${basePath}/socket.io`;
-  const scriptUrl = `${socketPath}/socket.io.js`;
-
-  function initSocketIo() {
-    if (typeof io !== 'function') {
-      console.warn('Socket.IO client not available');
-      return;
-    }
-
-    const socket = io({ path: socketPath });
-    socket.on('connect', () => {
-      try { socket.emit('join', {}); } catch (e) {}
-      console.log('Socket connected for live screenshots');
-    });
-
-    socket.on('screenshot_frame', (data) => {
-      try {
-        const sid = data.server_id;
-        const b64 = data.image_b64;
-        if (!sid || !b64) return;
-        const card = document.querySelector(`.agent-card[data-server-id='${sid}']`);
-        if (!card) return;
-        const img = card.querySelector('.live-preview-img');
-        if (img) {
-          img.src = `data:image/jpeg;base64,${b64}`;
-        }
-      } catch (e) {
-        console.error('screenshot_frame handler', e);
+  // Initialize Socket.IO connection for live screenshot updates
+  // base.html already loaded socket.io.js globally, we just need to connect and listen
+  function initSocketConnection() {
+    try {
+      if (typeof io !== 'function') {
+        console.warn('[Workforce Live] Socket.IO client not available yet');
+        setTimeout(initSocketConnection, 500);
+        return;
       }
-    });
-  }
+      
+      // Dynamically determine the socket path based on current location
+      const pathname = window.location.pathname || '';
+      const parts = pathname.split('/').filter(Boolean);
+      let socketPath = '/socket.io';
+      
+      // If under a tenant prefix like /t/<slug>, use that prefix
+      if (parts.length >= 2 && parts[0] === 't') {
+        socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
+      }
+      
+      // Create socket with the correct path
+      const socket = io({ path: socketPath, reconnection: true, reconnectionDelay: 1000 });
+      
+      socket.on('connect', function() {
+        console.log('[Workforce Live] Socket connected at:', socketPath);
+        try { 
+          socket.emit('join', {}); 
+          console.log('[Workforce Live] Emitted join event to tenant room');
+        } catch(e) {
+          console.warn('[Workforce Live] Join emit error:', e);
+        }
+      });
+      
+      socket.on('connect_error', function(err) {
+        console.warn('[Workforce Live] Socket connection error:', err);
+      });
+      
+      socket.on('disconnect', function(reason) {
+        console.log('[Workforce Live] Socket disconnected:', reason);
+      });
 
-  const script = document.createElement('script');
-  script.src = scriptUrl;
-  script.onload = initSocketIo;
-  script.onerror = function() {
-    console.warn('Socket.IO client failed to load from', scriptUrl);
-  };
-  document.head.appendChild(script);
+      socket.on('screenshot_frame', function(data) {
+        try {
+          console.log('[Workforce Live] Received screenshot_frame event:', { server_id: data?.server_id, timestamp: data?.timestamp });
+          
+          if (!data || !data.server_id) {
+            console.warn('[Workforce Live] Invalid screenshot_frame - missing server_id');
+            return;
+          }
+          
+          const serverId = data.server_id;
+          const b64Image = data.image_b64;
+          
+          if (!b64Image) {
+            console.warn('[Workforce Live] Invalid screenshot_frame - missing image_b64 for server', serverId);
+            return;
+          }
+          
+          // Update all cards with this server_id
+          const cards = document.querySelectorAll(`.agent-card[data-server-id="${serverId}"]`);
+          
+          if (cards.length === 0) {
+            console.warn('[Workforce Live] No agent cards found for server_id', serverId);
+            console.log('[Workforce Live] Available server_ids:', Array.from(document.querySelectorAll('.agent-card')).map(c => c.getAttribute('data-server-id')));
+            return;
+          }
+          
+          let updated = 0;
+          cards.forEach(card => {
+            const img = card.querySelector('.live-preview-img');
+            if (img) {
+              img.src = `data:image/jpeg;base64,${b64Image}`;
+              img.classList.add('live-updated');
+              updated++;
+            }
+          });
+          
+          console.log(`[Workforce Live] Updated ${updated}/${cards.length} card image(s) for server ${serverId}`);
+        } catch(e) {
+          console.error('[Workforce Live] screenshot_frame handler error:', e);
+        }
+      });
+      
+      window._workforceSocket = socket;
+      console.log('[Workforce Live] Initialization complete - listening for screenshot_frame events');
+    } catch(e) {
+      console.error('[Workforce Live] Initialization error:', e);
+    }
+  }
+  
+  // Start initialization after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(initSocketConnection, 300);
+    });
+  } else {
+    setTimeout(initSocketConnection, 300);
+  }
 })();
 </script>
 {% endblock %}

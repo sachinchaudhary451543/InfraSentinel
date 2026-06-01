@@ -1049,8 +1049,29 @@
 
     <!-- Load Chart.js synchronously (needed for dashboard charts) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <!-- Defer Socket.IO as it's not critical for initial render -->
-    <script defer src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <!-- Load Socket.IO from Flask-SocketIO server with tenant-aware path -->
+    <script>
+    (function() {
+        const pathname = window.location.pathname || '';
+        const parts = pathname.split('/').filter(Boolean);
+        let socketPath = '/socket.io/socket.io.js';
+        
+        // If under tenant prefix like /t/<slug>, use that prefix
+        if (parts.length >= 2 && parts[0] === 't') {
+            socketPath = `/${parts[0]}/${parts[1]}/socket.io/socket.io.js`;
+        }
+        
+        const script = document.createElement('script');
+        script.src = socketPath;
+        script.onerror = function() {
+            console.warn('Socket.IO client failed to load from', socketPath);
+        };
+        script.onload = function() {
+            console.log('[Base] Socket.IO client loaded from', socketPath);
+        };
+        document.head.appendChild(script);
+    })();
+    </script>
 </body>
 
 </html>

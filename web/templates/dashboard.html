@@ -547,6 +547,7 @@
         font-weight: 600;
         outline: none;
         transition: border-color 0.2s;
+        appearance: none;
         -webkit-appearance: none;
     }
 
@@ -737,6 +738,71 @@
         border: 1px solid rgba(129, 140, 248, 0.12);
         border-radius: 3px;
         padding: 14px 16px;
+    }
+
+    .forecast-panel--with-vms {
+        margin-bottom: 14px;
+    }
+
+    .server-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+    .server-icon--host {
+        background: rgba(167, 139, 250, 0.1);
+        color: var(--noc-violet);
+        border: 1px solid rgba(167, 139, 250, 0.25);
+    }
+
+    .server-icon--light {
+        background: rgba(51, 65, 85, 0.5);
+        color: #64748b;
+        border: 1px solid var(--noc-border);
+    }
+
+    .server-icon--default {
+        background: var(--noc-indigo-dim);
+        color: var(--noc-indigo);
+        border: 1px solid rgba(129, 140, 248, 0.2);
+    }
+
+    .server-status-dot {
+        position: absolute;
+        bottom: -3px;
+        right: -3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid var(--noc-surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .server-status-dot--online {
+        background: var(--noc-emerald);
+    }
+
+    .server-status-dot--idle {
+        background: var(--noc-amber);
+    }
+
+    .server-status-dot--offline {
+        background: #334155;
+    }
+
+    .mini-bar-fill--cpu {
+        background: var(--noc-indigo);
+    }
+
+    .mini-bar-fill--ram {
+        background: var(--noc-emerald);
     }
 
     .forecast-row {
@@ -1404,8 +1470,8 @@
                                 <div class="mini-bar-row">
                                     <span class="mini-bar-label">CPU</span>
                                     <div class="mini-bar-track">
-                                        <div class="mini-bar-fill"
-                                            style="width:{{ (item.cpu or item.cpu_percent)|round(0) }}%; background:var(--noc-indigo);">
+                                        <div class="mini-bar-fill mini-bar-fill--cpu"
+                                            data-fill-width="{{ (item.cpu or item.cpu_percent)|round(0) }}">
                                         </div>
                                     </div>
                                     <span class="mini-bar-val">{{ (item.cpu or item.cpu_percent)|round(1) }}%</span>
@@ -1413,8 +1479,8 @@
                                 <div class="mini-bar-row">
                                     <span class="mini-bar-label">RAM</span>
                                     <div class="mini-bar-track">
-                                        <div class="mini-bar-fill"
-                                            style="width:{{ (item.ram or item.memory_percent)|round(0) }}%; background:var(--noc-emerald);">
+                                        <div class="mini-bar-fill mini-bar-fill--ram"
+                                            data-fill-width="{{ (item.ram or item.memory_percent)|round(0) }}">
                                         </div>
                                     </div>
                                     <span class="mini-bar-val">{{ (item.ram or item.memory_percent)|round(1) }}%</span>
@@ -1588,8 +1654,8 @@
         <!-- Server Cards Grid -->
         <div style="display:grid; grid-template-columns:1fr; gap:16px;">
             {% for server in servers %}
-            <div class="server-card" data-server-id="{{ server.id }}"
-                onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href='{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}'">
+            <div class="server-card" data-server-id="{{ server.id }}" data-remote-url="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+                onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href=this.dataset.remoteUrl">
 
                 <div class="corner-accent"></div>
                 <div class="corner-accent-v"></div>
@@ -1602,21 +1668,16 @@
                         <div style="display:flex; align-items:center; gap:14px;">
                             <!-- Server Icon with status ring -->
                             <div style="position:relative;">
-                                <div
-                                    style="width:48px; height:48px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;
-                {% if server.server_type == 'Host' %}background:rgba(167,139,250,0.1); color:var(--noc-violet); border:1px solid rgba(167,139,250,0.25);
-                {% elif server.monitoring_mode == 'light' %}background:rgba(51,65,85,0.5); color:#64748b; border:1px solid var(--noc-border);
-                {% else %}background:var(--noc-indigo-dim); color:var(--noc-indigo); border:1px solid rgba(129,140,248,0.2);{% endif %}">
-                                    <i
-                                        class="fa-solid {% if server.server_type == 'Host' %}fa-cubes{% elif server.monitoring_mode == 'light' %}fa-laptop{% else %}fa-microchip{% endif %}"></i>
-                                </div>
-                                {% set slabel = server.status_label %}
-                                <div
-                                    style="position:absolute; bottom:-3px; right:-3px; width:14px; height:14px; border-radius:50%; border:2px solid var(--noc-surface); display:flex; align-items:center; justify-content:center;
-                {% if slabel == 'ONLINE' %}background:var(--noc-emerald);{% elif slabel == 'IDLE' %}background:var(--noc-amber);{% else %}background:#334155;{% endif %}">
-                                    {% if slabel == 'ONLINE' %}<div
-                                        style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);animation:noc-pulse 2s infinite;">
-                                    </div>{% endif %}
+                                    <div class="server-icon {% if server.server_type == 'Host' %}server-icon--host{% elif server.monitoring_mode == 'light' %}server-icon--light{% else %}server-icon--default{% endif %}">
+                                        <i
+                                            class="fa-solid {% if server.server_type == 'Host' %}fa-cubes{% elif server.monitoring_mode == 'light' %}fa-laptop{% else %}fa-microchip{% endif %}"></i>
+                                    </div>
+                                    {% set slabel = server.status_label %}
+                                    <div class="server-status-dot {% if slabel == 'ONLINE' %}server-status-dot--online{% elif slabel == 'IDLE' %}server-status-dot--idle{% else %}server-status-dot--offline{% endif %}">
+                                        {% if slabel == 'ONLINE' %}<div
+                                            style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);animation:noc-pulse 2s infinite;">
+                                        </div>{% endif %}
+                                    </div>
                                 </div>
                             </div>
 
@@ -1724,8 +1785,7 @@
 
 
                     <!-- AI Forecast -->
-                    <div class="forecast-panel"
-                        style="margin-bottom:{% if server.vms_count > 0 %}14px{% else %}0{% endif %};">
+                    <div class="forecast-panel{% if server.vms_count > 0 %} forecast-panel--with-vms{% endif %}">
                         <div class="forecast-row">
                             <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
                                 <div class="forecast-icon-wrap"><i class="fa-solid fa-robot"></i></div>
@@ -2426,7 +2486,7 @@
                             displayColors: false,
                             callbacks: {
                                 title: items => {
-                                    const lbl = items?.[0]?.label || '';
+                                    const lbl = (items && items[0] && items[0].label) ? items[0].label : '';
                                     return lbl ? lbl + ' IST' : '';
                                 },
                                 label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
@@ -2551,7 +2611,7 @@
                             displayColors: true,
                             callbacks: {
                                 title: items => {
-                                    const lbl = items?.[0]?.label || '';
+                                    const lbl = (items && items[0] && items[0].label) ? items[0].label : '';
                                     return lbl ? lbl + ' IST' : '';
                                 },
                                 label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
@@ -2715,12 +2775,12 @@
                     return;
                 }
 
-                const cpuTrend = (data.cpu?.trend || 'unknown').toUpperCase();
-                const ramTrend = (data.ram?.trend || 'unknown').toUpperCase();
+                const cpuTrend = ((data.cpu && data.cpu.trend) || 'unknown').toUpperCase();
+                const ramTrend = ((data.ram && data.ram.trend) || 'unknown').toUpperCase();
                 statusEl.textContent = `CPU ${cpuTrend} / RAM ${ramTrend}`;
                 statusEl.className = 'noc-badge badge-agent';
                 recommendationEl.textContent = data.recommendation || 'Trend available.';
-            } catch {
+            } catch (err) {
                 statusEl.textContent = 'Unavailable';
                 statusEl.className = 'noc-badge badge-offline';
                 recommendationEl.textContent = 'Forecast API unavailable right now.';
@@ -2764,6 +2824,13 @@
                 });
             }
 
+            document.querySelectorAll('.mini-bar-fill[data-fill-width]').forEach(el => {
+                const width = Number(el.dataset.fillWidth);
+                if (!Number.isNaN(width)) {
+                    el.style.width = width + '%';
+                }
+            });
+
             async function loadAlertsForServer(serverId) {
                 try {
                     const res = await fetch(`/api/v2/server/${serverId}/alerts`);
@@ -2781,37 +2848,50 @@
             let dashboardSocket = null;
 
             function handleMetricsUpdate(data) {
-                const sid = data.server_id;
-                const now = formatDateTime(data.timestamp || new Date().toISOString());
+                try {
+                    if (!data || !data.server_id) return;
+                    const sid = data.server_id;
+                    const now = formatDateTime(data.timestamp || new Date().toISOString());
 
-                const cpuEl = document.getElementById('live-cpu-val-' + sid);
-                const ramEl = document.getElementById('live-ram-val-' + sid);
-                const diskEl = document.getElementById('live-disk-val-' + sid);
-                const lastUpdateEl = document.getElementById('live-last-update-' + sid);
+                    const cpuEl = document.getElementById('live-cpu-val-' + sid);
+                    const ramEl = document.getElementById('live-ram-val-' + sid);
+                    const diskEl = document.getElementById('live-disk-val-' + sid);
+                    const lastUpdateEl = document.getElementById('live-last-update-' + sid);
 
-                if (cpuEl) cpuEl.innerText = parseFloat(data.metrics?.cpu || 0).toFixed(1) + '%';
-                if (ramEl) ramEl.innerText = parseFloat(data.metrics?.ram || 0).toFixed(1) + '%';
-                if (diskEl) diskEl.innerText = parseFloat(data.metrics?.disk || 0).toFixed(1) + '%';
-                if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
+                    if (cpuEl) cpuEl.innerText = parseFloat(((data.metrics && data.metrics.cpu) || 0)).toFixed(1) + '%';
+                    if (ramEl) ramEl.innerText = parseFloat(((data.metrics && data.metrics.ram) || 0)).toFixed(1) + '%';
+                    if (diskEl) diskEl.innerText = parseFloat(((data.metrics && data.metrics.disk) || 0)).toFixed(1) + '%';
+                    if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
 
-                let buf = historyBuffers[sid];
-                if (!buf || !Array.isArray(buf.labels)) {
-                    buf = {
-                        labels: [],
-                        liveCpu: [],
-                        liveRam: [],
-                        baselineCpu: [],
-                        baselineRam: [],
-                        baselinePatternCpu: [],
-                        baselinePatternRam: []
-                    };
-                }
+                    if (!historyBuffers) {
+                        console.warn('historyBuffers not initialized yet');
+                        return;
+                    }
 
-                buf.labels.push(now);
-                buf.liveCpu.push(parseFloat(data.metrics?.cpu) || 0);
-                buf.liveRam.push(parseFloat(data.metrics?.ram) || 0);
-                const cpuPattern = buf.baselinePatternCpu?.length ? buf.baselinePatternCpu : [parseFloat(data.metrics?.cpu) || 0];
-                const ramPattern = buf.baselinePatternRam?.length ? buf.baselinePatternRam : [parseFloat(data.metrics?.ram) || 0];
+                    let buf = historyBuffers[sid];
+                    if (!buf || !buf.labels || !Array.isArray(buf.labels)) {
+                        buf = {
+                            labels: [],
+                            liveCpu: [],
+                            liveRam: [],
+                            baselineCpu: [],
+                            baselineRam: [],
+                            baselinePatternCpu: [],
+                            baselinePatternRam: []
+                        };
+                    }
+
+                    if (buf.labels && Array.isArray(buf.labels)) {
+                        buf.labels.push(now);
+                    }
+                    if (buf.liveCpu && Array.isArray(buf.liveCpu)) {
+                        buf.liveCpu.push(parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0);
+                    }
+                    if (buf.liveRam && Array.isArray(buf.liveRam)) {
+                        buf.liveRam.push(parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0);
+                    }
+                const cpuPattern = (buf.baselinePatternCpu && buf.baselinePatternCpu.length) ? buf.baselinePatternCpu : [parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0];
+                const ramPattern = (buf.baselinePatternRam && buf.baselinePatternRam.length) ? buf.baselinePatternRam : [parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0];
                 buf.baselineCpu.push(cpuPattern[(buf.liveCpu.length - 1) % cpuPattern.length]);
                 buf.baselineRam.push(ramPattern[(buf.liveRam.length - 1) % ramPattern.length]);
 
@@ -2833,7 +2913,7 @@
                 }
 
                 if (charts['disk-' + sid]) {
-                    const diskVal = parseFloat(data.metrics?.disk) || 0;
+                    const diskVal = parseFloat(((data.metrics && data.metrics.disk) || 0)) || 0;
                     const diskColor = diskVal > 90 ? '#fb7185' : diskVal > 70 ? '#fbbf24' : '#22d3ee';
                     charts['disk-' + sid].data.datasets[0].data = [diskVal, 100 - diskVal];
                     charts['disk-' + sid].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
@@ -2897,6 +2977,9 @@
                         if (statusSpan) statusSpan.textContent = data.status;
                     });
                 }
+            } catch (err) {
+                console.error('Metrics update handler failed:', err);
+            }
             }
 
             function initializeSocketConnection(retries = 0) {
@@ -2910,11 +2993,18 @@
                 if (dashboardSocket) return;
 
                 try {
+                    const pathname = window.location.pathname || '';
+                    const parts = pathname.split('/').filter(Boolean);
+                    let socketPath = '/socket.io';
+                    if (parts.length >= 2 && parts[0] === 't') {
+                        socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
+                    }
                     dashboardSocket = io({
-                        path: '/socket.io',
+                        path: socketPath,
                         transports: ['websocket', 'polling'],
                         autoConnect: true,
                     });
+                    console.log('[Dashboard] Socket.IO path:', socketPath);
                 } catch (err) {
                     console.error('Socket.IO init failed:', err);
                     return;

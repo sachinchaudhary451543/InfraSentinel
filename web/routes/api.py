@@ -1032,6 +1032,7 @@ def agent_metrics():
 
         ss_image_b64 = None
         if ss_data and ss_data.get('success') and ss_data.get('image'):
+            logger.info(f"[DEBUG] Processing screenshot from server {server.id} ({hostname}): success={ss_data.get('success')}, image_len={len(ss_data.get('image', ''))}")
             try:
                 import base64 as _b64
                 import os as _os
@@ -1084,11 +1085,14 @@ def agent_metrics():
                         'image_b64': b64data,
                         'screenshot_id': shot_obj_id
                     }
+                    logger.info(f"[DEBUG] Emitting screenshot_frame to room={server.tenant_id} for server_id={server.id}, b64_size={len(b64data)} bytes")
                     sio.emit('screenshot_frame', payload, room=str(server.tenant_id))
+                    logger.info(f"[DEBUG] Screenshot_frame emitted successfully for server {server.id}")
                 except Exception as e:
-                    logger.error(f"SocketIO screenshot emit failed: {e}")
+                    logger.error(f"SocketIO screenshot emit failed for server {server.id}: {e}", exc_info=True)
 
             import threading as _threading
+            logger.info(f"[DEBUG] Starting screenshot emit thread for server {server.id} to tenant {server.tenant_id}")
             emit_thread_ss = _threading.Thread(target=_emit_screenshot_frame, args=(ss_image_b64, None), daemon=True)
             emit_thread_ss.start()
 
