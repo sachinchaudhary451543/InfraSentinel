@@ -75,60 +75,6 @@
     </div>
   </div>
 
-  <!-- KPI Cards Row -->
-  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-
-    <div class="metric-card blue animate-fade-up delay-1">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Total Employees</div>
-          <div class="text-3xl font-extrabold text-slate-800">{{ total_employees }}</div>
-        </div>
-        <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500"><i class="fa-solid fa-users"></i></div>
-      </div>
-    </div>
-
-    <div class="metric-card emerald animate-fade-up delay-2">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Devices Correlated</div>
-          <div class="text-3xl font-extrabold text-slate-800">{{ total_assignments }}</div>
-        </div>
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500"><i class="fa-solid fa-link"></i></div>
-      </div>
-    </div>
-
-    <div class="metric-card violet animate-fade-up delay-3">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Present Today</div>
-          <div class="text-3xl font-extrabold text-slate-800">{{ attendance_count }}</div>
-        </div>
-        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-500"><i class="fa-solid fa-user-check"></i></div>
-      </div>
-    </div>
-
-    <div class="metric-card amber animate-fade-up delay-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Active Time</div>
-          <div class="text-2xl font-extrabold text-slate-800 font-mono">{{ total_active_str }}</div>
-        </div>
-        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500"><i class="fa-solid fa-clock"></i></div>
-      </div>
-    </div>
-
-    <div class="metric-card rose animate-fade-up delay-5">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Idle Time</div>
-          <div class="text-2xl font-extrabold text-slate-800 font-mono">{{ total_idle_str }}</div>
-        </div>
-        <div class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500"><i class="fa-solid fa-hourglass-half"></i></div>
-      </div>
-    </div>
-  </div>
-
   <!-- Live Agent Systems -->
   <div class="glass-card mb-6 animate-fade-up">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -143,10 +89,9 @@
       {% for agent in live_agents %}
       <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden agent-card" data-server-id="{{ agent.server_id }}">
         <div class="relative h-40 bg-slate-950/5 overflow-hidden">
-          {% if agent.screenshot_thumb %}
-          <img src="{{ agent.screenshot_thumb }}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover live-preview-img">
-          {% else %}
-          <div class="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm font-semibold px-4 text-center">
+          <img src="{{ agent.screenshot_thumb or 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 fill=%27%23f8fafc%27/%3E%3Ctext x=%2750%27 y=%2755%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27%239ca3af%27 font-family=%27Arial,sans-serif%27 font-size=%2710%27%3ELive preview pending%3C/text%3E%3C/svg%3E'}}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover live-preview-img">
+          {% if not agent.screenshot_thumb %}
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-sm font-semibold px-4 text-center bg-slate-950/10">
             <i class="fa-solid fa-monitor-waveform text-3xl mb-3"></i>
             No recent screenshot available
           </div>
@@ -201,119 +146,11 @@
     {% endif %}
   </div>
 
-  <!-- Employee Workforce Table -->
-  <div class="glass-card mb-6 animate-fade-up">
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-      <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-table-columns text-indigo-500"></i> Employee Attendance & Productivity — {{ today }}</h3>
-      <div class="relative w-full sm:w-72">
-        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-        <input type="text" id="wfSearchInput" placeholder="Search employee..."
-          class="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-          oninput="filterWfRows()">
-      </div>
-    </div>
-    {% if employees %}
-    <div class="overflow-x-auto">
-      <table class="data-table w-full">
-        <thead>
-          <tr>
-            <th class="text-left">Employee</th>
-            <th class="text-left">Department</th>
-            <th class="text-left">Device</th>
-            <th class="text-center">Status</th>
-            <th class="text-center">First Seen</th>
-            <th class="text-center">Last Seen</th>
-            <th class="text-center">Active</th>
-            <th class="text-center">Idle</th>
-            <th class="text-center">Productive</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for emp in employees %}
-          <tr>
-            <td>
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs shadow">
-                  {{ emp.name[0]|upper if emp.name else '?' }}
-                </div>
-                <div>
-                  <div class="text-sm font-bold text-slate-800">{{ emp.name }}</div>
-                  <div class="text-xs text-slate-400">{{ emp.email }}</div>
-                </div>
-              </div>
-            </td>
-            <td class="text-sm text-slate-600">{{ emp.department or '—' }}</td>
-            <td>
-              {% if emp.device %}
-              <div class="flex flex-col gap-0.5">
-                <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <i class="fa-solid fa-laptop mr-1"></i>{{ emp.device }}
-                </span>
-                {% if emp.device_ip %}
-                <span class="text-[0.6rem] text-slate-400 font-mono pl-1">{{ emp.device_ip }}</span>
-                {% endif %}
-              </div>
-              {% else %}
-              <span class="text-xs text-slate-400">No device linked</span>
-              {% endif %}
-            </td>
-            <td class="text-center">
-              {% if emp.status == 'present' %}
-              <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Present</span>
-              {% elif emp.status == 'half_day' %}
-              <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Half Day</span>
-              {% else %}
-              <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-200">Absent</span>
-              {% endif %}
-            </td>
-            <td class="text-center text-sm font-mono text-slate-600">{{ emp.first_activity }}</td>
-            <td class="text-center text-sm font-mono text-slate-600">{{ emp.last_activity }}</td>
-            <td class="text-center">
-              <span class="text-sm font-bold font-mono text-emerald-700">{{ emp.active_str }}</span>
-            </td>
-            <td class="text-center">
-              <span class="text-sm font-bold font-mono text-rose-500">{{ emp.idle_str }}</span>
-            </td>
-            <td class="text-center">
-              <span class="text-sm font-bold font-mono text-indigo-600">{{ emp.productive_str }}</span>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="text-center py-12">
-      <div class="w-16 h-16 mx-auto rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 mb-4">
-        <i class="fa-solid fa-user-clock text-slate-300 text-3xl"></i>
-      </div>
-      <div class="text-sm font-bold text-slate-800 mb-1">No employee data yet</div>
-      <div class="text-xs text-slate-500">Once agents start reporting activity and the Identity Correlation Engine links employees to devices, data will appear here.</div>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- Identity Correlation Status -->
-  <div class="glass-card animate-fade-up">
-    <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4"><i class="fa-solid fa-fingerprint text-violet-500"></i> Identity Correlation Engine Status</h3>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-radius:14px;padding:18px;border:1px solid #bae6fd">
-        <div class="text-xs font-bold uppercase tracking-wider text-sky-500 mb-2">Azure → Employee</div>
-        <div class="text-2xl font-extrabold text-sky-800">{{ total_employees }}</div>
-        <div class="text-xs text-sky-600 mt-1">Employees synced from Azure AD</div>
-      </div>
-      <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:14px;padding:18px;border:1px solid #bbf7d0">
-        <div class="text-xs font-bold uppercase tracking-wider text-emerald-500 mb-2">Employee → Device</div>
-        <div class="text-2xl font-extrabold text-emerald-800">{{ total_assignments }}</div>
-        <div class="text-xs text-emerald-600 mt-1">Active device assignments</div>
-      </div>
-      <div style="background:linear-gradient(135deg,#faf5ff,#f3e8ff);border-radius:14px;padding:18px;border:1px solid #e9d5ff">
-        <div class="text-xs font-bold uppercase tracking-wider text-violet-500 mb-2">Correlation Rate</div>
-        <div class="text-2xl font-extrabold text-violet-800">
-          {% if total_employees > 0 %}{{ ((total_assignments / total_employees) * 100)|round(0)|int }}%{% else %}—{% endif %}
-        </div>
-        <div class="text-xs text-violet-600 mt-1">Employees with linked devices</div>
-      </div>
+  <!-- Live agent page note -->
+  <div class="glass-card mb-6 animate-fade-up border-dashed border-slate-200 bg-slate-50">
+    <div class="p-6 text-slate-700">
+      <h3 class="text-sm font-bold mb-2">Live agent screens only</h3>
+      <p class="text-sm text-slate-500">This page now shows only active agent-installed systems and their live previews. Historical Azure employee data and legacy productivity tables have been removed.</p>
     </div>
   </div>
 
@@ -321,45 +158,61 @@
 
 <script>
 function filterWfRows() {
-  const query = document.getElementById('wfSearchInput').value.toLowerCase().trim();
-  const rows = document.querySelectorAll('.data-table tbody tr');
+  const query = document.getElementById('wfSearchInput')?.value.toLowerCase().trim() || '';
   const cards = document.querySelectorAll('.agent-card');
-
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    row.style.display = (!query || text.includes(query)) ? '' : 'none';
-  });
-
   cards.forEach(card => {
     const text = card.textContent.toLowerCase();
     card.style.display = (!query || text.includes(query)) ? '' : 'none';
   });
 }
 </script>
-<script src="/socket.io/socket.io.js"></script>
 <script>
 ;(function(){
-  try{
-    const socket = io();
+  const pathname = window.location.pathname || '';
+  const parts = pathname.split('/').filter(Boolean);
+  let basePath = '';
+  if (parts.length >= 2 && parts[0] === 't') {
+    basePath = `/${parts[0]}/${parts[1]}`;
+  }
+  const socketPath = `${basePath}/socket.io`;
+  const scriptUrl = `${socketPath}/socket.io.js`;
+
+  function initSocketIo() {
+    if (typeof io !== 'function') {
+      console.warn('Socket.IO client not available');
+      return;
+    }
+
+    const socket = io({ path: socketPath });
     socket.on('connect', () => {
-      try { socket.emit('join', {}); } catch(e){}
+      try { socket.emit('join', {}); } catch (e) {}
       console.log('Socket connected for live screenshots');
     });
 
     socket.on('screenshot_frame', (data) => {
-      try{
+      try {
         const sid = data.server_id;
         const b64 = data.image_b64;
-        if(!sid || !b64) return;
+        if (!sid || !b64) return;
         const card = document.querySelector(`.agent-card[data-server-id='${sid}']`);
-        if(!card) return;
+        if (!card) return;
         const img = card.querySelector('.live-preview-img');
-        if(img){
+        if (img) {
           img.src = `data:image/jpeg;base64,${b64}`;
         }
-      }catch(e){console.error('screenshot_frame handler',e)}
+      } catch (e) {
+        console.error('screenshot_frame handler', e);
+      }
     });
-  }catch(e){console.warn('Live preview init failed', e)}
+  }
+
+  const script = document.createElement('script');
+  script.src = scriptUrl;
+  script.onload = initSocketIo;
+  script.onerror = function() {
+    console.warn('Socket.IO client failed to load from', scriptUrl);
+  };
+  document.head.appendChild(script);
 })();
 </script>
 {% endblock %}
