@@ -62,6 +62,37 @@
     </div>
 
     <!-- KPI Cards -->
+    <div class="grid grid-cols-1 gap-4 mb-8 animate-fade-up" style="animation-delay: 50ms;">
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-widest text-slate-500">Assigned Agent System</p>
+                    <h3 class="text-xl font-bold text-slate-900 mt-2">{{ assigned_server.hostname if assigned_server else 'Unassigned' }}</h3>
+                    <p class="text-sm text-slate-500 mt-1">
+                        {% if assigned_server %}
+                            {{ assigned_server.ip or 'IP not available' }} • {{ 'Online' if assigned_server.is_online else 'Offline' }}
+                        {% else %}
+                            No agent system currently mapped to this employee.
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="w-full md:w-auto">
+                    <form method="POST" action="{{ url_for('asset_mgmt.assign_employee_device', employee_id=employee.id) }}" class="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <input type="hidden" name="date" value="{{ selected_date }}">
+                        <select name="server_id" class="min-w-[220px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+                            <option value="">Unassign / select a system</option>
+                            {% for server in servers %}
+                            <option value="{{ server.id }}" {% if assigned_server and server.id == assigned_server.id %}selected{% endif %}>
+                                {{ server.hostname or server.name }} {% if server.ip %}({{ server.ip }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors">Save Mapping</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 animate-fade-up" style="animation-delay: 50ms;">
         <div
             class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-emerald-200 transition-all">

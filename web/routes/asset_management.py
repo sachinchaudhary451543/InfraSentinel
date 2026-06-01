@@ -247,6 +247,15 @@ def _find_employee_for_server(server, tenant_id):
     return None
 
 
+def _get_active_employee_assignment(employee_id, tenant_id):
+    """Return the current active employee-device assignment."""
+    return EmployeeDeviceAssignment.query.filter_by(
+        tenant_id=tenant_id,
+        employee_id=employee_id,
+        is_active=True
+    ).first()
+
+
 def _build_productivity_rows(tenant_id, target_date):
     from web.models import ActivitySession, AttendanceRecord
 
@@ -1152,7 +1161,14 @@ def employee_productivity_detail(employee_id):
         emp = Employee.query.get_or_404(employee_id)
         if emp.tenant_id != tenant_id:
             abort(403)
-            
+
+        assignment = _get_active_employee_assignment(emp.id, tenant_id)
+        assigned_server = None
+        if assignment and assignment.server_id:
+            assigned_server = Server.query.get(assignment.server_id)
+
+        servers = Server.query.filter_by(tenant_id=tenant_id, agent_installed=True).order_by(Server.hostname.asc()).all()
+
         date_str = (request.args.get('date') or '').strip()
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
@@ -1263,12 +1279,64 @@ def employee_productivity_detail(employee_id):
             attendance_first_activity_display=attendance_first_activity_display,
             attendance_last_activity_display=attendance_last_activity_display,
             selected_date=target_date.strftime('%Y-%m-%d'),
-            today=target_date.strftime('%b %d, %Y')
+            today=target_date.strftime('%b %d, %Y'),
+            assigned_server=assigned_server,
+            servers=servers,
+            current_assignment=assignment
         )
     except Exception as e:
         logger.error(f"Error loading employee productivity detail: {e}")
         flash(f"Error loading details: {str(e)}", "error")
         return redirect(url_for('asset_mgmt.productivity_overview'))
+
+
+@asset_mgmt_bp.route('/assets/productivity/<int:employee_id>/assign', methods=['POST'])
+@login_required
+def assign_employee_device(employee_id):
+    """Manually assign an agent server to a productivity employee."""
+    try:
+        tenant_id = current_user.tenant_id
+        employee = Employee.query.get_or_404(employee_id)
+        if not current_user.is_superadmin and employee.tenant_id != tenant_id:
+            abort(403)
+
+        selected_server_id = (request.form.get('server_id') or '').strip()
+        assignment = _get_active_employee_assignment(employee.id, employee.tenant_id)
+        if assignment:
+            assignment.is_active = False
+            assignment.unassigned_at = datetime.utcnow()
+            db.session.add(assignment)
+
+        if selected_server_id:
+            try:
+                server_id = int(selected_server_id)
+            except ValueError:
+                server_id = None
+
+            if server_id:
+                server = Server.query.get(server_id)
+                if server and server.tenant_id == employee.tenant_id:
+                    db.session.add(EmployeeDeviceAssignment(
+                        tenant_id=employee.tenant_id,
+                        employee_id=employee.id,
+                        server_id=server.id,
+                        assignment_source='admin_manual',
+                        is_active=True,
+                        assigned_at=datetime.utcnow()
+                    ))
+
+        db.session.commit()
+        flash('Employee device mapping updated successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating employee device assignment: {e}")
+        flash('Unable to update device mapping.', 'danger')
+
+    return redirect(url_for(
+        'asset_mgmt.employee_productivity_detail',
+        employee_id=employee_id,
+        date=request.form.get('date') or datetime.utcnow().date().strftime('%Y-%m-%d')
+    ))
 
 
 @asset_mgmt_bp.route('/assets/remote-control/<int:server_id>/screenshots')
