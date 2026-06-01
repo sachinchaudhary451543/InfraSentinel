@@ -174,10 +174,10 @@ def legacy_api_screenshot_upload():
     fname = f"screenshot_{server.id}_{hostname}_{ts_str}.jpg"
 
     try:
-        base_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            '..', 'data', 'screenshots'
-        )
+        # Use Flask app root (ServerMonitor) as base and join data/screenshots
+        from web.app import app as flask_app
+        app_root = os.path.dirname(flask_app.root_path)  # web -> ServerMonitor
+        base_dir = os.path.join(app_root, 'data', 'screenshots')
         os.makedirs(base_dir, exist_ok=True)
         file_path = os.path.abspath(os.path.join(base_dir, fname))
         f.save(file_path)
@@ -994,13 +994,13 @@ def agent_metrics():
                 fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
 
                 # Save next to the database in a screenshots sub-folder
-                # current_app not required here; compute base dir directly
-                base_dir  = _os.path.join(
-                    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                    '..', 'data', 'screenshots'
-                )
+                # Use Flask app root (ServerMonitor) as base and join data/screenshots
+                from web.app import app as flask_app
+                app_root = _os.path.dirname(flask_app.root_path)  # web -> ServerMonitor
+                base_dir = _os.path.join(app_root, 'data', 'screenshots')
                 _os.makedirs(base_dir, exist_ok=True)
                 file_path = _os.path.join(base_dir, fname)
+                file_path = _os.path.abspath(file_path)  # Normalize the path
 
                 with open(file_path, 'wb') as f:
                     f.write(img_bytes)
@@ -1017,7 +1017,7 @@ def agent_metrics():
                 shot.active_user    = logged_in_user or ''
                 shot.os_info        = os_info
                 shot.ip_address     = ip
-                shot.local_file_path = _os.path.abspath(file_path)
+                shot.local_file_path = file_path
                 db.session.add(shot)
                 logger.info(f"Screenshot saved: {file_path}")
             except Exception as e:
@@ -1740,7 +1740,7 @@ def api_inventory_sync_debug():
     Returns token acquisition status and a small sample from Microsoft Graph for the current tenant.
     Admin-only: only users belonging to the tenant may call this while signed in.
     """
-    from web.models import Tenant
+    from web.models import Tenant, db
     try:
         tenant = db.session.get(Tenant, current_user.tenant_id)
         if not tenant:

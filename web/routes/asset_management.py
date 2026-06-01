@@ -5,6 +5,7 @@ Employees, Devices, Login/Logout tracking, Software Deployment, and Remote Acces
 
 import logging
 from datetime import datetime
+from typing import Any
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort, flash, make_response
 from flask_login import login_required, current_user
 from web.utils import require_tenant_access
@@ -1794,7 +1795,7 @@ def manual_azure_sync():
         )
         
         # Trigger full comprehensive sync
-        res = AzureSyncService.get_full_sync(db, tenant, client)
+        res: dict[str, Any] = AzureSyncService.get_full_sync(db, tenant, client)
         
         if 'error' in res:
             return jsonify({'success': False, 'error': res['error']}), 500
