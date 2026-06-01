@@ -2,10 +2,14 @@ import logging
 import secrets
 from datetime import datetime, timezone
 from flask import Blueprint, render_template, jsonify, request, url_for, current_app, send_file
+import subprocess
+import tempfile
+import shutil
+import os
 from flask_login import login_required, current_user
 import io
 import zipfile
-from web.models import db, Server, Tenant, AzureUser, AzureDeviceOwner, EmployeeAssetLog
+from web.models import db, Server, Tenant, AzureUser, AzureDeviceOwner, EmployeeAssetLog, AgentKey, AuditLog
 
 logger = logging.getLogger("[AGENT_PORTAL]")
 
@@ -583,6 +587,247 @@ Write-Host "="*70
         download_name=f"DEPLOY_{server.hostname}.ps1",
         mimetype='text/plain'
     )
+
+
+@agent_portal_bp.route('/agent/download-intune-package')
+@login_required
+def download_intune_package():
+    """Generate an Intune-ready ZIP for the current tenant.
+    The ZIP contains a pre-configured `Install-Agent.ps1`, `Uninstall-Agent.ps1`, and instructions
+    so an admin can run the Microsoft Intune Win32 Content Prep Tool locally to create a .intunewin.
+    """
+    # Determine tenant
+    tenant_id = current_user.tenant_id
+    if not tenant_id and current_user.is_superadmin:
+        return jsonify({'success': False, 'error': 'Superadmin must choose a tenant'}), 400
+
+    # Ensure an AgentKey exists for the tenant
+    from web.models import AgentKey, Tenant, db
+    ak = AgentKey.query.filter_by(tenant_id=tenant_id, is_active=True).first()
+    if not ak:
+        ak = AgentKey(tenant_id=tenant_id, key_name='Auto-generated', description='Generated for Intune package')
+        db.session.add(ak)
+        db.session.commit()
+
+    tenant = db.session.get(Tenant, tenant_id)
+    portal_url = request.host_url.rstrip('/')
+
+    # Locate deployment files on disk
+    base_dir = os.path.abspath(os.path.join(current_app.root_path, '..'))
+    deploy_dir = os.path.join(base_dir, 'deployment')
+
+    files_to_include = ['Install-Agent.ps1', 'Uninstall-Agent.ps1', 'DEPLOYMENT_GUIDE.md', 'QUICK_REFERENCE.md']
+
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in files_to_include:
+            fpath = os.path.join(deploy_dir, fname)
+            if not os.path.exists(fpath):
+                continue
+            with open(fpath, 'r', encoding='utf-8') as fh:
+                content = fh.read()
+
+            # If this is Install-Agent.ps1, inject portal URL and tenant key
+            if fname == 'Install-Agent.ps1':
+                content = content.replace('[string]$PortalUrl = "https://servermonitor-web.onrender.com"', f'[string]$PortalUrl = "{portal_url}"')
+                content = content.replace('[string]$TenantKey = ""', f'[string]$TenantKey = "{ak.key}"')
+
+            zf.writestr(fname, content.encode('utf-8'))
+
+        # Add a README with Intune packaging instructions
+        readme = f"""ServerMonitor Intune Packaging
+
+Contents:
+ - Install-Agent.ps1  (pre-configured with portal URL & tenant key)
+ - Uninstall-Agent.ps1
+ - DEPLOYMENT_GUIDE.md
+ - QUICK_REFERENCE.md
+
+How to create a .intunewin package (on a Windows admin workstation):
+
+1. Download the Microsoft Intune Win32 Content Prep Tool (IntuneWinAppUtil.exe)
+   https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool/releases
+
+2. Place the files in a folder, for example:
+   C:\pkg\ServerMonitorAgent\
+     - Install-Agent.ps1
+     - Uninstall-Agent.ps1
+     - DEPLOYMENT_GUIDE.md
+
+3. Run the tool to produce the .intunewin:
+   IntuneWinAppUtil.exe -c C:\pkg\ServerMonitorAgent -s Install-Agent.ps1 -o C:\pkg\output
+
+4. In Intune, create a "Windows app (Win32)" and upload the produced .intunewin file.
+
+Recommended Detection Rule (Registry):
+ - Hive: HKEY_LOCAL_MACHINE
+ - Key path: SOFTWARE\\ServerMonitor\\Agent
+ - Value name: Installed
+ - Detection method: Equals
+ - Expected value: 1
+
+Install command (if using MSI):
+  msiexec /i AgentInstaller.msi /qn /norestart
+
+If you need the portal to produce a fully-signed MSI or .intunewin server-side, contact the dev team to enable server-side packaging (requires the Intune packaging tool on the host).
+"""
+        zf.writestr('README_INTUNE.txt', readme.encode('utf-8'))
+
+    mem.seek(0)
+    filename = f"ServerMonitor-Agent-Intune-{tenant.name or tenant.id}.zip"
+    # Audit log
+    try:
+        log = AuditLog(user_id=current_user.id, tenant_id=tenant.id if tenant else None,
+                       user=current_user.username, action='PACKAGE:DOWNLOAD_ZIP',
+                       resource=f'Tenant:{tenant.id}', details=f'Generated intune ZIP for tenant {tenant.name or tenant.id}')
+        db.session.add(log)
+        db.session.commit()
+    except Exception:
+        current_app.logger.exception('Failed to write audit log for intune zip generation')
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='application/zip')
+
+
+@agent_portal_bp.route('/agent/generate-intunewin', methods=['POST'])
+@login_required
+def generate_intunewin():
+    """Attempt to create a .intunewin package server-side using IntuneWinAppUtil.exe if available.
+    Falls back to returning the ZIP if the tool is not present or fails.
+    """
+    tenant_id = current_user.tenant_id
+    if not tenant_id and current_user.is_superadmin:
+        return jsonify({'success': False, 'error': 'Superadmin must choose a tenant'}), 400
+
+    from web.models import AgentKey, Tenant, db
+    ak = AgentKey.query.filter_by(tenant_id=tenant_id, is_active=True).first()
+    if not ak:
+        ak = AgentKey(tenant_id=tenant_id, key_name='Auto-generated', description='Generated for Intune package')
+        db.session.add(ak)
+        db.session.commit()
+
+    tenant = db.session.get(Tenant, tenant_id)
+    portal_url = request.host_url.rstrip('/')
+
+    # Check configured Intune tool path
+    tool_path = current_app.config.get('INTUNE_WIN_TOOL_PATH') or os.environ.get('INTUNE_WIN_TOOL_PATH')
+    # Create temp workspace
+    workdir = tempfile.mkdtemp(prefix='sm_intune_')
+    try:
+        # Write files into workdir
+        deploy_dir = os.path.join(workdir, 'package')
+        os.makedirs(deploy_dir, exist_ok=True)
+
+        # Read base deployment files
+        src_deploy_dir = os.path.abspath(os.path.join(current_app.root_path, '..', 'deployment'))
+        files = ['Install-Agent.ps1', 'Uninstall-Agent.ps1']
+        for fname in files:
+            src = os.path.join(src_deploy_dir, fname)
+            if os.path.exists(src):
+                with open(src, 'r', encoding='utf-8') as fh:
+                    content = fh.read()
+                if fname == 'Install-Agent.ps1':
+                    content = content.replace('[string]$PortalUrl = "https://servermonitor-web.onrender.com"', f'[string]$PortalUrl = "{portal_url}"')
+                    content = content.replace('[string]$TenantKey = ""', f'[string]$TenantKey = "{ak.key}"')
+                with open(os.path.join(deploy_dir, fname), 'w', encoding='utf-8') as outfh:
+                    outfh.write(content)
+
+        # Add README
+        readme_path = os.path.join(deploy_dir, 'README_INTUNE.txt')
+        with open(readme_path, 'w', encoding='utf-8') as rfh:
+            rfh.write('ServerMonitor Intune packaging folder. Use IntuneWinAppUtil to create .intunewin')
+
+        if tool_path and os.path.exists(tool_path):
+            # Run the Intune packaging tool
+            out_dir = os.path.join(workdir, 'output')
+            os.makedirs(out_dir, exist_ok=True)
+            cmd = [tool_path, '-c', deploy_dir, '-s', 'Install-Agent.ps1', '-o', out_dir]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if proc.returncode == 0:
+                # Find produced .intunewin
+                for f in os.listdir(out_dir):
+                    if f.lower().endswith('.intunewin'):
+                        path = os.path.join(out_dir, f)
+                        return send_file(path, as_attachment=True, download_name=f)
+                # If not found, fall through to ZIP
+            else:
+                current_app.logger.error('Intune packaging failed: %s', proc.stderr)
+
+        # Fallback: return ZIP of folder
+        mem = io.BytesIO()
+        with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, _, filenames in os.walk(deploy_dir):
+                for fn in filenames:
+                    rel = os.path.relpath(os.path.join(root, fn), deploy_dir)
+                    zf.write(os.path.join(root, fn), arcname=rel)
+        mem.seek(0)
+        filename = f"ServerMonitor-Agent-Intune-{tenant.name or tenant.id}.zip"
+        # Audit log
+        try:
+            log = AuditLog(user_id=current_user.id, tenant_id=tenant.id if tenant else None,
+                           user=current_user.username, action='PACKAGE:GENERATE_FALLBACK_ZIP',
+                           resource=f'Tenant:{tenant.id}', details=f'Fallback ZIP for tenant {tenant.name or tenant.id}')
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            current_app.logger.exception('Failed to write audit log for generate_intunewin fallback')
+        return send_file(mem, as_attachment=True, download_name=filename, mimetype='application/zip')
+    except Exception as e:
+        current_app.logger.exception('Error generating intunewin: %s', e)
+        try:
+            log = AuditLog(user_id=current_user.id, tenant_id=tenant.id if tenant else None,
+                           user=current_user.username, action='PACKAGE:GENERATE_ERROR',
+                           resource=f'Tenant:{tenant.id}', details=str(e))
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            current_app.logger.exception('Failed to write audit log for generate_intunewin error')
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        try:
+            shutil.rmtree(workdir)
+        except Exception:
+            pass
+
+
+@agent_portal_bp.route('/agent/intune-tool-health')
+@login_required
+def intune_tool_health():
+    """Return whether the Intune packaging tool is available on the server and its path."""
+    tool_path = current_app.config.get('INTUNE_WIN_TOOL_PATH') or os.environ.get('INTUNE_WIN_TOOL_PATH')
+    available = False
+    info = {}
+    try:
+        if tool_path and os.path.exists(tool_path):
+            st = os.stat(tool_path)
+            available = True
+            info = {
+                'path': tool_path,
+                'size_bytes': st.st_size,
+                'modified': int(st.st_mtime)
+            }
+        else:
+            info = {'path': tool_path}
+    except Exception as e:
+        info = {'error': str(e), 'path': tool_path}
+
+    return jsonify({'available': available, 'info': info})
+
+
+@agent_portal_bp.route('/agent/packaging-guide')
+@login_required
+def get_packaging_guide():
+    """Return the deployment guide content as HTML for portal display."""
+    try:
+        base = os.path.abspath(os.path.join(current_app.root_path, '..'))
+        guide_path = os.path.join(base, 'deployment', 'DEPLOYMENT_GUIDE.md')
+        if os.path.exists(guide_path):
+            with open(guide_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            content = 'Deployment guide not found on server.'
+    except Exception as e:
+        content = f'Error loading deployment guide: {e}'
+
+    return render_template('packaging_guide.html', guide=content)
 
 
 @agent_portal_bp.route('/agent/quick-setup/<int:server_id>')

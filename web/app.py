@@ -163,6 +163,20 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 app.config['DEBUG'] = False
 
+# Load root config.json into app.config (optional server settings)
+try:
+    cfg_path = os.path.join(ROOT_DIR, 'config.json')
+    if os.path.exists(cfg_path):
+        import json as _json
+        with open(cfg_path, 'r', encoding='utf-8') as _cf:
+            _cfg = _json.load(_cf)
+            # Normalize keys to upper-case environment-style names
+            for _k, _v in _cfg.items():
+                app.config.setdefault(_k.upper(), _v)
+        logging.info('Loaded configuration from config.json into app.config')
+except Exception as e:
+    logging.warning(f'Could not load config.json into app.config: {e}')
+
 
 def format_seconds(value):
     """Format seconds as HH:MM:SS for productivity labels."""

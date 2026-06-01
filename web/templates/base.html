@@ -1049,7 +1049,8 @@
 
     <!-- Load Chart.js synchronously (needed for dashboard charts) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <!-- Load Socket.IO client; prefer local tenant-aware server asset and fall back to CDN -->
+    <!-- Load Socket.IO client from resilient CDN list; avoid using server /socket.io/socket.io.js path as a fallback
+         (server endpoint may respond with 400 to plain GET requests). We still expose tenant-aware socket base path. -->
     <script>
     (function() {
         const pathname = window.location.pathname || '';
@@ -1062,28 +1063,44 @@
         }
 
         window.socketIoBasePath = socketIoBasePath;
-        const localClientPath = socketIoBasePath + '/socket.io.js';
-        const primaryCdn = 'https://cdn.socket.io/4.6.1/socket.io.min.js';
 
-        const script = document.createElement('script');
-        script.src = primaryCdn;
-        script.crossOrigin = 'anonymous';
-        script.onload = function() {
-            console.log('[Base] Socket.IO client loaded from CDN', primaryCdn);
-        };
-        script.onerror = function() {
-            console.warn('Socket.IO client failed to load from CDN', primaryCdn, '; falling back to local server asset:', localClientPath);
-            const fallbackScript = document.createElement('script');
-            fallbackScript.src = localClientPath;
-            fallbackScript.onload = function() {
-                console.log('[Base] Socket.IO client loaded from local path', localClientPath);
+        const cdns = [
+            'https://cdn.socket.io/4.6.1/socket.io.min.js',
+            'https://cdn.jsdelivr.net/npm/socket.io-client@4.6.1/dist/socket.io.min.js',
+            'https://unpkg.com/socket.io-client@4.6.1/dist/socket.io.min.js'
+        ];
+
+        function tryLoad(index) {
+            if (index >= cdns.length) {
+                console.warn('[Base] Socket.IO client failed to load from all CDNs; attempting local static fallback');
+                // Final fallback: load local static vendor copy (add socket.io client under web/static/vendor/)
+                const local = '/static/vendor/socket.io.min.js';
+                const sLocal = document.createElement('script');
+                sLocal.src = local;
+                sLocal.onload = function() {
+                    console.log('[Base] Socket.IO client loaded from local fallback', local);
+                };
+                sLocal.onerror = function() {
+                    console.error('[Base] Socket.IO client failed to load from local fallback', local);
+                };
+                document.head.appendChild(sLocal);
+                return;
+            }
+            const src = cdns[index];
+            const s = document.createElement('script');
+            s.src = src;
+            s.crossOrigin = 'anonymous';
+            s.onload = function() {
+                console.log('[Base] Socket.IO client loaded from', src);
             };
-            fallbackScript.onerror = function() {
-                console.error('[Base] Socket.IO client failed to load from local path', localClientPath);
+            s.onerror = function() {
+                console.warn('[Base] Failed to load Socket.IO client from', src, '; trying next CDN');
+                tryLoad(index + 1);
             };
-            document.head.appendChild(fallbackScript);
-        };
-        document.head.appendChild(script);
+            document.head.appendChild(s);
+        }
+
+        tryLoad(0);
     })();
     </script>
 </body>

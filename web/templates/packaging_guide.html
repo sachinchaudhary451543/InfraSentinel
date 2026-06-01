@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Packaging & Deployment Guide{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <h2 class="text-2xl font-bold mb-4">Packaging & Deployment Guide</h2>
+    <div class="prose max-w-none">
+        <pre style="white-space:pre-wrap;">{{ guide }}</pre>
+    </div>
+    <div class="mt-6">
+        <a href="/agent/download-intune-package" class="px-4 py-2 bg-emerald-600 text-white rounded-lg">Download Preconfigured ZIP</a>
+        <button onclick="window.open('/agent/generate-intunewin','_blank')" class="ml-2 px-4 py-2 bg-yellow-500 text-white rounded-lg">Generate .intunewin (server)</button>
+    </div>
+    <div class="mt-8">
+        <h3 class="text-lg font-bold mb-2">Quick Commands</h3>
+        <p class="text-sm text-slate-600 mb-2">Use these commands when packaging for Intune or running installer/uninstaller directly.</p>
+
+        <div class="mb-4">
+            <label class="font-semibold">Intune packaging (IntuneWinAppUtil):</label>
+            <div class="mt-2 flex items-start gap-2">
+                <code id="cmd-package" class="bg-slate-100 p-3 rounded w-full">IntuneWinAppUtil.exe -c C:\pkg\ServerMonitorAgent -s Install-Agent.ps1 -o C:\pkg\output</code>
+                <button onclick="copyText('cmd-package')" class="px-3 py-2 bg-indigo-600 text-white rounded">Copy</button>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="font-semibold">Intune install command (what to set as the install command):</label>
+            <div class="mt-2 flex items-start gap-2">
+                <code id="cmd-install" class="bg-slate-100 p-3 rounded w-full">powershell.exe -ExecutionPolicy Bypass -File Install-Agent.ps1</code>
+                <button onclick="copyText('cmd-install')" class="px-3 py-2 bg-indigo-600 text-white rounded">Copy</button>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="font-semibold">Uninstall command (for Intune uninstall):</label>
+            <div class="mt-2 flex items-start gap-2">
+                <code id="cmd-uninstall" class="bg-slate-100 p-3 rounded w-full">powershell.exe -ExecutionPolicy Bypass -File Uninstall-Agent.ps1</code>
+                <button onclick="copyText('cmd-uninstall')" class="px-3 py-2 bg-indigo-600 text-white rounded">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function copyText(id) {
+            const el = document.getElementById(id);
+            const text = el.innerText || el.textContent;
+            navigator.clipboard.writeText(text).then(()=>{
+                alert('Copied to clipboard');
+            }).catch(()=>{ alert('Copy failed'); });
+        }
+    </script>
+</div>
+{% endblock %}
