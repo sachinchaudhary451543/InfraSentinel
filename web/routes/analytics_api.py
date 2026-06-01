@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request, g, render_template
+import logging
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 
@@ -7,6 +8,7 @@ from web.routes.api import _resolve_screenshot_local_path
 from web.utils import require_role, get_allowed_employee_ids
 
 analytics_api_bp = Blueprint('analytics_api', __name__)
+logger = logging.getLogger(__name__)
 
 
 @analytics_api_bp.route('/workforce')
@@ -115,6 +117,16 @@ def workforce_dashboard():
         })
     
     live_agents = [r for r in emp_rows if r.get('server_id')]
+
+    # Debug: log counts to help diagnose missing live agent cards in UI
+    try:
+        logger.info(f"Workforce: tenant={tenant_id} employees={len(employees)} assignments={len(assignments)} emp_rows={len(emp_rows)} live_agents={len(live_agents)}")
+        # log sample of first few linked agents
+        sample = [r for r in emp_rows if r.get('server_id')][:10]
+        if sample:
+            logger.info(f"Workforce sample linked agents: {[(r['id'], r['server_id']) for r in sample]}")
+    except Exception:
+        pass
 
     return render_template(
         'workforce_dashboard.html',
