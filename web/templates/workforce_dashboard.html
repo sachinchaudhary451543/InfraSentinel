@@ -76,6 +76,78 @@
     </div>
   </div>
 
+  <!-- Live Agent Systems -->
+  <div class="glass-card mb-6 animate-fade-up">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+      <div>
+        <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-network-wired text-indigo-500"></i> Live Agent Systems</h3>
+        <p class="text-xs text-slate-500">Linked employee systems currently reporting to the platform.</p>
+      </div>
+      <div class="text-xs text-slate-500">Showing {{ live_agents|length }} linked systems</div>
+    </div>
+    {% if live_agents %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      {% for agent in live_agents %}
+      <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div class="relative h-40 bg-slate-950/5 overflow-hidden">
+          {% if agent.screenshot_thumb %}
+          <img src="{{ agent.screenshot_thumb }}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover">
+          {% else %}
+          <div class="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm font-semibold px-4 text-center">
+            <i class="fa-solid fa-monitor-waveform text-3xl mb-3"></i>
+            No recent screenshot available
+          </div>
+          {% endif %}
+          <div class="absolute left-4 top-4 rounded-full px-3 py-1 text-[0.65rem] uppercase tracking-[0.18em] font-semibold {{ 'bg-emerald-100 text-emerald-700' if agent.server_status == 'ONLINE' else 'bg-amber-100 text-amber-700' if agent.server_status == 'IDLE' else 'bg-slate-100 text-slate-500' }}">
+            {{ agent.server_status }}
+          </div>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-slate-400 mb-2">{{ agent.name }}</div>
+            <div class="text-sm font-bold text-slate-900">{{ agent.device or 'Unlinked device' }}</div>
+            {% if agent.device_ip %}
+            <div class="text-xs text-slate-500 mt-1">{{ agent.device_ip }}</div>
+            {% endif %}
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-sm text-slate-700">
+            <div class="rounded-2xl bg-slate-50 p-3">
+              <div class="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">Active</div>
+              <div class="font-semibold text-slate-900 mt-1">{{ agent.active_str }}</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-3">
+              <div class="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">Idle</div>
+              <div class="font-semibold text-slate-900 mt-1">{{ agent.idle_str }}</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-3">
+              <div class="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">Productive</div>
+              <div class="font-semibold text-slate-900 mt-1">{{ agent.productive_str }}</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-3">
+              <div class="text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">Screenshots</div>
+              <div class="font-semibold {{ 'text-emerald-700' if agent.screenshot_enabled else 'text-rose-600' }} mt-1">{{ 'Enabled' if agent.screenshot_enabled else 'Disabled' }}</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-xs text-slate-500">Last seen: {{ agent.server_last_seen[:19].replace('T',' ') if agent.server_last_seen else '—' }}</div>
+            <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=agent.server_id) }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all">
+              <i class="fa-solid fa-camera"></i> Screenshot Gallery
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
+      <div class="text-sm font-bold">No linked agent systems found.</div>
+      <div class="text-xs mt-2">Link employees to agent systems to enable live workforce monitoring.</div>
+    </div>
+    {% endif %}
+  </div>
+
   <!-- Employee Workforce Table -->
   <div class="glass-card mb-6 animate-fade-up">
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
@@ -198,9 +270,16 @@
 function filterWfRows() {
   const query = document.getElementById('wfSearchInput').value.toLowerCase().trim();
   const rows = document.querySelectorAll('.data-table tbody tr');
+  const cards = document.querySelectorAll('.agent-card');
+
   rows.forEach(row => {
     const text = row.textContent.toLowerCase();
     row.style.display = (!query || text.includes(query)) ? '' : 'none';
+  });
+
+  cards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = (!query || text.includes(query)) ? '' : 'none';
   });
 }
 </script>

@@ -682,6 +682,9 @@ class EmployeeDeviceAssignment(db.Model):
     
     # Tracking
     created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
     
     __table_args__ = (
         db.Index('idx_emp_dev_active', 'tenant_id', 'is_active'),

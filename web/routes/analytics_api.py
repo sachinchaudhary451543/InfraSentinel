@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, g, render_template
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 
-from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, AzureDevice
+from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, AzureDevice, Screenshot
 from web.utils import require_role, get_allowed_employee_ids
 
 analytics_api_bp = Blueprint('analytics_api', __name__)
@@ -59,12 +59,28 @@ def workforce_dashboard():
         assignment = next((a for a in assignments if a.employee_id == emp.id), None)
         device_name = ''
         device_ip = ''
+        screenshot_enabled = False
+        server_status = 'offline'
+        last_seen = None
+        screenshot_thumb = None
+        screenshot_available = False
+        screenshot_enabled = False
+        server_status = 'offline'
+        last_seen = None
         if assignment and assignment.server_id:
             srv = db.session.get(Server, assignment.server_id)
-            if srv and srv.device_active_status == 'active' and srv.agent_installed:
-                device_name = srv.hostname
-                device_ip = srv.ip
-        
+            if srv:
+                device_name = srv.hostname or srv.name or ''
+                device_ip = srv.ip or ''
+                screenshot_enabled = bool(srv.screenshot_enabled)
+                server_status = srv.status_label
+                last_seen = srv.last_seen
+
+                latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
+                if latest_ss:
+                    screenshot_available = bool(latest_ss.sharepoint_url or latest_ss.local_file_path)
+                    screenshot_thumb = latest_ss.sharepoint_url or f"/api/screenshot/{latest_ss.id}?size=thumb"
+
         first_act_str = '—'
         last_act_str = '—'
         if att:
@@ -80,6 +96,13 @@ def workforce_dashboard():
             'department': emp.department or '',
             'device': device_name,
             'device_ip': device_ip,
+            'server_id': assignment.server_id if assignment and assignment.server_id else None,
+            'server_name': device_name,
+            'screenshot_enabled': screenshot_enabled,
+            'screenshot_available': screenshot_available,
+            'screenshot_thumb': screenshot_thumb,
+            'server_status': server_status,
+            'server_last_seen': last_seen.isoformat() if last_seen else None,
             'status': att.status if att else 'absent',
             'first_activity': first_act_str,
             'last_activity': last_act_str,
@@ -88,9 +111,12 @@ def workforce_dashboard():
             'productive_str': f"{prod_sec // 3600:02d}:{(prod_sec % 3600) // 60:02d}:{prod_sec % 60:02d}",
         })
     
+    live_agents = [r for r in emp_rows if r.get('server_id')]
+
     return render_template(
         'workforce_dashboard.html',
         employees=emp_rows,
+        live_agents=live_agents,
         total_employees=len(employees),
         total_assignments=len(assignments),
         attendance_count=len(attendance),

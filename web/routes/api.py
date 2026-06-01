@@ -53,6 +53,43 @@ def _retry_db_flush(db, attempts=3, delay=0.25):
             raise
     return False
 
+
+def _resolve_screenshot_local_path(shot, update_db=False):
+    """Resolve a screenshot local path from stored path or known screenshot folder."""
+    if not shot:
+        return None
+
+    path = (shot.local_file_path or '').strip()
+    if path:
+        try:
+            if os.path.isfile(path):
+                return os.path.abspath(path)
+        except Exception:
+            pass
+
+    try:
+        from web.app import app as flask_app
+        app_root = os.path.dirname(flask_app.root_path)
+        base_dir = os.path.join(app_root, 'data', 'screenshots')
+
+        if shot.filename:
+            candidate = os.path.abspath(os.path.join(base_dir, shot.filename))
+            if os.path.isfile(candidate):
+                if update_db and candidate != path:
+                    shot.local_file_path = candidate
+                return candidate
+
+        if path:
+            candidate = os.path.abspath(os.path.join(base_dir, os.path.basename(path)))
+            if os.path.isfile(candidate):
+                if update_db and candidate != path:
+                    shot.local_file_path = candidate
+                return candidate
+    except Exception:
+        pass
+
+    return None
+
 #
 # Legacy agent compatibility endpoints
 # - PowerShell agent in `web/static/agent/ServerMonitorAgent.ps1` posts to:
@@ -226,12 +263,11 @@ def api_screenshot_view(screenshot_id):
     if not current_user.is_superadmin and shot.tenant_id != current_user.tenant_id:
         abort(403)
 
-    # Defensive: check local file path and also attempt to resolve relative paths
-    file_exists = False
-    try:
-        file_exists = bool(shot.local_file_path and os.path.isfile(shot.local_file_path))
-    except Exception:
-        file_exists = False
+    # Defensive: check local file path and also attempt to resolve the screenshot folder if the stored path is stale.
+    serve_path = _resolve_screenshot_local_path(shot, update_db=True)
+    if serve_path:
+        shot.local_file_path = serve_path
+    file_exists = bool(serve_path)
 
     if not file_exists:
         logger.warning(f"Screenshot missing on disk: id={screenshot_id}, path={shot.local_file_path}")
@@ -372,7 +408,8 @@ def api_server_screenshots(server_id):
 
     result = []
     for s in shots:
-        has_local = bool(s.local_file_path and os.path.isfile(s.local_file_path))
+        local_path = _resolve_screenshot_local_path(s)
+        has_local = bool(local_path)
         # Only expose local thumbnails as image src to avoid hotlinking to SharePoint.
         thumb_url = f'/api/screenshot/{s.id}?size=thumb' if has_local else None
         result.append({
