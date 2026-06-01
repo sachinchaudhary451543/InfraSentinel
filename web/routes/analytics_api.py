@@ -115,8 +115,46 @@ def workforce_dashboard():
             'idle_str': f"{idle_sec // 3600:02d}:{(idle_sec % 3600) // 60:02d}:{idle_sec % 60:02d}",
             'productive_str': f"{prod_sec // 3600:02d}:{(prod_sec % 3600) // 60:02d}:{prod_sec % 60:02d}",
         })
-    
-    live_agents = [r for r in emp_rows if r.get('server_id')]
+
+    # Focus: only agent-installed systems and the employees linked to them
+    # Servers with agent installed for this tenant
+    servers = Server.query.filter_by(tenant_id=tenant_id, agent_installed=True).all()
+
+    # Active assignments (correlated devices) - used to map servers -> employees
+    # (we already fetched assignments earlier; reuse them)
+
+    # Employees linked to agent-installed servers (unique)
+    linked_employee_ids = {a.employee_id for a in assignments if a.server_id}
+    linked_employees = [db.session.get(Employee, eid) for eid in linked_employee_ids if db.session.get(Employee, eid) is not None]
+
+    live_agents = []
+    for srv in servers:
+        # find linked employee for this server if any
+        assignment = next((a for a in assignments if a.server_id == srv.id), None)
+        emp = db.session.get(Employee, assignment.employee_id) if assignment and assignment.employee_id else None
+        latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
+        local_path = _resolve_screenshot_local_path(latest_ss) if latest_ss else None
+        screenshot_available = bool(local_path or (latest_ss and latest_ss.sharepoint_url))
+        screenshot_thumb = f"/api/screenshot/{latest_ss.id}?size=thumb" if screenshot_available and latest_ss else None
+
+        live_agents.append({
+            'id': emp.id if emp else None,
+            'name': emp.display_name if emp and getattr(emp, 'display_name', None) else (srv.hostname or srv.name or 'Unknown'),
+            'email': emp.email if emp else '',
+            'department': emp.department if emp else '',
+            'device': srv.hostname or srv.name or '',
+            'device_ip': srv.ip or '',
+            'server_id': srv.id,
+            'server_name': srv.hostname or srv.name or '',
+            'screenshot_enabled': bool(srv.screenshot_enabled),
+            'screenshot_available': screenshot_available,
+            'screenshot_thumb': screenshot_thumb,
+            'server_status': srv.status_label,
+            'server_last_seen': srv.last_seen.isoformat() if srv.last_seen else None,
+            'active_str': '—',
+            'idle_str': '—',
+            'productive_str': '—',
+        })
 
     # Debug: log counts to help diagnose missing live agent cards in UI
     try:
@@ -128,6 +166,14 @@ def workforce_dashboard():
     except Exception:
         pass
 
+    # Top-level agent metrics
+    total_agents = len(servers)
+    active_agents = sum(1 for s in servers if getattr(s, 'status_label', '').upper() == 'ONLINE')
+    idle_agents = sum(1 for s in servers if getattr(s, 'status_label', '').upper() == 'IDLE')
+    offline_agents = total_agents - active_agents - idle_agents
+    screenshot_enabled_count = sum(1 for s in servers if bool(s.screenshot_enabled))
+    active_screens = sum(1 for a in live_agents if a.get('screenshot_available') and (a.get('server_status') or '').upper() == 'ONLINE')
+
     return render_template(
         'workforce_dashboard.html',
         employees=emp_rows,
@@ -138,7 +184,13 @@ def workforce_dashboard():
         total_active_str=total_active_str,
         total_idle_str=total_idle_str,
         total_productive_str=total_productive_str,
-        today=today.isoformat()
+        today=today.isoformat(),
+        total_agents=total_agents,
+        active_agents=active_agents,
+        idle_agents=idle_agents,
+        offline_agents=offline_agents,
+        screenshot_enabled_count=screenshot_enabled_count,
+        active_screens=active_screens,
     )
 
 @analytics_api_bp.route('/api/v2/workforce/timeline', methods=['GET'])
@@ -186,7 +238,7 @@ def get_timeline():
         ActivitySession.employee_id.in_(target_employees),
         ActivitySession.start_time >= start_time,
         ActivitySession.start_time <= end_time
-    ).order_by(ActivitySession.start_time.asc()).all()
+    ).all()
     
     timeline_data = []
     for session in sessions:
