@@ -1030,12 +1030,14 @@ def agent_metrics():
         screenshot_enabled = server.screenshot_enabled
         screenshot_interval_minutes = server.screenshot_interval_minutes or 10
 
+        ss_image_b64 = None
         if ss_data and ss_data.get('success') and ss_data.get('image'):
             try:
                 import base64 as _b64
                 import os as _os
 
-                img_bytes = _b64.b64decode(ss_data['image'])
+                ss_image_b64 = ss_data.get('image')
+                img_bytes = _b64.b64decode(ss_image_b64)
                 ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
                 ts_str    = now.strftime('%Y%m%d_%H%M%S')
                 fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
@@ -1069,6 +1071,26 @@ def agent_metrics():
                 logger.info(f"Screenshot saved: {file_path}")
             except Exception as e:
                 logger.error(f"Failed to save screenshot: {e}")
+
+        # Emit screenshot frame over SocketIO for live preview (non-persistent stream)
+        if ss_image_b64:
+            def _emit_screenshot_frame(b64data, shot_obj_id=None):
+                try:
+                    from web.app import socketio
+                    sio = cast(Any, socketio)
+                    payload = {
+                        'server_id': server.id,
+                        'timestamp': now.isoformat() + 'Z',
+                        'image_b64': b64data,
+                        'screenshot_id': shot_obj_id
+                    }
+                    sio.emit('screenshot_frame', payload, room=str(server.tenant_id))
+                except Exception as e:
+                    logger.error(f"SocketIO screenshot emit failed: {e}")
+
+            import threading as _threading
+            emit_thread_ss = _threading.Thread(target=_emit_screenshot_frame, args=(ss_image_b64, None), daemon=True)
+            emit_thread_ss.start()
 
         logger.info("About to commit final transaction")
         try:

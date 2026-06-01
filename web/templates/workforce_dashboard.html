@@ -22,6 +22,59 @@
     </div>
   </div>
 
+  <!-- Agent KPIs Row -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="metric-card slate animate-fade-up">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Total Agents</div>
+          <div class="text-3xl font-extrabold text-slate-800">{{ total_agents or 0 }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600"><i class="fa-solid fa-server"></i></div>
+      </div>
+    </div>
+
+    <div class="metric-card emerald animate-fade-up">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Active Agents</div>
+          <div class="text-3xl font-extrabold text-slate-800">{{ active_agents or 0 }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500"><i class="fa-solid fa-circle-check"></i></div>
+      </div>
+    </div>
+
+    <div class="metric-card amber animate-fade-up">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Idle Agents</div>
+          <div class="text-3xl font-extrabold text-slate-800">{{ idle_agents or 0 }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500"><i class="fa-solid fa-pause"></i></div>
+      </div>
+    </div>
+
+    <div class="metric-card rose animate-fade-up">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Offline Agents</div>
+          <div class="text-3xl font-extrabold text-slate-800">{{ offline_agents or 0 }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600"><i class="fa-solid fa-circle-xmark"></i></div>
+      </div>
+    </div>
+
+    <div class="metric-card violet animate-fade-up">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Active Screens</div>
+          <div class="text-3xl font-extrabold text-slate-800">{{ active_screens or 0 }}</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-500"><i class="fa-solid fa-camera-retro"></i></div>
+      </div>
+    </div>
+  </div>
+
   <!-- KPI Cards Row -->
   <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
 
@@ -88,10 +141,10 @@
     {% if live_agents %}
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       {% for agent in live_agents %}
-      <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden agent-card" data-server-id="{{ agent.server_id }}">
         <div class="relative h-40 bg-slate-950/5 overflow-hidden">
           {% if agent.screenshot_thumb %}
-          <img src="{{ agent.screenshot_thumb }}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover">
+          <img src="{{ agent.screenshot_thumb }}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover live-preview-img">
           {% else %}
           <div class="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm font-semibold px-4 text-center">
             <i class="fa-solid fa-monitor-waveform text-3xl mb-3"></i>
@@ -282,5 +335,31 @@ function filterWfRows() {
     card.style.display = (!query || text.includes(query)) ? '' : 'none';
   });
 }
+</script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+;(function(){
+  try{
+    const socket = io();
+    socket.on('connect', () => {
+      try { socket.emit('join', {}); } catch(e){}
+      console.log('Socket connected for live screenshots');
+    });
+
+    socket.on('screenshot_frame', (data) => {
+      try{
+        const sid = data.server_id;
+        const b64 = data.image_b64;
+        if(!sid || !b64) return;
+        const card = document.querySelector(`.agent-card[data-server-id='${sid}']`);
+        if(!card) return;
+        const img = card.querySelector('.live-preview-img');
+        if(img){
+          img.src = `data:image/jpeg;base64,${b64}`;
+        }
+      }catch(e){console.error('screenshot_frame handler',e)}
+    });
+  }catch(e){console.warn('Live preview init failed', e)}
+})();
 </script>
 {% endblock %}
