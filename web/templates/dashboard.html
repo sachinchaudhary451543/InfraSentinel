@@ -2778,10 +2778,9 @@
                 }
             }
 
-            const socket = io();
-            socket.emit('join', {});
+            let dashboardSocket = null;
 
-            socket.on('metrics_update', (data) => {
+            function handleMetricsUpdate(data) {
                 const sid = data.server_id;
                 const now = formatDateTime(data.timestamp || new Date().toISOString());
 
@@ -2790,13 +2789,13 @@
                 const diskEl = document.getElementById('live-disk-val-' + sid);
                 const lastUpdateEl = document.getElementById('live-last-update-' + sid);
 
-                if (cpuEl) cpuEl.innerText = parseFloat(data.metrics.cpu).toFixed(1) + '%';
-                if (ramEl) ramEl.innerText = parseFloat(data.metrics.ram).toFixed(1) + '%';
-                if (diskEl) diskEl.innerText = parseFloat(data.metrics.disk).toFixed(1) + '%';
+                if (cpuEl) cpuEl.innerText = parseFloat(data.metrics?.cpu || 0).toFixed(1) + '%';
+                if (ramEl) ramEl.innerText = parseFloat(data.metrics?.ram || 0).toFixed(1) + '%';
+                if (diskEl) diskEl.innerText = parseFloat(data.metrics?.disk || 0).toFixed(1) + '%';
                 if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
 
                 let buf = historyBuffers[sid];
-                if (!buf) {
+                if (!buf || !Array.isArray(buf.labels)) {
                     buf = {
                         labels: [],
                         liveCpu: [],
@@ -2806,14 +2805,13 @@
                         baselinePatternCpu: [],
                         baselinePatternRam: []
                     };
-                    historyBuffers[sid] = buf;
                 }
 
                 buf.labels.push(now);
-                buf.liveCpu.push(parseFloat(data.metrics.cpu) || 0);
-                buf.liveRam.push(parseFloat(data.metrics.ram) || 0);
-                const cpuPattern = buf.baselinePatternCpu?.length ? buf.baselinePatternCpu : [parseFloat(data.metrics.cpu) || 0];
-                const ramPattern = buf.baselinePatternRam?.length ? buf.baselinePatternRam : [parseFloat(data.metrics.ram) || 0];
+                buf.liveCpu.push(parseFloat(data.metrics?.cpu) || 0);
+                buf.liveRam.push(parseFloat(data.metrics?.ram) || 0);
+                const cpuPattern = buf.baselinePatternCpu?.length ? buf.baselinePatternCpu : [parseFloat(data.metrics?.cpu) || 0];
+                const ramPattern = buf.baselinePatternRam?.length ? buf.baselinePatternRam : [parseFloat(data.metrics?.ram) || 0];
                 buf.baselineCpu.push(cpuPattern[(buf.liveCpu.length - 1) % cpuPattern.length]);
                 buf.baselineRam.push(ramPattern[(buf.liveRam.length - 1) % ramPattern.length]);
 
@@ -2825,6 +2823,8 @@
                     buf.baselineRam.shift();
                 }
 
+                historyBuffers[sid] = buf;
+
                 if (charts['combined-' + sid]) {
                     charts['combined-' + sid].data.labels = buf.labels;
                     charts['combined-' + sid].data.datasets[0].data = buf.liveCpu;
@@ -2833,7 +2833,7 @@
                 }
 
                 if (charts['disk-' + sid]) {
-                    const diskVal = parseFloat(data.metrics.disk) || 0;
+                    const diskVal = parseFloat(data.metrics?.disk) || 0;
                     const diskColor = diskVal > 90 ? '#fb7185' : diskVal > 70 ? '#fbbf24' : '#22d3ee';
                     charts['disk-' + sid].data.datasets[0].data = [diskVal, 100 - diskVal];
                     charts['disk-' + sid].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
@@ -2897,7 +2897,42 @@
                         if (statusSpan) statusSpan.textContent = data.status;
                     });
                 }
-            });
+            }
+
+            function initializeSocketConnection(retries = 0) {
+                if (typeof io === 'undefined') {
+                    if (retries < 50) {
+                        return setTimeout(() => initializeSocketConnection(retries + 1), 100);
+                    }
+                    console.warn('Socket.IO client library did not load in time.');
+                    return;
+                }
+                if (dashboardSocket) return;
+
+                try {
+                    dashboardSocket = io({
+                        path: '/socket.io',
+                        transports: ['websocket', 'polling'],
+                        autoConnect: true,
+                    });
+                } catch (err) {
+                    console.error('Socket.IO init failed:', err);
+                    return;
+                }
+
+                dashboardSocket.on('connect', () => {
+                    dashboardSocket.emit('join', {});
+                });
+                dashboardSocket.on('connect_error', (err) => {
+                    console.error('Socket.IO connect_error:', err);
+                });
+                dashboardSocket.on('disconnect', (reason) => {
+                    console.warn('Socket.IO disconnected:', reason);
+                });
+                dashboardSocket.on('metrics_update', handleMetricsUpdate);
+            }
+
+            initializeSocketConnection();
 
             // ── Wait for Chart.js (loaded with defer) before initializing charts ──
             // Chart.js uses `defer` in base.html so it may not be ready when
