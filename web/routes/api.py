@@ -22,6 +22,32 @@ logger = logging.getLogger(__name__)
 api_bp = Blueprint('api', __name__)
 
 
+def _queue_remote_command(db, RemoteCommand, server_id, command, *, parameters=None, timeout_seconds=120, created_by=None):
+    """Queue a command, storing long scripts in parameters for Postgres varchar safety."""
+    cmd = RemoteCommand()
+    cmd.server_id = server_id
+    cmd.command = command if len(command) <= 250 else command[:250]
+    if len(command) > 250:
+        payload = {}
+        if parameters:
+            try:
+                payload = json.loads(parameters) if isinstance(parameters, str) else dict(parameters)
+            except Exception:
+                payload = {'parameters': parameters}
+        payload['script'] = command
+        cmd.parameters = json.dumps(payload)
+    elif parameters is not None:
+        cmd.parameters = json.dumps(parameters) if isinstance(parameters, (dict, list)) else parameters
+    else:
+        cmd.parameters = None
+    cmd.status = 'pending'
+    cmd.timeout_seconds = timeout_seconds
+    if created_by:
+        cmd.created_by = created_by
+    db.session.add(cmd)
+    return cmd
+
+
 def _retry_db_commit(db, attempts=3, delay=0.5):
     for attempt in range(attempts):
         try:
@@ -537,20 +563,37 @@ def api_remote_software(server_id):
         return jsonify({'error': 'Software name required'}), 400
 
     if action == 'uninstall':
-        powershell_cmd = f'choco uninstall {software} -y'
+        software_literal = "'" + software.replace("'", "''") + "'"
+        powershell_cmd = f'''
+$target = {software_literal}
+$paths = @(
+  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+  'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+)
+$app = Get-ItemProperty $paths -ErrorAction SilentlyContinue |
+  Where-Object {{ $_.DisplayName -eq $target }} |
+  Select-Object -First 1
+if (-not $app) {{
+  Write-Error "Installed software not found: $target"
+  exit 1
+}}
+$cmd = $app.QuietUninstallString
+if (-not $cmd) {{ $cmd = $app.UninstallString }}
+if (-not $cmd) {{
+  Write-Error "No uninstall command found for: $target"
+  exit 1
+}}
+Write-Host "Running uninstall for $target"
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -Wait -NoNewWindow
+'''.strip()
     else:
         powershell_cmd = f'choco install {software} -y --allow-empty-checksums'
 
-    remote_cmd = RemoteCommand()
-    remote_cmd.server_id = server_id
-    remote_cmd.command = powershell_cmd
-    remote_cmd.parameters = json.dumps({
+    remote_cmd = _queue_remote_command(db, RemoteCommand, server_id, powershell_cmd, parameters={
         'action': action,
         'software': software,
         'requested_by': current_user.username
-    })
-    remote_cmd.status = 'pending'
-    db.session.add(remote_cmd)
+    }, created_by=current_user.username)
 
     audit = AuditLog()
     audit.tenant_id = current_user.tenant_id
@@ -598,12 +641,8 @@ def api_remote_repair(server_id):
     
     try:
         # Build RemoteCommand via attribute assignment to satisfy static analysis
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command_name
-        cmd.parameters = json.dumps(params) if isinstance(params, (dict, list)) and params else (params if params else None)
-        cmd.status = 'pending'
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command_name, parameters=params or None,
+                                    timeout_seconds=600, created_by=current_user.username)
         db.session.commit()
         
         return jsonify({
@@ -623,18 +662,35 @@ def api_remote_repair(server_id):
 @login_required
 def api_agent_restart(server_id):
     """Queue agent restart on target system"""
-    from web.models import Server
+    from web.models import db, RemoteCommand, Server
     server = Server.query.get_or_404(server_id)
     
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
     
-    import random
-    command_id = random.randint(1000, 9999)
+    script = r'''
+$svc = Get-Service -Name "ServerMonitorAgent" -ErrorAction SilentlyContinue
+if ($svc) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Restart-Service -Name ServerMonitorAgent -Force"'
+    Write-Host "ServerMonitorAgent service restart scheduled"
+} else {
+    Write-Host "ServerMonitorAgent service not found; exiting current agent process"
+    Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Get-Process agent -ErrorAction SilentlyContinue | Stop-Process -Force"'
+}
+'''.strip()
+
+    try:
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, script, timeout_seconds=60,
+                                    created_by=current_user.username)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to queue agent restart: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
     
     return jsonify({
         'success': True,
-        'command_id': command_id,
+        'command_id': cmd.id,
         'message': 'Agent restart queued for next heartbeat'
     })
 
@@ -653,17 +709,21 @@ def get_server_software_list(server_id):
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
     
-    # Get latest metric with software list from agent
-    metric = Metric.query.filter_by(server_id=server_id)\
-        .order_by(Metric.timestamp.desc()).first()
-    
     software_list = []
-    if metric and metric.details:
+    metrics = Metric.query.filter_by(server_id=server_id)\
+        .order_by(Metric.timestamp.desc()).limit(50).all()
+
+    for metric in metrics:
+        if not metric.details:
+            continue
         try:
             details = json.loads(metric.details) if isinstance(metric.details, str) else metric.details
-            software_list = details.get('installed_software', [])
-        except:
-            pass
+            candidate = details.get('installed_software', [])
+            if candidate:
+                software_list = candidate
+                break
+        except Exception:
+            continue
     
     return jsonify({
         'success': True,
@@ -718,7 +778,7 @@ def upload_software_package(server_id):
         
         file.save(file_path)
         file_size = os.path.getsize(file_path)
-        file_url = f"/api/v2/server/{server_id}/software-download/{saved_filename}"
+        file_url = f"{request.host_url.rstrip('/')}/api/v2/server/{server_id}/software-download/{saved_filename}"
         
         # Build PowerShell command to download and execute
         powershell_cmd = f'''
@@ -742,17 +802,11 @@ Write-Host "Installation completed"
 '''.strip()
         
         # Queue the command
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = powershell_cmd
-        cmd.parameters = json.dumps({
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, powershell_cmd, parameters={
             'file': saved_filename,
             'size': file_size,
             'uploaded_by': current_user.username
-        })
-        cmd.status = 'pending'
-        cmd.timeout_seconds = 600  # 10 minutes for installation
-        db.session.add(cmd)
+        }, timeout_seconds=600, created_by=current_user.username)
         
         # Audit log
         audit = AuditLog()
@@ -1042,7 +1096,9 @@ def agent_metrics():
                 import os as _os
 
                 ss_image_b64 = ss_data.get('image')
-                img_bytes = _b64.b64decode(ss_image_b64)
+                img_bytes = _b64.b64decode(ss_image_b64, validate=True)
+                if len(img_bytes) < 100:
+                    raise ValueError("Screenshot payload decoded to an empty or invalid image")
                 ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
                 ts_str    = now.strftime('%Y%m%d_%H%M%S')
                 fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
@@ -1207,6 +1263,7 @@ def agent_poll_commands():
             'command_id': c.id,
             'command':    c.command,
             'parameters': c.parameters or '',
+            'timeout_seconds': c.timeout_seconds or 120,
         }
         for c in pending
     ])
@@ -1578,10 +1635,19 @@ def api_screenshot_config(server_id):
         abort(403)
     
     data = request.get_json() or {}
-    enabled = data.get('enabled', False)
-    interval = data.get('interval', 10)
+    enabled_raw = data.get('enabled', data.get('screenshot_enabled', False))
+    if isinstance(enabled_raw, str):
+        enabled = enabled_raw.strip().lower() in ('1', 'true', 'yes', 'on')
+    else:
+        enabled = bool(enabled_raw)
+    interval = data.get('interval', data.get('screenshot_interval_minutes', 10))
     
     try:
+        try:
+            interval = int(interval)
+        except (TypeError, ValueError):
+            interval = 10
+
         # Validate interval
         if interval < 5:
             interval = 5
@@ -1627,12 +1693,8 @@ def api_terminal_command(server_id):
     
     try:
         # Queue the command directly — agent will run it in PowerShell as-is
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command
-        cmd.parameters = None
-        cmd.status = 'pending'
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command, timeout_seconds=120,
+                                    created_by=current_user.username)
         db.session.commit()
         
         return jsonify({
@@ -1703,13 +1765,8 @@ def api_queue_terminal_command():
     
     try:
         # Create and queue the command
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command
-        cmd.parameters = None
-        cmd.status = 'pending'
-        cmd.timeout_seconds = timeout
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command, timeout_seconds=timeout,
+                                    created_by=current_user.username)
         db.session.commit()
         
         logger.info(f"Queued terminal command {cmd.id} on server {server_id}: {command[:100]}")

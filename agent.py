@@ -176,14 +176,20 @@ def get_system_metrics():
     installed_software = []
     if not hasattr(get_system_metrics, 'last_software_refresh'):
         get_system_metrics.last_software_refresh = 0
+    if not hasattr(get_system_metrics, 'last_software_list'):
+        get_system_metrics.last_software_list = []
     
     current_time = time.time()
     if current_time - get_system_metrics.last_software_refresh >= 300:  # 5 minutes
         try:
             installed_software = get_installed_software()
+            get_system_metrics.last_software_list = installed_software
             get_system_metrics.last_software_refresh = current_time
         except Exception as e:
             logger.warning(f"Failed to get installed software: {e}")
+            installed_software = get_system_metrics.last_software_list
+    else:
+        installed_software = get_system_metrics.last_software_list
 
     return {
         "agent_key": AGENT_KEY,
@@ -358,6 +364,10 @@ def fetch_and_execute_commands():
                 command_id = cmd.get('command_id')
                 command_str = cmd.get('command', '').strip()
                 params_raw = cmd.get('parameters', '') or ''
+                try:
+                    timeout_seconds = int(cmd.get('timeout_seconds') or 120)
+                except (TypeError, ValueError):
+                    timeout_seconds = 120
                 
                 if not command_str:
                     logger.warning(f"⚠️  Empty command received (ID: {command_id})")
@@ -387,7 +397,7 @@ def fetch_and_execute_commands():
                             ["powershell", "-NoProfile", "-Command", command_str], 
                             capture_output=True, 
                             text=True, 
-                            timeout=120,
+                            timeout=timeout_seconds,
                             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
                         )
                     else:
@@ -396,7 +406,7 @@ def fetch_and_execute_commands():
                             shell=True, 
                             capture_output=True, 
                             text=True, 
-                            timeout=120
+                            timeout=timeout_seconds
                         )
                         
                     output = result.stdout or ''
@@ -407,10 +417,10 @@ def fetch_and_execute_commands():
                     
                 except subprocess.TimeoutExpired:
                     output = ''
-                    error_output = 'Command execution timed out after 120 seconds'
+                    error_output = f'Command execution timed out after {timeout_seconds} seconds'
                     exit_code = -1
                     status = 'failed'
-                    logger.error(f"⏱️  Command {command_id} timed out after 120 seconds")
+                    logger.error(f"⏱️  Command {command_id} timed out after {timeout_seconds} seconds")
                 except Exception as e:
                     output = ''
                     error_output = str(e)
