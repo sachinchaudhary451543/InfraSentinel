@@ -1075,10 +1075,11 @@ def agent_metrics():
 
         # Emit screenshot frame over SocketIO for live preview (non-persistent stream)
         if ss_image_b64:
+            from web.app import socketio
+            sio = cast(Any, socketio)
+
             def _emit_screenshot_frame(b64data, shot_obj_id=None):
                 try:
-                    from web.app import socketio
-                    sio = cast(Any, socketio)
                     payload = {
                         'server_id': server.id,
                         'timestamp': now.isoformat() + 'Z',
@@ -1091,10 +1092,11 @@ def agent_metrics():
                 except Exception as e:
                     logger.error(f"SocketIO screenshot emit failed for server {server.id}: {e}", exc_info=True)
 
-            import threading as _threading
-            logger.info(f"[DEBUG] Starting screenshot emit thread for server {server.id} to tenant {server.tenant_id}")
-            emit_thread_ss = _threading.Thread(target=_emit_screenshot_frame, args=(ss_image_b64, None), daemon=True)
-            emit_thread_ss.start()
+            logger.info(f"[DEBUG] Starting screenshot emit background task for server {server.id} to tenant {server.tenant_id}")
+            try:
+                socketio.start_background_task(_emit_screenshot_frame, ss_image_b64, None)
+            except Exception as e:
+                logger.error(f"Failed to start screenshot_frame background task for server {server.id}: {e}", exc_info=True)
 
         logger.info("About to commit final transaction")
         try:
@@ -1118,7 +1120,7 @@ def agent_metrics():
         except Exception:
             pass
         
-        # ── Emit real-time update via SocketIO (non-blocking) ────────────────────
+        # ── Emit real-time update via Socket.IO in a background task ──────────────
         def _emit_metrics_update():
             try:
                 from web.app import socketio
@@ -1130,11 +1132,8 @@ def agent_metrics():
                 }, room=str(tenant_id))
             except Exception as e:
                 logger.error(f"SocketIO emit failed: {e}")
-        
-        # Emit in background thread to avoid blocking the HTTP response
-        import threading
-        emit_thread = threading.Thread(target=_emit_metrics_update, daemon=True)
-        emit_thread.start()
+
+        socketio.start_background_task(_emit_metrics_update)
 
         logger.info("Metrics endpoint returning success")
         return jsonify({

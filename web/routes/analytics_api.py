@@ -1,9 +1,9 @@
-from flask import Blueprint, jsonify, request, g, render_template
+from flask import Blueprint, jsonify, request, render_template
 import logging
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, AzureDevice, Screenshot
+from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, Screenshot
 from web.routes.api import _resolve_screenshot_local_path
 from web.utils import require_role, get_allowed_employee_ids
 
@@ -123,9 +123,7 @@ def workforce_dashboard():
     # Active assignments (correlated devices) - used to map servers -> employees
     # (we already fetched assignments earlier; reuse them)
 
-    # Employees linked to agent-installed servers (unique)
-    linked_employee_ids = {a.employee_id for a in assignments if a.server_id}
-    linked_employees = [db.session.get(Employee, eid) for eid in linked_employee_ids if db.session.get(Employee, eid) is not None]
+    # Active assignments correlate servers to employees
 
     live_agents = []
     for srv in servers:

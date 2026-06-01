@@ -1063,25 +1063,25 @@
 
         window.socketIoBasePath = socketIoBasePath;
         const localClientPath = socketIoBasePath + '/socket.io.js';
-        const fallbackCdn = 'https://cdn.socket.io/4.6.1/socket.io.min.js';
+        const primaryCdn = 'https://cdn.socket.io/4.6.1/socket.io.min.js';
 
         const script = document.createElement('script');
-        script.src = localClientPath;
+        script.src = primaryCdn;
+        script.crossOrigin = 'anonymous';
+        script.onload = function() {
+            console.log('[Base] Socket.IO client loaded from CDN', primaryCdn);
+        };
         script.onerror = function() {
-            console.warn('Socket.IO client failed to load from', localClientPath, '; falling back to CDN:', fallbackCdn);
+            console.warn('Socket.IO client failed to load from CDN', primaryCdn, '; falling back to local server asset:', localClientPath);
             const fallbackScript = document.createElement('script');
-            fallbackScript.src = fallbackCdn;
-            fallbackScript.crossOrigin = 'anonymous';
+            fallbackScript.src = localClientPath;
             fallbackScript.onload = function() {
-                console.log('[Base] Socket.IO client loaded from CDN', fallbackCdn);
+                console.log('[Base] Socket.IO client loaded from local path', localClientPath);
             };
             fallbackScript.onerror = function() {
-                console.error('[Base] Socket.IO client failed to load from CDN', fallbackCdn);
+                console.error('[Base] Socket.IO client failed to load from local path', localClientPath);
             };
             document.head.appendChild(fallbackScript);
-        };
-        script.onload = function() {
-            console.log('[Base] Socket.IO client loaded from', localClientPath);
         };
         document.head.appendChild(script);
     })();
