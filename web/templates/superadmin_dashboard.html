@@ -233,7 +233,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initCharts(); loadMetrics();
         try {
-            const socket = io();
+            const socket = io({ path: window.socketIoBasePath || '/socket.io' });
             socket.on('new_metrics', data => {
                 const sid = document.getElementById('serverSelect').value;
                 if (!sid || parseInt(sid) === data.server_id) {

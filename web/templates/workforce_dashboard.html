@@ -182,10 +182,10 @@ function filterWfRows() {
       // Dynamically determine the socket path based on current location
       const pathname = window.location.pathname || '';
       const parts = pathname.split('/').filter(Boolean);
-      let socketPath = '/socket.io';
+      let socketPath = window.socketIoBasePath || '/socket.io';
       
-      // If under a tenant prefix like /t/<slug>, use that prefix
-      if (parts.length >= 2 && parts[0] === 't') {
+      // If the base path is not present for any reason, fall back to tenant-aware detection.
+      if (!window.socketIoBasePath && parts.length >= 2 && parts[0] === 't') {
         socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
       }
       

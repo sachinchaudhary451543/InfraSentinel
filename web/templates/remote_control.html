@@ -856,7 +856,7 @@
 
     // --- WebSocket Implementation for Live Monitoring ---
     document.addEventListener('DOMContentLoaded', function () {
-        const socket = io();
+        const socket = io({ path: window.socketIoBasePath || '/socket.io' });
         const serverId = "{{ server.id }}";
         const tenantId = "{{ server.tenant_id }}";
 

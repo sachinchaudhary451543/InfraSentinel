@@ -2995,8 +2995,8 @@
                 try {
                     const pathname = window.location.pathname || '';
                     const parts = pathname.split('/').filter(Boolean);
-                    let socketPath = '/socket.io';
-                    if (parts.length >= 2 && parts[0] === 't') {
+                    let socketPath = window.socketIoBasePath || '/socket.io';
+                    if (!window.socketIoBasePath && parts.length >= 2 && parts[0] === 't') {
                         socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
                     }
                     dashboardSocket = io({

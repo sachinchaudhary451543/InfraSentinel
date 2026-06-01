@@ -576,7 +576,7 @@
         setTimeout(() => { try { initializeCharts(); } catch (e) { } }, 100);
 
         // ── WebSocket ──
-        const socket = io({ transports: ['websocket', 'polling'] });
+        const socket = io({ path: window.socketIoBasePath || '/socket.io', transports: ['websocket', 'polling'] });
         const wsStatus = document.getElementById('ws-status');
         socket.on('connect', () => {
             wsStatus.className = 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
