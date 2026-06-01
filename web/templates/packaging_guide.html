@@ -10,7 +10,9 @@
     </div>
     <div class="mt-6">
         <a href="/agent/download-intune-package" class="px-4 py-2 bg-emerald-600 text-white rounded-lg">Download Preconfigured ZIP</a>
-        <button onclick="window.open('/agent/generate-intunewin','_blank')" class="ml-2 px-4 py-2 bg-yellow-500 text-white rounded-lg">Generate .intunewin (server)</button>
+        <form id="genForm" method="POST" action="/agent/generate-intunewin" target="_blank" style="display:inline;">
+            <button type="submit" class="ml-2 px-4 py-2 bg-yellow-500 text-white rounded-lg">Generate .intunewin (server)</button>
+        </form>
     </div>
     <div class="mt-8">
         <h3 class="text-lg font-bold mb-2">Quick Commands</h3>

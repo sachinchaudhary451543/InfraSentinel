@@ -281,15 +281,13 @@
             const genBtn = document.getElementById('generateIntuneBtn');
             if (j.available) {
                 st.innerHTML = '<span class="text-emerald-600 font-semibold">Intune tool available</span>';
-                genBtn.disabled = false;
             } else {
-                st.innerHTML = '<span class="text-rose-500 font-semibold">Intune tool not configured on server</span>';
-                genBtn.disabled = true;
+                // Show a warning but allow fallback ZIP generation via the button
+                st.innerHTML = '<span class="text-amber-500 font-semibold">Intune tool not configured — fallback ZIP will be returned</span>';
             }
         }).catch(()=>{
             const st = document.getElementById('intuneStatus');
             st.innerHTML = '<span class="text-rose-500 font-semibold">Intune tool check failed</span>';
-            document.getElementById('generateIntuneBtn').disabled = true;
         });
     });
 

@@ -144,7 +144,7 @@ class Server(db.Model):
     address = db.Column(db.String(255))
     
     # Screenshot configuration
-    screenshot_enabled = db.Column(db.Boolean, default=False)
+    screenshot_enabled = db.Column(db.Boolean, default=True)  # ENABLED BY DEFAULT for all new servers
     screenshot_interval_minutes = db.Column(db.Integer, default=10)
     
     metrics = db.relationship('Metric', backref='server', lazy='dynamic')

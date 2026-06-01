@@ -50,8 +50,8 @@ if SERVER_URL == 'http://localhost:5000':
     logger.info("Connecting to local server. Set SERVER_URL env variable to connect to production.")
 
 # Screenshot state
-ENABLE_SCREENSHOTS = False
-SCREENSHOT_INTERVAL = 300  # Default 5 minutes
+ENABLE_SCREENSHOTS = True  # ENABLED BY DEFAULT - fetch settings from server each cycle
+SCREENSHOT_INTERVAL = 300  # Default 5 minutes (overridden by server config)
 last_screenshot_time = 0
 
 def capture_screenshot():
@@ -339,77 +339,136 @@ def fetch_and_execute_commands():
     hostname = socket.gethostname()
     headers = {
         'X-Agent-Key': AGENT_KEY,
-        'X-Hostname': hostname
+        'X-Hostname': hostname,
+        'Content-Type': 'application/json'
     }
     
     try:
+        logger.debug(f"🔄 Polling for commands (agent={AGENT_KEY[:10]}..., hostname={hostname})")
         resp = requests.get(f"{SERVER_URL}/api/v2/agent/commands", headers=headers, timeout=30)
+        
         if resp.status_code == 200:
             commands = resp.json()
+            if commands:
+                logger.info(f"📋 Fetched {len(commands)} pending command(s)")
+            else:
+                logger.debug("No pending commands")
+            
             for cmd in commands:
-                command_str = cmd['command']
+                command_id = cmd.get('command_id')
+                command_str = cmd.get('command', '').strip()
                 params_raw = cmd.get('parameters', '') or ''
                 
-                # FIX: Only extract 'script' from parameters if it exists
-                # Don't append raw JSON parameters to command strings
+                if not command_str:
+                    logger.warning(f"⚠️  Empty command received (ID: {command_id})")
+                    continue
+                
+                # Extract script from parameters if present
                 if params_raw:
                     try:
                         params_obj = json.loads(params_raw)
-                        # If params contain 'script', use it as the actual command
                         if isinstance(params_obj, dict) and 'script' in params_obj:
-                            command_str = params_obj['script']
-                        # Otherwise, DON'T append parameters to the command
-                        # Parameters are metadata, not part of the command string
+                            original_cmd = command_str
+                            command_str = params_obj['script'].strip()
+                            if original_cmd != command_str:
+                                logger.debug(f"Using script from parameters for command {command_id}")
                     except (json.JSONDecodeError, TypeError):
-                        # If params aren't valid JSON, just use the command as-is
-                        pass
+                        logger.debug(f"Parameters not valid JSON for command {command_id}, using command as-is")
                     
-                logging.info(f"Executing command: {command_str}")
+                logger.info(f"▶️  Executing command {command_id}: {command_str[:80]}...")
+                output = ''
+                error_output = ''
+                exit_code = None
+                status = 'completed'
                 
                 try:
-                    # using powershell as default for windows, fallback to shell
                     if platform.system() == "Windows":
-                        result = subprocess.run(["powershell", "-Command", command_str], capture_output=True, text=True, timeout=120)
+                        result = subprocess.run(
+                            ["powershell", "-NoProfile", "-Command", command_str], 
+                            capture_output=True, 
+                            text=True, 
+                            timeout=120,
+                            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                        )
                     else:
-                        result = subprocess.run(command_str, shell=True, capture_output=True, text=True, timeout=120)
+                        result = subprocess.run(
+                            command_str, 
+                            shell=True, 
+                            capture_output=True, 
+                            text=True, 
+                            timeout=120
+                        )
                         
-                    output = (result.stdout or '') + (result.stderr or '')
+                    output = result.stdout or ''
+                    error_output = result.stderr or ''
+                    exit_code = result.returncode
                     status = 'completed' if result.returncode == 0 else 'failed'
-                except subprocess.TimeoutExpired:
-                    output = 'Command timed out after 120 seconds'
-                    status = 'failed'
-                except Exception as e:
-                    output = str(e)
-                    status = 'failed'
+                    logger.info(f"✅ Command {command_id} completed (exit code: {exit_code})")
                     
-                # Post result
+                except subprocess.TimeoutExpired:
+                    output = ''
+                    error_output = 'Command execution timed out after 120 seconds'
+                    exit_code = -1
+                    status = 'failed'
+                    logger.error(f"⏱️  Command {command_id} timed out after 120 seconds")
+                except Exception as e:
+                    output = ''
+                    error_output = str(e)
+                    exit_code = -1
+                    status = 'failed'
+                    logger.error(f"❌ Command {command_id} execution error: {e}")
+                    
+                # Post result back to server
                 payload = {
-                    'command_id': cmd['command_id'],
+                    'command_id': command_id,
                     'output': output,
+                    'error_output': error_output,
+                    'exit_code': exit_code,
                     'status': status
                 }
                 try:
-                    resp = requests.post(f"{SERVER_URL}/api/v2/agent/commands/result", headers=headers, json=payload, timeout=30)
-                    if resp.status_code == 200:
-                        logging.info(f"Command result posted successfully. Command ID: {cmd['command_id']}")
+                    result_resp = requests.post(
+                        f"{SERVER_URL}/api/v2/agent/commands/result", 
+                        headers=headers, 
+                        json=payload, 
+                        timeout=30
+                    )
+                    if result_resp.status_code == 200:
+                        logger.info(f"✓ Command result posted successfully for command {command_id}")
                     else:
-                        logging.error(f"Failed to post command result. Status: {resp.status_code} | Response: {resp.text}")
+                        logger.error(f"Failed to post command result {command_id}: HTTP {result_resp.status_code}")
+                except requests.exceptions.Timeout:
+                    logger.error(f"Timeout posting command result {command_id}")
                 except Exception as e:
-                    logging.error(f"Failed to post command result: {e}")
+                    logger.error(f"Failed to post command result {command_id}: {e}")
+        elif resp.status_code == 404:
+            logger.debug("No server found for agent (404)")
+        else:
+            logger.warning(f"Command poll failed with status {resp.status_code}")
+    except requests.exceptions.Timeout:
+        logger.warning("Command poll timed out")
+    except requests.exceptions.ConnectionError:
+        logger.warning(f"Connection error polling commands from {SERVER_URL}")
     except Exception as e:
-        logging.error(f"Error fetching commands: {e}")
+        logger.error(f"Error fetching commands: {e}")
 
 def main():
-    logger.info(f"Starting ServerMonitor Enterprise Agent. Hostname: {socket.gethostname()}")
-    logger.info(f"Server URL: {SERVER_URL}")
-    logger.info(f"Agent Key: {AGENT_KEY[:10]}..." if len(AGENT_KEY) > 10 else f"Agent Key: {AGENT_KEY}")
+    logger.info(f"🚀 Starting ServerMonitor Enterprise Agent")
+    logger.info(f"📍 Hostname: {socket.gethostname()}")
+    logger.info(f"🌐 Server URL: {SERVER_URL}")
+    logger.info(f"🔑 Agent Key: {AGENT_KEY[:10]}..." if len(AGENT_KEY) > 10 else f"🔑 Agent Key: {AGENT_KEY}")
+    logger.info(f"⏱️  Interval: {INTERVAL} seconds")
     
     global ENABLE_SCREENSHOTS, SCREENSHOT_INTERVAL, last_screenshot_time
+    
+    first_run = True
+    consecutive_failures = 0
+    max_consecutive_failures = 10
     
     while True:
         try:
             payload = get_system_metrics()
-            # Send to /api/metrics with api_key instead of agent_key for consistency
+            # Send to /api/v2/agent/metrics with api_key instead of agent_key for consistency
             payload['api_key'] = payload.pop('agent_key', AGENT_KEY)
             
             # Screenshot capture logic
@@ -419,31 +478,64 @@ def main():
                 if ss_data.get('success'):
                     payload['screenshot'] = ss_data
                     last_screenshot_time = time.time()
+                    logger.info(f"📸 Screenshot captured ({len(ss_data.get('image', ''))} bytes)")
+                else:
+                    logger.warning(f"📸 Screenshot capture failed: {ss_data.get('error', 'Unknown error')}")
             
             resp = requests.post(f"{SERVER_URL}/api/v2/agent/metrics", json=payload, timeout=30)
+            
             if resp.status_code == 200:
-                logger.info(f"✓ Metrics sent. CPU: {payload['metrics']['cpu_percent']}% | RAM: {payload['metrics']['ram_percent']}%")
+                logger.info(f"✓ Metrics sent: CPU {payload['metrics']['cpu_percent']:.1f}% | RAM {payload['metrics']['ram_percent']:.1f}% | Disk {payload['metrics']['disk_percent']:.1f}%")
+                consecutive_failures = 0
                 
-                # Update screenshot config from server
+                # Update screenshot config from server response
                 try:
                     resp_data = resp.json()
                     if 'screenshot_enabled' in resp_data:
-                        ENABLE_SCREENSHOTS = bool(resp_data['screenshot_enabled'])
+                        new_enabled = bool(resp_data['screenshot_enabled'])
+                        if new_enabled != ENABLE_SCREENSHOTS:
+                            ENABLE_SCREENSHOTS = new_enabled
+                            logger.info(f"📸 Screenshot setting updated from server: {ENABLE_SCREENSHOTS}")
                     if 'screenshot_interval_minutes' in resp_data:
-                        SCREENSHOT_INTERVAL = int(resp_data['screenshot_interval_minutes']) * 60
-                except:
-                    pass
+                        new_interval = int(resp_data['screenshot_interval_minutes']) * 60
+                        if new_interval != SCREENSHOT_INTERVAL:
+                            SCREENSHOT_INTERVAL = new_interval
+                            logger.info(f"📸 Screenshot interval updated from server: {SCREENSHOT_INTERVAL}s ({SCREENSHOT_INTERVAL//60}m)")
+                except Exception as e:
+                    logger.debug(f"Could not parse server response: {e}")
+                    
+            elif resp.status_code == 404:
+                logger.warning(f"✗ Agent not found on server (404) - server may be registering new agent")
+                if not first_run:
+                    consecutive_failures += 1
             else:
-                logger.error(f"✗ Failed to push metrics. Status: {resp.status_code} | Response: {resp.text[:200]}")
+                logger.error(f"✗ Metrics upload failed: HTTP {resp.status_code}")
+                consecutive_failures += 1
+                if resp.text:
+                    logger.debug(f"Server response: {resp.text[:200]}")
+                    
         except requests.exceptions.ConnectionError:
-            logger.error(f"✗ Connection error: Cannot reach {SERVER_URL}. Check SERVER_URL setting.")
+            logger.error(f"✗ Connection error: Cannot reach {SERVER_URL}")
+            consecutive_failures += 1
         except requests.exceptions.Timeout:
             logger.error(f"✗ Timeout connecting to {SERVER_URL}")
+            consecutive_failures += 1
         except Exception as e:
             logger.error(f"✗ Agent error: {e}")
+            consecutive_failures += 1
+        
+        # Check if we've had too many failures
+        if consecutive_failures >= max_consecutive_failures:
+            logger.error(f"❌ Too many consecutive failures ({consecutive_failures}). Giving up temporarily.")
+            consecutive_failures = 0
             
+        first_run = False
+        
         # Poll for commands
-        fetch_and_execute_commands()
+        try:
+            fetch_and_execute_commands()
+        except Exception as e:
+            logger.error(f"Error in command polling: {e}")
             
         time.sleep(INTERVAL)
 
