@@ -991,6 +991,12 @@ def agent_metrics():
                 server.source     = 'agent'
                 server.type       = 'agent'
                 server.agent_installed = True
+                # Ensure screenshots and remote-control defaults are enabled for newly auto-created servers
+                try:
+                    server.screenshot_enabled = True
+                    server.screenshot_interval_minutes = 10
+                except Exception:
+                    pass
                 db.session.add(server)
                 logger.info(f"Auto-created server record for hostname={hostname}")
 
@@ -1134,6 +1140,8 @@ def agent_metrics():
                 ss_image_b64 = ss_data.get('image')
                 img_bytes = _b64.b64decode(ss_image_b64, validate=True)
                 if len(img_bytes) < 100:
+                    # Log more context for tiny/invalid payloads to help troubleshooting
+                    logger.warning(f"Tiny/invalid screenshot payload from server {server.id} ({hostname}) - decoded size={len(img_bytes)} bytes")
                     raise ValueError("Screenshot payload decoded to an empty or invalid image")
                 ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
                 ts_str    = now.strftime('%Y%m%d_%H%M%S')

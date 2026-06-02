@@ -142,9 +142,17 @@ def _build_employee_device_maps(tenant_id, day_start, day_end):
         DeviceActivity.login_time <= day_end
     ).order_by(DeviceActivity.login_time.desc()).all() if server_ids else []
 
+    employee_activity_rows = EmployeeActivity.query.filter(
+        EmployeeActivity.server_id.in_(server_ids),
+        EmployeeActivity.timestamp >= day_start,
+        EmployeeActivity.timestamp <= day_end
+    ).order_by(EmployeeActivity.timestamp.desc()).all() if server_ids else []
+
     latest_activity_by_user = {}
-    for act in activity_rows:
-        user_key = (act.session_user or '').strip().lower()
+    for act in activity_rows + employee_activity_rows:
+        user_key = (act.session_user if hasattr(act, 'session_user') else act.user or '').strip().lower()
+        if user_key and '\\' in user_key:
+            user_key = user_key.split('\\').pop().strip()
         if user_key and user_key not in latest_activity_by_user:
             latest_activity_by_user[user_key] = act
 
@@ -191,6 +199,8 @@ def _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps):
         username_candidates = [local_username]
         if emp.email:
             username_candidates.append(emp.email.split('@', 1)[0].lower())
+        if emp.email:
+            username_candidates.append(emp.email.lower())
 
         for username in username_candidates:
             if not username:

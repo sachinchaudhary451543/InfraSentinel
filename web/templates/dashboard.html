@@ -3028,10 +3028,14 @@
                     if (!window.socketIoBasePath && parts.length >= 2 && parts[0] === 't') {
                         socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
                     }
-                    dashboardSocket = io({
+                    dashboardSocket = io(window.location.origin, {
                         path: socketPath,
                         transports: ['websocket', 'polling'],
+                        upgrade: true,
+                        reconnection: true,
                         autoConnect: true,
+                        timeout: 20000,
+                        withCredentials: true
                     });
                     console.log('[Dashboard] Socket.IO path:', socketPath);
                 } catch (err) {

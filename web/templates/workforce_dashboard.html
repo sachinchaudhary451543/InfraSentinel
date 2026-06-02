@@ -198,8 +198,16 @@ function filterWfRows() {
         socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
       }
       
-      // Create socket with the correct path
-      const socket = io({ path: socketPath, reconnection: true, reconnectionDelay: 1000 });
+      // Create socket with the correct path and explicit origin to avoid proxy path issues
+      const socket = io(window.location.origin, {
+        path: socketPath,
+        transports: ['websocket', 'polling'],
+        upgrade: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        timeout: 20000,
+        withCredentials: true
+      });
       
       socket.on('connect', function() {
         console.log('[Workforce Live] Socket connected at:', socketPath);

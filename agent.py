@@ -57,6 +57,17 @@ last_screenshot_time = 0
 def capture_screenshot():
     """Capture system screenshot and encode as base64"""
     try:
+        # If running on Windows, ensure we have an interactive desktop session
+        if platform.system() == 'Windows':
+            try:
+                from ctypes import windll
+                # If there's no foreground window, we're likely running in Session 0 (service) and cannot capture
+                if not windll.user32.GetForegroundWindow():
+                    logger.warning("Screenshot skipped: no interactive session detected (running as service/Session 0)")
+                    return {"success": False, "error": "No interactive session (Service/Session 0)"}
+            except Exception:
+                # If the check fails, proceed to attempt capture and let PIL raise if unsupported
+                pass
         if platform.system() == 'Windows':
             from PIL import ImageGrab
             screenshot = ImageGrab.grab()

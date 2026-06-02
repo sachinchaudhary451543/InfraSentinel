@@ -257,6 +257,8 @@ socketio_kwargs = {
     "async_mode": "gevent",       # CRITICAL: must match gunicorn+gevent worker type
     "logger": False,
     "engineio_logger": False,
+    "allow_upgrades": True,
+    "async_handlers": True,
     "ping_timeout": 60,
     "ping_interval": 25,
 }
