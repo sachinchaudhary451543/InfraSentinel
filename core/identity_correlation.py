@@ -72,7 +72,9 @@ class IdentityCorrelationService:
                 AzureUser.tenant_id == tenant_id,
                 or_(
                     AzureUser.email.ilike(f"{clean_user}%"),
-                    AzureUser.employee_id.ilike(f"{clean_user}%")
+                    AzureUser.employee_id.ilike(f"{clean_user}%"),
+                    AzureUser.mail_nickname.ilike(f"{clean_user}%"),
+                    AzureUser.sam_account_name.ilike(f"{clean_user}%")
                 )
             ).first()
             

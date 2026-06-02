@@ -51,6 +51,61 @@ def _compact_identity(value):
     return (value or '').lower().replace('.', '').replace('_', '').replace('-', '')
 
 
+def _resolve_asset_log_employee_key(
+    log,
+    employee_dict,
+    manual_by_local,
+    manual_by_azure_id,
+    azure_users_by_email,
+    azure_users_by_employee_id,
+    azure_users_by_mail_nickname,
+    azure_users_by_sam
+):
+    """Normalize asset log identity to an existing manual employee email when possible."""
+    raw_email = (log.employee_email or '').strip().lower()
+    raw_employee_id = (log.employee_id or '').strip()
+
+    if raw_email and raw_email in employee_dict:
+        return raw_email
+
+    compact_email_prefix = ''
+    if raw_email and '@' in raw_email:
+        compact_email_prefix = _compact_identity(raw_email.split('@', 1)[0])
+        if compact_email_prefix and compact_email_prefix in manual_by_local:
+            return manual_by_local[compact_email_prefix]
+
+    compact_employee_id = _compact_identity(raw_employee_id)
+    if compact_employee_id and compact_employee_id in manual_by_local:
+        return manual_by_local[compact_employee_id]
+
+    def _match_azure_user(azure_user):
+        if not azure_user:
+            return None
+        user_key = (azure_user.user_id or '').lower()
+        return manual_by_azure_id.get(user_key)
+
+    if raw_email and raw_email in azure_users_by_email:
+        mapped = _match_azure_user(azure_users_by_email[raw_email])
+        if mapped:
+            return mapped
+
+    for key, lookup in (
+        (raw_employee_id, azure_users_by_employee_id),
+        (raw_employee_id, azure_users_by_mail_nickname),
+        (raw_employee_id, azure_users_by_sam)
+    ):
+        if key and key.lower() in lookup:
+            mapped = _match_azure_user(lookup[key.lower()])
+            if mapped:
+                return mapped
+
+    if raw_email:
+        return raw_email
+    if raw_employee_id:
+        return raw_employee_id
+    return ''
+
+
 def _build_employee_device_maps(tenant_id, day_start, day_end):
     """Build caches to resolve employees to servers and Azure devices."""
     assignments = EmployeeDeviceAssignment.query.filter_by(tenant_id=tenant_id, is_active=True).all()
@@ -578,7 +633,20 @@ def get_employees_scroll():
                     metric_lookup[m.server_id] = (m.cpu_util_percent or 0)
         
         for log in asset_logs:
-            emp_email = log.employee_email.lower()
+            emp_email = _resolve_asset_log_employee_key(
+                log,
+                employee_dict,
+                manual_by_local,
+                manual_by_azure_id,
+                {u.email.lower(): u for u in azure_users if u.email},
+                {u.employee_id.lower(): u for u in azure_users if u.employee_id},
+                {u.mail_nickname.lower(): u for u in azure_users if u.mail_nickname},
+                {u.sam_account_name.lower(): u for u in azure_users if u.sam_account_name}
+            )
+
+            if not emp_email:
+                continue
+
             if emp_email not in employee_dict:
                 # User not in Azure, create skeleton
                 if q and q not in emp_email and q not in log.hostname.lower():

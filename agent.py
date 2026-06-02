@@ -120,26 +120,35 @@ def get_system_metrics():
         import getpass
         username = getpass.getuser()
         
-        # If running as SYSTEM (service mode), try to detect actual logged-in user from running processes
+        # If running as SYSTEM (service mode), try to detect actual logged-in user from active sessions first
         if username.upper() in ['SYSTEM', 'NT AUTHORITY', 'NETWORK SERVICE', 'LOCAL SERVICE']:
             try:
                 if platform.system() == 'Windows':
                     logged_in_user = None
-                    # Check Windows process ownership to find actual user
-                    import ctypes
-                    for proc in psutil.process_iter(['username', 'name']):
-                        try:
-                            user = proc.info['username']
-                            proc_name = proc.info['name'].lower()
-                            # Look for user processes (not system processes)
-                            if user and user not in ['SYSTEM', 'NT AUTHORITY\\SYSTEM'] and 'system' not in proc_name:
+                    # First try active user sessions
+                    try:
+                        for session in psutil.users():
+                            user = getattr(session, 'name', None) or getattr(session, 'username', None)
+                            if user and user.upper() not in ['SYSTEM', 'NETWORK SERVICE', 'LOCAL SERVICE', 'NT AUTHORITY\\SYSTEM']:
                                 logged_in_user = user.split('\\')[-1] if '\\' in user else user
                                 break
-                        except:
-                            pass
-            except:
+                    except Exception:
+                        pass
+
+                    # Fall back to process ownership if session lookup fails
+                    if not logged_in_user:
+                        for proc in psutil.process_iter(['username', 'name']):
+                            try:
+                                user = proc.info['username']
+                                proc_name = (proc.info['name'] or '').lower()
+                                if user and user.upper() not in ['SYSTEM', 'NETWORK SERVICE', 'LOCAL SERVICE', 'NT AUTHORITY\\SYSTEM'] and 'system' not in proc_name:
+                                    logged_in_user = user.split('\\')[-1] if '\\' in user else user
+                                    break
+                            except Exception:
+                                pass
+            except Exception:
                 pass
-        
+
         # If still no user detected, use the system getpass user
         if not logged_in_user:
             logged_in_user = username
@@ -234,8 +243,7 @@ def get_active_window_info():
     window_title = ''
     try:
         if platform.system() == 'Windows':
-            from ctypes import windll, create_unicode_buffer, c_int
-            
+            from ctypes import windll, create_unicode_buffer
             # Try to get foreground window (works in interactive session)
             hwnd = windll.user32.GetForegroundWindow()
             
