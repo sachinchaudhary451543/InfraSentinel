@@ -57,33 +57,65 @@ last_screenshot_time = 0
 def capture_screenshot():
     """Capture system screenshot and encode as base64"""
     try:
-        # If running on Windows, ensure we have an interactive desktop session
         if platform.system() == 'Windows':
             try:
-                from ctypes import windll
-                # If there's no foreground window, we're likely running in Session 0 (service) and cannot capture
-                if not windll.user32.GetForegroundWindow():
-                    logger.warning("Screenshot skipped: no interactive session detected (running as service/Session 0)")
-                    return {"success": False, "error": "No interactive session (Service/Session 0)"}
-            except Exception:
-                # If the check fails, proceed to attempt capture and let PIL raise if unsupported
-                pass
-        if platform.system() == 'Windows':
-            from PIL import ImageGrab
-            screenshot = ImageGrab.grab()
-            img_byte_arr = io.BytesIO()
-            screenshot.save(img_byte_arr, format='JPEG', quality=60)
-            img_byte_arr.seek(0)
-            base64_str = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
-            return {
-                "success": True,
-                "image": base64_str,
-                "format": "jpeg",
-                "timestamp": datetime.now(timezone.utc).isoformat() + 'Z'
-            }
+                from PIL import ImageGrab
+                screenshot = ImageGrab.grab()
+                img_byte_arr = io.BytesIO()
+                screenshot.save(img_byte_arr, format='JPEG', quality=60)
+                img_byte_arr.seek(0)
+                base64_str = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                return {
+                    "success": True,
+                    "image": base64_str,
+                    "format": "jpeg",
+                    "timestamp": datetime.now(timezone.utc).isoformat() + 'Z'
+                }
+            except Exception as first_error:
+                logger.warning(f"Primary screenshot capture failed: {first_error}. Trying PowerShell fallback.")
+                try:
+                    powershell_script = r"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen
+$bitmap = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size)
+$tempFile = [System.IO.Path]::Combine($env:TEMP, 'screenshot_temp.jpg')
+$bitmap.Save($tempFile, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+[Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tempFile))
+"""
+                    result = subprocess.run(
+                        ['powershell', '-NoProfile', '-Command', powershell_script],
+                        capture_output=True,
+                        text=True,
+                        timeout=20
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        return {
+                            "success": True,
+                            "image": result.stdout.strip(),
+                            "format": "jpeg",
+                            "timestamp": datetime.now(timezone.utc).isoformat() + 'Z'
+                        }
+                    logger.error(f"PowerShell screenshot fallback failed: returncode={result.returncode} stderr={result.stderr.strip()}")
+                except Exception as fallback_error:
+                    logger.error(f"Screenshot fallback failed: {fallback_error}")
+        else:
+            result = subprocess.run(['scrot', '/tmp/screenshot.png'], capture_output=True, timeout=10)
+            if result.returncode == 0:
+                with open('/tmp/screenshot.png', 'rb') as f:
+                    base64_str = base64.b64encode(f.read()).decode('utf-8')
+                    return {
+                        "success": True,
+                        "image": base64_str,
+                        "format": "png",
+                        "timestamp": datetime.now(timezone.utc).isoformat() + 'Z'
+                    }
     except Exception as e:
         logger.error(f"Screenshot capture failed: {e}")
-    return {"success": False, "error": "Capture failed"}
+        return {"success": False, "error": str(e)}
+    return {"success": False, "error": "Screenshot capture failed"}
 
 def get_idle_time():
     """Return system idle time in seconds"""

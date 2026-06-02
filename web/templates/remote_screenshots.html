@@ -373,14 +373,25 @@
             const last = document.getElementById('lastRef');
             if (last) last.textContent = fmt(new Date().toISOString());
 
-            // Default to the current local date on first page load.
+            // Default to show all screenshots when there are no shots for today.
             const fromInput = document.getElementById('filterDateFrom');
             const toInput = document.getElementById('filterDateTo');
+            const today = todayInputValue();
+            const hasToday = allShots.some(s => {
+                const capturedDate = s.captured_date || (s.captured_at_local || s.captured_at || '').slice(0, 10);
+                return capturedDate === today;
+            });
+
             if (fromInput && toInput) {
-                const today = todayInputValue();
-                if (!fromInput.value) fromInput.value = today;
-                if (!toInput.value) toInput.value = today;
-                applyDateFilter();
+                if (hasToday) {
+                    fromInput.value = today;
+                    toInput.value = today;
+                    applyDateFilter();
+                } else {
+                    fromInput.value = '';
+                    toInput.value = '';
+                    renderShots(allShots);
+                }
             } else {
                 renderShots(allShots);
             }

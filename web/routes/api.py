@@ -944,7 +944,7 @@ def agent_metrics():
       }
     }
     """
-    from web.models import db, Server, Metric, Screenshot, EmployeeActivity
+    from web.models import db, Server, Metric, Screenshot, EmployeeActivity, EmployeeDeviceAssignment
     import traceback
 
     logger.info("📥 Metrics endpoint called")
@@ -1032,18 +1032,25 @@ def agent_metrics():
             return jsonify({'success': False, 'error': 'Database is busy. Try again shortly.'}), 503
         
         # ── Identity Correlation Engine ───────────────────────────────────
-        try:
-            from core.identity_correlation import IdentityCorrelationService
-            serial_number = data.get('serial_number') or ''
-            IdentityCorrelationService.correlate_agent_payload(
-                tenant_id=server.tenant_id,
-                server_id=server.id,
-                hostname=hostname,
-                serial_number=serial_number,
-                logged_in_user=logged_in_user
-            )
-        except Exception as e:
-            logger.error(f"Identity correlation failed: {str(e)}")
+        if logged_in_user:
+            try:
+                existing_assignment = EmployeeDeviceAssignment.query.filter_by(
+                    tenant_id=server.tenant_id,
+                    server_id=server.id,
+                    is_active=True
+                ).first()
+                if not existing_assignment:
+                    from core.identity_correlation import IdentityCorrelationService
+                    serial_number = data.get('serial_number') or ''
+                    IdentityCorrelationService.correlate_agent_payload(
+                        tenant_id=server.tenant_id,
+                        server_id=server.id,
+                        hostname=hostname,
+                        serial_number=serial_number,
+                        logged_in_user=logged_in_user
+                    )
+            except Exception as e:
+                logger.error(f"Identity correlation failed: {str(e)}")
 
         # ── Store Metric row ──────────────────────────────────────────────
         metrics_raw = data.get('metrics') or {}
