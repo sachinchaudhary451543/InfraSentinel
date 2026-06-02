@@ -1587,43 +1587,61 @@ def resolve_incident(alert_id):
 @asset_mgmt_bp.route('/assets/api/v2/asset/<int:server_id>/delete', methods=['POST'])
 @login_required
 def delete_server(server_id):
-    """Delete a server and all its associated data"""
+    """Soft-remove a server from active inventory while preserving historical data."""
     try:
         server = Server.query.get_or_404(server_id)
         
         # Check authorization
         if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-            
-        # Delete related records in FK-safe order.
-        session_ids = [
-            row.id for row in ActivitySession.query
-            .filter_by(server_id=server_id)
-            .with_entities(ActivitySession.id)
-            .all()
-        ]
-        if session_ids:
-            AppUsage.query.filter(AppUsage.session_id.in_(session_ids)).delete(synchronize_session=False)
-            ActivitySession.query.filter(ActivitySession.id.in_(session_ids)).delete(synchronize_session=False)
 
-        Screenshot.query.filter_by(server_id=server_id).delete()
-        SharePointMetricQueue.query.filter_by(server_id=server_id).delete()
-        Metric.query.filter_by(server_id=server_id).delete()
-        EmployeeActivity.query.filter_by(server_id=server_id).delete()
-        DeviceActivity.query.filter_by(server_id=server_id).delete()
-        SystemAlert.query.filter_by(server_id=server_id).delete()
-        RemoteCommand.query.filter_by(server_id=server_id).delete()
-        EmployeeAssetLog.query.filter_by(server_id=server_id).delete()
-        EmployeeDeviceAssignment.query.filter_by(server_id=server_id).delete()
-        DeploymentJob.query.filter_by(server_id=server_id).delete()
-        VM.query.filter_by(server_id=server_id).delete()
-        
-        db.session.delete(server)
+        now = datetime.utcnow()
+        server.status = 'deleted'
+        server.device_active_status = 'removed'
+        server.monitoring_active = False
+        server.agent_installed = False
+        server.last_seen = server.last_seen or now
+
+        EmployeeDeviceAssignment.query.filter_by(
+            server_id=server_id,
+            is_active=True
+        ).update({
+            'is_active': False,
+            'unassigned_at': now
+        }, synchronize_session=False)
+
+        SystemAlert.query.filter_by(
+            server_id=server_id,
+            is_active=True
+        ).update({
+            'is_active': False,
+            'resolved_at': now
+        }, synchronize_session=False)
+
+        RemoteCommand.query.filter(
+            RemoteCommand.server_id == server_id,
+            RemoteCommand.status.in_(['pending', 'sent', 'running'])
+        ).update({
+            'status': 'cancelled',
+            'completed_at': now,
+            'error_output': 'Device removed from active inventory'
+        }, synchronize_session=False)
+
+        audit = AuditLog(
+            tenant_id=server.tenant_id,
+            user_id=current_user.id,
+            user=current_user.username,
+            action='soft_remove_device',
+            resource=f'Server:{server.hostname or server.name}',
+            details='Device removed from active inventory. Historical screenshots, metrics, and activity were preserved.',
+            status='success'
+        )
+        db.session.add(audit)
         db.session.commit()
         
-        logger.info(f"Server {server_id} ({server.hostname}) deleted by {current_user.username}")
+        logger.info(f"Server {server_id} ({server.hostname}) soft-removed by {current_user.username}")
         
-        return jsonify({'success': True, 'message': 'Device deleted successfully'})
+        return jsonify({'success': True, 'message': 'Device removed from active inventory. Historical data preserved.'})
         
     except Exception as e:
         logger.error(f"Error deleting server {server_id}: {e}")

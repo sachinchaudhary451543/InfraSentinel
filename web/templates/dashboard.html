@@ -1710,6 +1710,35 @@
                         </div>
                     </div>
 
+                    <!-- Latest Screenshot -->
+                    <div class="screenshot-panel" style="margin-bottom:14px;">
+                        <div class="screenshot-header">
+                            <div class="chart-label">
+                                <i class="fa-solid fa-camera" style="color:var(--noc-cyan);"></i>
+                                Latest Screen
+                            </div>
+                            <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
+                                class="noc-btn-console" onclick="event.stopPropagation();" style="font-size:0.62rem; padding:5px 8px;">
+                                Gallery
+                            </a>
+                        </div>
+                        {% if server.latest_screenshot_url %}
+                        <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
+                            onclick="event.stopPropagation();" style="display:block; text-decoration:none;">
+                            <div style="position:relative; width:100%; aspect-ratio:16/5; background:#0f172a; border:1px solid var(--noc-border); border-radius:6px; overflow:hidden;">
+                                <img src="{{ server.latest_screenshot_url }}?size=thumb"
+                                    alt="Latest screenshot for {{ server.hostname }}"
+                                    loading="lazy"
+                                    style="width:100%; height:100%; object-fit:cover; display:block;">
+                            </div>
+                        </a>
+                        {% else %}
+                        <div style="display:flex; align-items:center; justify-content:center; min-height:72px; background:rgba(15,23,42,0.04); border:1px dashed var(--noc-border); border-radius:6px; color:var(--noc-text-muted); font-size:0.68rem; font-weight:600;">
+                            No screenshot captured yet
+                        </div>
+                        {% endif %}
+                    </div>
+
                     <!-- Combined Charts Row: CPU + RAM -->
                     <div style="margin-bottom:14px;">
                         <div class="chart-panel">
@@ -2340,7 +2369,7 @@
         }
 
         function deleteDevice(serverId, hostname) {
-            if (!confirm(`Are you sure you want to delete the device ${hostname}? This will remove all associated data, metrics, and screenshots.`)) return;
+            if (!confirm(`Remove ${hostname} from active inventory? Historical metrics, activity, and screenshots will be preserved.`)) return;
 
             fetch(`/assets/api/v2/asset/${serverId}/delete`, {
                 method: 'POST',
@@ -2349,10 +2378,10 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Device deleted successfully.');
+                        alert(data.message || 'Device removed from active inventory.');
                         window.location.reload();
                     } else {
-                        alert('Failed to delete device: ' + (data.error || 'Unknown error'));
+                        alert('Failed to remove device: ' + (data.error || 'Unknown error'));
                     }
                 })
                 .catch(err => alert('Error: ' + err.message));
