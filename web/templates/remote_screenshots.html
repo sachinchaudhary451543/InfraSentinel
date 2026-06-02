@@ -174,10 +174,19 @@
     let refreshTimer = null;
     let allShots = [];  // Store all screenshots for filtering
 
+    function todayInputValue() {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
     function getDateFromISO(iso) {
         if (!iso) return null;
         let s = iso;
-        if (!s.includes('T')) s = s.replace(' ', 'T');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s = `${s}T00:00:00`;
+        else if (!s.includes('T')) s = s.replace(' ', 'T');
         if (!s.endsWith('Z')) s += 'Z';
         try {
             return new Date(s);
@@ -230,8 +239,8 @@
             return;
         }
 
-        const fromDate = new Date(fromStr + 'T00:00:00Z');
-        const toDate = new Date(toStr + 'T23:59:59Z');
+        const fromDate = fromStr;
+        const toDate = toStr;
 
         if (fromDate > toDate) {
             showFilterMsg('⚠ Start date must be before end date');
@@ -239,15 +248,15 @@
         }
 
         const filtered = allShots.filter(s => {
-            const capturedDate = getDateFromISO(s.captured_at);
+            const capturedDate = s.captured_date || (s.captured_at_local || s.captured_at || '').slice(0, 10);
             if (!capturedDate) return false;
             return capturedDate >= fromDate && capturedDate <= toDate;
         });
 
         // Sort by date descending (latest first)
         filtered.sort((a, b) => {
-            const dateA = getDateFromISO(a.captured_at) || new Date(0);
-            const dateB = getDateFromISO(b.captured_at) || new Date(0);
+            const dateA = getDateFromISO(a.captured_at_local || a.captured_at) || new Date(0);
+            const dateB = getDateFromISO(b.captured_at_local || b.captured_at) || new Date(0);
             return dateB - dateA;
         });
 
@@ -267,8 +276,8 @@
         // Re-render all shots sorted by date (latest first)
         const sorted = [...allShots];
         sorted.sort((a, b) => {
-            const dateA = getDateFromISO(a.captured_at) || new Date(0);
-            const dateB = getDateFromISO(b.captured_at) || new Date(0);
+            const dateA = getDateFromISO(a.captured_at_local || a.captured_at) || new Date(0);
+            const dateB = getDateFromISO(b.captured_at_local || b.captured_at) || new Date(0);
             return dateB - dateA;
         });
         renderShots(sorted);
@@ -356,27 +365,24 @@
 
             // Sort by date descending (latest first)
             allShots.sort((a, b) => {
-                const dateA = getDateFromISO(a.captured_at) || new Date(0);
-                const dateB = getDateFromISO(b.captured_at) || new Date(0);
+                const dateA = getDateFromISO(a.captured_at_local || a.captured_at) || new Date(0);
+                const dateB = getDateFromISO(b.captured_at_local || b.captured_at) || new Date(0);
                 return dateB - dateA;
             });
-
-            renderShots(allShots);
 
             const last = document.getElementById('lastRef');
             if (last) last.textContent = fmt(new Date().toISOString());
 
-            // Set default date range (last 7 days)
+            // Default to the current local date on first page load.
             const fromInput = document.getElementById('filterDateFrom');
             const toInput = document.getElementById('filterDateTo');
             if (fromInput && toInput) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-                fromInput.valueAsDate = sevenDaysAgo;
-                toInput.valueAsDate = today;
+                const today = todayInputValue();
+                if (!fromInput.value) fromInput.value = today;
+                if (!toInput.value) toInput.value = today;
+                applyDateFilter();
+            } else {
+                renderShots(allShots);
             }
         } catch (e) {
             grid.innerHTML = `

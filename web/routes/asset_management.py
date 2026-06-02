@@ -4,7 +4,9 @@ Employees, Devices, Login/Logout tracking, Software Deployment, and Remote Acces
 """
 
 import logging
+import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort, flash, make_response
 from flask_login import login_required, current_user
@@ -17,12 +19,26 @@ from web.active_agents_monitor import ActiveAgentsMonitor
 from web.models import (
     db, Server, Metric, EmployeeAssetLog, DeviceActivity, EmployeeDeviceAssignment,
     SystemAlert, AuditLog, RemoteCommand, Tenant,
-    AzureUser, AzureDevice, AzureDeviceOwner, Screenshot, Employee
+    AzureUser, AzureDevice, AzureDeviceOwner, Screenshot, Employee,
+    EmployeeActivity, ActivitySession, AppUsage, DeploymentJob,
+    SharePointMetricQueue, VM
 )
 
 logger = logging.getLogger("[ASSET_MGMT]")
 
 asset_mgmt_bp = Blueprint('asset_mgmt', __name__)
+LOCAL_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Kolkata'))
+
+
+def _today_local():
+    return datetime.now(LOCAL_TZ).date()
+
+
+def _local_day_bounds_utc_naive(target_date):
+    start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=LOCAL_TZ)
+    end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
+    utc = ZoneInfo('UTC')
+    return start.astimezone(utc).replace(tzinfo=None), end.astimezone(utc).replace(tzinfo=None)
 
 
 def _seconds_to_hms(value):
@@ -1047,9 +1063,9 @@ def productivity_overview():
         # Get target date from query args or default to today
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
             
         emp_rows = _build_productivity_rows(tenant_id, target_date)
         
@@ -1074,9 +1090,9 @@ def productivity_export():
         tenant_id = current_user.tenant_id
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
         emp_rows = _build_productivity_rows(tenant_id, target_date)
         output = io.StringIO()
@@ -1110,12 +1126,11 @@ def productivity_screenshots():
         tenant_id = current_user.tenant_id
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
-        day_start = datetime.combine(target_date, datetime.min.time())
-        day_end = datetime.combine(target_date, datetime.max.time())
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
 
         screenshots = Screenshot.query.filter(
             Screenshot.tenant_id == tenant_id,
@@ -1171,9 +1186,9 @@ def employee_productivity_detail(employee_id):
 
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
             
         attendance = AttendanceRecord.query.filter_by(employee_id=emp.id, date=target_date).first()
         
@@ -1189,8 +1204,7 @@ def employee_productivity_detail(employee_id):
             if attendance.last_activity:
                 attendance_last_activity_display = attendance.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist)
         
-        day_start = datetime.combine(target_date, datetime.min.time())
-        day_end = datetime.combine(target_date, datetime.max.time())
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
         sessions = ActivitySession.query.filter(
             ActivitySession.employee_id == emp.id,
             ActivitySession.start_time >= day_start,
@@ -1335,7 +1349,7 @@ def assign_employee_device(employee_id):
     return redirect(url_for(
         'asset_mgmt.employee_productivity_detail',
         employee_id=employee_id,
-        date=request.form.get('date') or datetime.utcnow().date().strftime('%Y-%m-%d')
+        date=request.form.get('date') or _today_local().strftime('%Y-%m-%d')
     ))
 
 
@@ -1422,12 +1436,11 @@ def remote_control_productivity(server_id):
 
         user_filter = (request.args.get('user') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
-        day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
-        day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
 
         base = db.session.query(EmployeeActivity).filter(
             EmployeeActivity.server_id == server_id,
@@ -1582,14 +1595,28 @@ def delete_server(server_id):
         if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
             
-        # Delete related records
-        from web.models import Screenshot
+        # Delete related records in FK-safe order.
+        session_ids = [
+            row.id for row in ActivitySession.query
+            .filter_by(server_id=server_id)
+            .with_entities(ActivitySession.id)
+            .all()
+        ]
+        if session_ids:
+            AppUsage.query.filter(AppUsage.session_id.in_(session_ids)).delete(synchronize_session=False)
+            ActivitySession.query.filter(ActivitySession.id.in_(session_ids)).delete(synchronize_session=False)
+
         Screenshot.query.filter_by(server_id=server_id).delete()
+        SharePointMetricQueue.query.filter_by(server_id=server_id).delete()
         Metric.query.filter_by(server_id=server_id).delete()
+        EmployeeActivity.query.filter_by(server_id=server_id).delete()
         DeviceActivity.query.filter_by(server_id=server_id).delete()
         SystemAlert.query.filter_by(server_id=server_id).delete()
         RemoteCommand.query.filter_by(server_id=server_id).delete()
         EmployeeAssetLog.query.filter_by(server_id=server_id).delete()
+        EmployeeDeviceAssignment.query.filter_by(server_id=server_id).delete()
+        DeploymentJob.query.filter_by(server_id=server_id).delete()
+        VM.query.filter_by(server_id=server_id).delete()
         
         db.session.delete(server)
         db.session.commit()

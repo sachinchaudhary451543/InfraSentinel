@@ -1,9 +1,9 @@
 from flask import Blueprint, jsonify, request, render_template
 import logging
 from flask_login import login_required, current_user
-from datetime import datetime
+from datetime import datetime, time
 
-from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, Server, Screenshot
+from web.models import db, ActivitySession, AppUsage, AttendanceRecord, Employee, EmployeeDeviceAssignment, EmployeeActivity, Server, Screenshot
 from web.routes.api import _resolve_screenshot_local_path
 from web.utils import require_role, get_allowed_employee_ids
 
@@ -16,9 +16,31 @@ logger = logging.getLogger(__name__)
 def workforce_dashboard():
     """Workforce Intelligence Dashboard page."""
     tenant_id = current_user.tenant_id
-    
-    # Gather summary data for the template
-    today = datetime.utcnow().date()
+
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+
+    def _hms(seconds):
+        seconds = int(seconds or 0)
+        return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+
+    def _last_seen_label(dt):
+        if not dt:
+            return None
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+        return dt.astimezone(ist).strftime('%d %b %Y, %I:%M %p')
+
+    def _screenshot_thumb(shot):
+        if not shot:
+            return None, False
+        local_path = _resolve_screenshot_local_path(shot)
+        if local_path or shot.sharepoint_url:
+            return f"/api/screenshot/{shot.id}?size=thumb", True
+        return None, False
+
+    # Gather summary data for the template using India/local business day.
+    today = datetime.now(ist).date()
     
     # Employee count
     employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True, employment_status='active').all()
@@ -30,8 +52,8 @@ def workforce_dashboard():
     attendance = AttendanceRecord.query.filter_by(tenant_id=tenant_id, date=today).all()
     
     # Today's sessions
-    day_start = datetime.combine(today, datetime.min.time())
-    day_end = datetime.combine(today, datetime.max.time())
+    day_start = ist.localize(datetime.combine(today, time.min)).astimezone(pytz.UTC).replace(tzinfo=None)
+    day_end = ist.localize(datetime.combine(today, time.max)).astimezone(pytz.UTC).replace(tzinfo=None)
     sessions = ActivitySession.query.filter(
         ActivitySession.tenant_id == tenant_id,
         ActivitySession.start_time >= day_start,
@@ -44,12 +66,9 @@ def workforce_dashboard():
     total_productive = sum(s.productive_minutes or 0 for s in sessions)
     
     # Format totals as HH:MM:SS (since they are stored as seconds)
-    total_active_str = f"{total_active // 3600:02d}:{(total_active % 3600) // 60:02d}:{total_active % 60:02d}"
-    total_idle_str = f"{total_idle // 3600:02d}:{(total_idle % 3600) // 60:02d}:{total_idle % 60:02d}"
-    total_productive_str = f"{total_productive // 3600:02d}:{(total_productive % 3600) // 60:02d}:{total_productive % 60:02d}"
-    
-    import pytz
-    ist = pytz.timezone('Asia/Kolkata')
+    total_active_str = _hms(total_active)
+    total_idle_str = _hms(total_idle)
+    total_productive_str = _hms(total_productive)
     
     # Build employee detail rows for the table
     emp_rows = []
@@ -80,11 +99,7 @@ def workforce_dashboard():
                 last_seen = srv.last_seen
 
                 latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
-                if latest_ss:
-                    local_path = _resolve_screenshot_local_path(latest_ss)
-                    screenshot_available = bool(local_path or latest_ss.sharepoint_url)
-                    if screenshot_available:
-                        screenshot_thumb = f"/api/screenshot/{latest_ss.id}?size=thumb"
+                screenshot_thumb, screenshot_available = _screenshot_thumb(latest_ss)
 
         first_act_str = '—'
         last_act_str = '—'
@@ -107,13 +122,13 @@ def workforce_dashboard():
             'screenshot_available': screenshot_available,
             'screenshot_thumb': screenshot_thumb,
             'server_status': server_status,
-            'server_last_seen': last_seen.isoformat() if last_seen else None,
+            'server_last_seen': _last_seen_label(last_seen),
             'status': att.status if att else 'absent',
             'first_activity': first_act_str,
             'last_activity': last_act_str,
-            'active_str': f"{active_sec // 3600:02d}:{(active_sec % 3600) // 60:02d}:{active_sec % 60:02d}",
-            'idle_str': f"{idle_sec // 3600:02d}:{(idle_sec % 3600) // 60:02d}:{idle_sec % 60:02d}",
-            'productive_str': f"{prod_sec // 3600:02d}:{(prod_sec % 3600) // 60:02d}:{prod_sec % 60:02d}",
+            'active_str': _hms(active_sec),
+            'idle_str': _hms(idle_sec),
+            'productive_str': _hms(prod_sec),
         })
 
     # Focus: only agent-installed systems and the employees linked to them
@@ -131,13 +146,22 @@ def workforce_dashboard():
         assignment = next((a for a in assignments if a.server_id == srv.id), None)
         emp = db.session.get(Employee, assignment.employee_id) if assignment and assignment.employee_id else None
         latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
-        local_path = _resolve_screenshot_local_path(latest_ss) if latest_ss else None
-        screenshot_available = bool(local_path or (latest_ss and latest_ss.sharepoint_url))
-        screenshot_thumb = f"/api/screenshot/{latest_ss.id}?size=thumb" if screenshot_available and latest_ss else None
+        screenshot_thumb, screenshot_available = _screenshot_thumb(latest_ss)
+        latest_activity = EmployeeActivity.query.filter_by(server_id=srv.id).order_by(EmployeeActivity.timestamp.desc()).first()
+        emp_sessions = [s for s in sessions if emp and s.employee_id == emp.id]
+        active_sec = sum(s.active_minutes or 0 for s in emp_sessions)
+        idle_sec = sum(s.idle_minutes or 0 for s in emp_sessions)
+        prod_sec = sum(s.productive_minutes or 0 for s in emp_sessions)
+        if not emp_sessions and latest_activity and latest_activity.timestamp >= day_start and latest_activity.timestamp <= day_end:
+            idle_sec = int(latest_activity.idle_time or 0)
 
         live_agents.append({
             'id': emp.id if emp else None,
-            'name': emp.display_name if emp and getattr(emp, 'display_name', None) else (srv.hostname or srv.name or 'Unknown'),
+            'name': (
+                emp.display_name if emp and getattr(emp, 'display_name', None)
+                else latest_activity.user if latest_activity and latest_activity.user
+                else (srv.hostname or srv.name or 'Unknown')
+            ),
             'email': emp.email if emp else '',
             'department': emp.department if emp else '',
             'device': srv.hostname or srv.name or '',
@@ -148,10 +172,12 @@ def workforce_dashboard():
             'screenshot_available': screenshot_available,
             'screenshot_thumb': screenshot_thumb,
             'server_status': srv.status_label,
-            'server_last_seen': srv.last_seen.isoformat() if srv.last_seen else None,
-            'active_str': '—',
-            'idle_str': '—',
-            'productive_str': '—',
+            'server_last_seen': _last_seen_label(srv.last_seen),
+            'active_str': _hms(active_sec),
+            'idle_str': _hms(idle_sec),
+            'productive_str': _hms(prod_sec),
+            'current_app': latest_activity.app if latest_activity and latest_activity.app else '',
+            'current_window': latest_activity.window_title if latest_activity and latest_activity.window_title else '',
         })
 
     # Debug: log counts to help diagnose missing live agent cards in UI

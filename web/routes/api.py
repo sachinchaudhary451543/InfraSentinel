@@ -9,6 +9,7 @@ import mimetypes
 import logging
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from typing import Any, cast
 from sqlalchemy.exc import OperationalError
@@ -20,6 +21,30 @@ from web.services.notification_service import create_notification
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__)
+
+LOCAL_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Kolkata'))
+
+
+def _as_utc_naive(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(ZoneInfo('UTC')).replace(tzinfo=None)
+
+
+def _as_local(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+    return dt.astimezone(LOCAL_TZ)
+
+
+def _local_day_bounds_utc_naive(day):
+    start_local = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=LOCAL_TZ)
+    end_local = datetime(day.year, day.month, day.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
+    return _as_utc_naive(start_local), _as_utc_naive(end_local)
 
 
 def _queue_remote_command(db, RemoteCommand, server_id, command, *, parameters=None, timeout_seconds=120, created_by=None):
@@ -418,8 +443,7 @@ def api_server_screenshots(server_id):
     if date_str:
         try:
             target = datetime.strptime(date_str, '%Y-%m-%d').date()
-            day_start = datetime(target.year, target.month, target.day, 0, 0, 0)
-            day_end   = datetime(target.year, target.month, target.day, 23, 59, 59)
+            day_start, day_end = _local_day_bounds_utc_naive(target)
             q = q.filter(Screenshot.captured_at >= day_start,
                          Screenshot.captured_at <= day_end)
         except ValueError:
@@ -431,16 +455,22 @@ def api_server_screenshots(server_id):
     shots = q.offset((page - 1) * per_page).limit(per_page).all()
 
     # Distinct dates (for the date filter tabs) – always across ALL screenshots
-    all_dates_rows = (
-        db.session.query(
-            db.func.date(Screenshot.captured_at).label('d')
-        )
+    all_capture_rows = (
+        db.session.query(Screenshot.captured_at)
         .filter(Screenshot.server_id == server_id)
-        .group_by(db.func.date(Screenshot.captured_at))
-        .order_by(db.func.date(Screenshot.captured_at).desc())
+        .order_by(Screenshot.captured_at.desc())
         .all()
     )
-    distinct_dates = [str(r.d) for r in all_dates_rows if r.d]
+    distinct_dates = []
+    seen_dates = set()
+    for row in all_capture_rows:
+        local_dt = _as_local(row.captured_at)
+        if not local_dt:
+            continue
+        local_date = local_dt.date().isoformat()
+        if local_date not in seen_dates:
+            distinct_dates.append(local_date)
+            seen_dates.add(local_date)
 
     result = []
     for s in shots:
@@ -450,11 +480,17 @@ def api_server_screenshots(server_id):
         image_url = f'/api/screenshot/{s.id}?t={ts}' if (has_local or bool(s.sharepoint_url)) else None
         thumb_url = f'/api/screenshot/{s.id}?size=thumb&t={ts}' if image_url else None
 
+        captured_local = _as_local(s.captured_at)
+        uploaded_local = _as_local(s.uploaded_at)
+
         result.append({
             'id':            s.id,
             'filename':      s.filename,
             'captured_at':   s.captured_at.isoformat() if s.captured_at else None,
-            'captured_date': s.captured_at.strftime('%Y-%m-%d') if s.captured_at else None,
+            'captured_at_local': captured_local.isoformat() if captured_local else None,
+            'uploaded_at_local': uploaded_local.isoformat() if uploaded_local else None,
+            'captured_date': captured_local.date().isoformat() if captured_local else None,
+            'timezone':      str(LOCAL_TZ),
             'active_user':   s.active_user or '',
             'file_size_kb':  s.file_size_kb or 0,
             'sharepoint_url': s.sharepoint_url or None,
