@@ -1,0 +1,477 @@
+/* Dashboard Mobile Responsive Fixes and Socket.IO Improvements */
+
+/* ============================================================================
+   MOBILE RESPONSIVE BREAKPOINTS (Enhanced)
+   ============================================================================ */
+
+/* Small mobile (320px - 480px) */
+@media (max-width: 480px) {
+    .noc-page {
+        padding: 12px 14px !important;
+    }
+
+    .noc-page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+    }
+
+    .noc-title {
+        font-size: 0.9rem;
+        gap: 6px;
+    }
+
+    .noc-title-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .noc-subtitle {
+        font-size: 0.55rem;
+    }
+
+    .telemetry-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+    }
+
+    .filter-bar {
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+
+    .filter-bar > div:first-child {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .filter-bar select,
+    .filter-bar input {
+        width: 100% !important;
+    }
+
+    .filter-bar button {
+        width: 100%;
+        white-space: normal;
+    }
+
+    .noc-grid-4,
+    .noc-grid-2,
+    .noc-grid-12 {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+
+    .noc-metric-card {
+        padding: 12px 14px 10px !important;
+    }
+
+    .noc-metric-card div[style*="font-size:2.2rem"] {
+        font-size: 1.8rem !important;
+    }
+
+    .chart-panel {
+        padding: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    .chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 8px !important;
+    }
+
+    .chart-header > div:last-child {
+        width: 100%;
+        justify-content: space-between !important;
+    }
+
+    .chart-panel canvas {
+        max-height: 250px !important;
+        min-height: 200px !important;
+    }
+
+    #selected-chart-canvas {
+        max-height: 250px !important;
+        min-height: 200px !important;
+    }
+
+    .disk-panel {
+        flex-direction: column;
+        gap: 10px !important;
+        padding: 10px !important;
+    }
+
+    .disk-donut-wrap {
+        width: 50px !important;
+        height: 50px !important;
+    }
+
+    .disk-donut-label {
+        font-size: 0.55rem !important;
+    }
+
+    .kpi-strip {
+        flex-direction: column;
+        padding: 10px !important;
+    }
+
+    .kpi-item {
+        padding: 8px 6px !important;
+    }
+
+    .kpi-item + .kpi-item {
+        border-left: none !important;
+        border-top: 1px solid var(--noc-border) !important;
+        padding-top: 8px !important;
+    }
+
+    .kpi-value {
+        font-size: 0.95rem !important;
+        margin-bottom: 2px !important;
+    }
+
+    .kpi-name {
+        font-size: 0.5rem !important;
+    }
+
+    .screenshot-panel {
+        margin-bottom: 10px !important;
+    }
+
+    .forecast-panel {
+        padding: 10px 12px !important;
+    }
+
+    .forecast-row {
+        flex-direction: column;
+        gap: 8px !important;
+    }
+
+    .server-card {
+        padding: 12px 14px !important;
+    }
+
+    .server-card .corner-accent,
+    .server-card .corner-accent-v {
+        display: none;
+    }
+
+    .noc-btn-console,
+    .noc-btn-primary,
+    .noc-btn-secondary {
+        font-size: 0.6rem !important;
+        padding: 6px 10px !important;
+        white-space: normal !important;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .noc-btn-danger {
+        width: 24px !important;
+        height: 24px !important;
+        font-size: 0.55rem !important;
+    }
+
+    .noc-table-wrap {
+        overflow-x: auto;
+    }
+
+    .noc-table thead th {
+        padding: 8px 10px !important;
+        font-size: 0.55rem !important;
+    }
+
+    .noc-table tbody td {
+        padding: 10px 10px !important;
+        font-size: 0.65rem !important;
+    }
+
+    .mini-bar-label {
+        width: 20px !important;
+        font-size: 0.5rem !important;
+    }
+
+    .mini-bar-val {
+        width: 28px !important;
+        font-size: 0.55rem !important;
+    }
+
+    .vm-chip {
+        padding: 3px 8px !important;
+        font-size: 0.58rem !important;
+    }
+
+    .device-icon {
+        width: 28px !important;
+        height: 28px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .noc-modal {
+        max-width: 100% !important;
+        max-height: 90vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+
+    .noc-modal-body {
+        max-height: calc(90vh - 80px) !important;
+    }
+
+    .noc-terminal {
+        font-size: 0.6rem !important;
+        max-height: 150px !important;
+        padding: 10px !important;
+    }
+}
+
+/* Tablet (481px - 768px) */
+@media (min-width: 481px) and (max-width: 768px) {
+    .noc-page {
+        padding: 16px 18px !important;
+    }
+
+    .noc-page-header {
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .noc-title {
+        font-size: 0.95rem;
+    }
+
+    .telemetry-header {
+        flex-wrap: wrap;
+        padding: 14px 16px;
+    }
+
+    .filter-bar {
+        flex-wrap: wrap;
+    }
+
+    .filter-bar select,
+    .filter-bar input {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .filter-bar button {
+        flex: 0.5;
+        min-width: auto;
+    }
+
+    .noc-grid-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+    }
+
+    .noc-grid-2,
+    .noc-grid-12 {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+
+    .chart-panel {
+        padding: 12px;
+    }
+
+    .chart-panel canvas {
+        max-height: 280px !important;
+        min-height: 220px !important;
+    }
+
+    #selected-chart-canvas {
+        max-height: 300px !important;
+        min-height: 240px !important;
+    }
+
+    .disk-panel {
+        flex-direction: row;
+    }
+
+    .noc-grid-12[style*="grid-template-columns"] {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    .mini-bar-wrap {
+        gap: 2px;
+    }
+
+    .mini-bar-val {
+        width: 30px;
+    }
+}
+
+/* Medium screens (769px - 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .noc-grid-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .chart-panel canvas {
+        max-height: 300px !important;
+    }
+
+    .noc-grid-12[style*="grid-template-columns"] {
+        grid-template-columns: 5fr 7fr !important;
+    }
+
+    .noc-page {
+        padding: 18px 20px;
+    }
+}
+
+/* Large screens (1025px+) */
+@media (min-width: 1025px) {
+    .chart-panel canvas {
+        max-height: 320px !important;
+    }
+
+    #selected-chart-canvas {
+        max-height: 420px !important;
+        min-height: 300px !important;
+    }
+
+    .noc-grid-12[style*="grid-template-columns"] {
+        grid-template-columns: 5fr 7fr !important;
+    }
+}
+
+/* ============================================================================
+   CHART CONTAINER FIXES
+   ============================================================================ */
+
+.chart-container-wrapper {
+    position: relative;
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+}
+
+.chart-container-wrapper canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+}
+
+canvas[id^="chart-"] {
+    max-width: 100% !important;
+    display: block !important;
+}
+
+#selected-chart-canvas {
+    max-width: 100% !important;
+    width: 100% !important;
+    display: block !important;
+}
+
+/* ============================================================================
+   FIXED HEIGHT CONTAINERS (Ensure proper chart sizing)
+   ============================================================================ */
+
+div[style*="height:320px"],
+div[style*="height:300px"],
+div[style*="height:250px"] {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+div[style*="height:320px"] canvas,
+div[style*="height:300px"] canvas,
+div[style*="height:250px"] canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* ============================================================================
+   SOCKET.IO INDICATOR (Visual feedback for connection status)
+   ============================================================================ */
+
+.socket-status-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    z-index: 1000;
+    animation: socket-pulse 2s infinite;
+}
+
+.socket-status-indicator.disconnected {
+    background: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    animation: none;
+}
+
+.socket-status-indicator.connecting {
+    background: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+    animation: socket-pulse 1s infinite;
+}
+
+@keyframes socket-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+/* ============================================================================
+   TEXT OVERFLOW FIXES (Prevent text wrapping issues on small screens)
+   ============================================================================ */
+
+.server-card .noc-btn-console,
+.noc-btn-primary i,
+.noc-btn-secondary i {
+    flex-shrink: 0;
+}
+
+.chart-label {
+    flex-wrap: wrap;
+    word-break: break-word;
+}
+
+/* ============================================================================
+   IMPROVED TOUCH TARGETS (Larger tap areas for mobile)
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    button,
+    .noc-btn-primary,
+    .noc-btn-secondary,
+    .noc-btn-console,
+    .noc-btn-danger {
+        min-height: 40px;
+        min-width: 40px;
+    }
+
+    .noc-table tbody tr {
+        min-height: 40px;
+    }
+
+    input,
+    select {
+        min-height: 40px;
+        padding: 10px 12px !important;
+    }
+}

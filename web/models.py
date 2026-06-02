@@ -247,12 +247,20 @@ class Metric(db.Model):
 class EmployeeActivity(db.Model):
     """Tracking employee productivity"""
     id = db.Column(db.Integer, primary_key=True)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'))
-    user = db.Column(db.String(100))
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False, index=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False, index=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), index=True)  # Linked to employee for productivity tracking
+    user = db.Column(db.String(100), index=True)  # Local username from agent
     app = db.Column(db.String(255))
     window_title = db.Column(db.String(512))
     idle_time = db.Column(db.Integer)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    __table_args__ = (
+        db.Index('idx_employee_activity_tenant_server_user', 'tenant_id', 'server_id', 'user'),
+        db.Index('idx_employee_activity_tenant_timestamp', 'tenant_id', 'timestamp'),
+        db.Index('idx_employee_activity_employee_timestamp', 'employee_id', 'timestamp'),
+    )
 
 
 class Screenshot(db.Model):

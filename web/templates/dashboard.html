@@ -128,6 +128,10 @@
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
     }
 </style>
+
+<!-- Import mobile responsive CSS fixes -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_mobile_fixes.css') }}">
+
 {% endblock %}
 
 {% block content %}
@@ -2192,6 +2196,10 @@
                         }
                     }
                 });
+                // Register selected chart with responsivity manager
+                if (typeof window.ChartResponsivityManager !== 'undefined' && selectedChart) {
+                    window.ChartResponsivityManager.register(selectedChart);
+                }
             }
         }
 
@@ -2698,10 +2706,20 @@
             }
 
             if (!charts['combined-' + serverId]) {
-                charts['combined-' + serverId] = createCombinedLineChart('chart-combined-' + serverId, buf.labels, buf.liveCpu, buf.liveRam);
+                const combinedChart = createCombinedLineChart('chart-combined-' + serverId, buf.labels, buf.liveCpu, buf.liveRam);
+                charts['combined-' + serverId] = combinedChart;
+                // Register with responsivity manager for auto-resizing
+                if (typeof window.ChartResponsivityManager !== 'undefined' && combinedChart) {
+                    window.ChartResponsivityManager.register(combinedChart);
+                }
             }
             if (!charts['disk-' + serverId]) {
-                charts['disk-' + serverId] = createDiskDoughnut('chart-disk-' + serverId, server.disk);
+                const diskChart = createDiskDoughnut('chart-disk-' + serverId, server.disk);
+                charts['disk-' + serverId] = diskChart;
+                // Register with responsivity manager for auto-resizing
+                if (typeof window.ChartResponsivityManager !== 'undefined' && diskChart) {
+                    window.ChartResponsivityManager.register(diskChart);
+                }
             }
         }
 
@@ -3091,6 +3109,9 @@
             document.querySelectorAll('.server-card').forEach(card => cardObserver.observe(card));
         });
     </script>
+
+    <!-- Socket.IO Configuration & Chart Responsivity Fixes -->
+    <script src="{{ url_for('static', filename='js/dashboard_socket_fix.js') }}"></script>
 
 </div><!-- /noc-page -->
 {% endblock %}

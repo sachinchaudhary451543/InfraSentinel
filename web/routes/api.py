@@ -36,9 +36,13 @@ def _as_utc_naive(dt):
 def _as_local(dt):
     if not dt:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
-    return dt.astimezone(LOCAL_TZ)
+    try:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+        return dt.astimezone(LOCAL_TZ)
+    except Exception as e:
+        logger.warning(f"Timezone conversion failed for {dt}: {e}. Returning None.")
+        return None
 
 
 def _local_day_bounds_utc_naive(day):
@@ -464,13 +468,17 @@ def api_server_screenshots(server_id):
     distinct_dates = []
     seen_dates = set()
     for row in all_capture_rows:
-        local_dt = _as_local(row.captured_at)
-        if not local_dt:
+        try:
+            local_dt = _as_local(row.captured_at)
+            if not local_dt:
+                continue
+            local_date = local_dt.date().isoformat()
+            if local_date not in seen_dates:
+                distinct_dates.append(local_date)
+                seen_dates.add(local_date)
+        except Exception as e:
+            logger.warning(f"Failed to process screenshot date {row.captured_at}: {e}")
             continue
-        local_date = local_dt.date().isoformat()
-        if local_date not in seen_dates:
-            distinct_dates.append(local_date)
-            seen_dates.add(local_date)
 
     result = []
     for s in shots:
@@ -1093,6 +1101,7 @@ def agent_metrics():
         # ── Employee activity (logged_in_user) ────────────────────────────────
         if logged_in_user:
             activity = EmployeeActivity()
+            activity.tenant_id = server.tenant_id
             activity.server_id = server.id
             activity.user      = logged_in_user
             activity.timestamp = now
@@ -1104,8 +1113,22 @@ def agent_metrics():
                 activity.window_title = browser_url
             else:
                 activity.window_title = window_title or None
+            
+            # Try to link to employee if identity correlation has been done
+            try:
+                assignment = EmployeeDeviceAssignment.query.filter_by(
+                    tenant_id=server.tenant_id,
+                    server_id=server.id,
+                    is_active=True
+                ).first()
+                if assignment and assignment.employee_id:
+                    activity.employee_id = assignment.employee_id
+                    logger.debug(f"Activity linked to employee {assignment.employee_id}")
+            except Exception as e:
+                logger.debug(f"Could not link activity to employee: {e}")
+            
             db.session.add(activity)
-            logger.info(f"Employee activity added: user={logged_in_user}")
+            logger.info(f"Employee activity added: user={logged_in_user}, tenant_id={server.tenant_id}")
 
             # Commit activity before calling ProductivityEngine to avoid database locks
             try:
