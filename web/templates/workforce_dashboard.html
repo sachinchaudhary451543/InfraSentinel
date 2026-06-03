@@ -22,6 +22,13 @@
     </div>
   </div>
 
+  {% if error %}
+  <div class="mb-6 rounded-3xl border border-rose-200 bg-rose-50 p-5 text-rose-800">
+    <div class="font-bold">Workforce dashboard error</div>
+    <div class="text-sm mt-1">{{ error }}</div>
+  </div>
+  {% endif %}
+
   <!-- Agent KPIs Row -->
   <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
     <div class="metric-card slate animate-fade-up">

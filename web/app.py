@@ -277,7 +277,7 @@ socketio = SocketIO(
 app.wsgi_app = TenantPathPrefixMiddleware(app.wsgi_app)
 
 # Security hardening: Fix proxy headers for proper X-Forwarded-* handling
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Enable HTTP response compression to reduce payload sizes (gzip/brotli)
 try:
@@ -704,6 +704,11 @@ def index():
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static', 'favicon_io'),
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+@app.route('/favicon.png')
+def favicon_png():
+    return send_from_directory(os.path.join(app.root_path, 'static', 'favicon_io'),
+                               'favicon-32x32.png', mimetype='image/png')
 
 @app.route('/health')
 def health():
