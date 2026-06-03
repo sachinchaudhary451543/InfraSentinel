@@ -61,10 +61,31 @@ def _slugify_tenant(value):
 db_url = os.environ.get('DATABASE_URL')
 if db_url:
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+    if db_url.startswith(('postgres://', 'postgresql://')):
+        sslmode = os.environ.get('PGSSLMODE', 'require')
+        connect_args = {} if 'sslmode' in db_url else {'sslmode': sslmode}
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
+            'pool_size': int(os.environ.get('SQL_POOL_SIZE', '10')),
+            'max_overflow': int(os.environ.get('SQL_MAX_OVERFLOW', '20')),
+            'pool_pre_ping': True,
+            'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800')),
+            'connect_args': connect_args,
+        })
 else:
     DB_PATH = os.path.join(os.path.dirname(__file__), 'instance', 'admin_portal.db')
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+    from sqlalchemy.pool import NullPool
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
+        'connect_args': {
+            'timeout': int(os.environ.get('SQLITE_BUSY_TIMEOUT_SECONDS', '120')),
+            'check_same_thread': False,
+        },
+        'poolclass': NullPool,
+        'pool_pre_ping': True,
+    })
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Enable /t/<tenant>/... path routing before Flask endpoint matching.

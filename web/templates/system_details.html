@@ -576,7 +576,14 @@
         setTimeout(() => { try { initializeCharts(); } catch (e) { } }, 100);
 
         // ── WebSocket ──
-        const socket = io({ transports: ['websocket', 'polling'] });
+        const socket = io(window.location.origin, {
+            path: window.socketIoBasePath || '/socket.io',
+            transports: ['websocket', 'polling'],
+            upgrade: true,
+            reconnection: true,
+            timeout: 20000,
+            withCredentials: true
+        });
         const wsStatus = document.getElementById('ws-status');
         socket.on('connect', () => {
             wsStatus.className = 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
@@ -1135,10 +1142,10 @@
         async function toggleScreenshotCapturing() {
             const enabled = document.getElementById('screenshot-toggle').checked;
             try {
-                const res = await fetch(`/api/v2/systems/update/${SERVER_ID}`, {
+                const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots/config`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ screenshot_enabled: enabled })
+                    body: JSON.stringify({ enabled: enabled })
                 });
                 if (!res.ok) throw new Error('Toggle failed');
 

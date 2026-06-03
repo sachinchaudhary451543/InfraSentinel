@@ -6,9 +6,8 @@ All required data fetched in minimal queries instead of per-server lookups.
 """
 
 import logging
-from datetime import datetime, timezone
-from sqlalchemy import and_, or_, func
-from sqlalchemy.orm import joinedload
+from datetime import datetime
+from sqlalchemy import and_, func
 
 from web.models import (
     db, Server, Metric, AzureDevice, AzureUser, AzureDeviceOwner,
@@ -258,23 +257,23 @@ class OptimizedDashboardService:
             # Add computed metric fields to servers for template rendering
             for s in servers:
                 metric = latest_metrics.get(s.id)
-                s.cpu_percent = metric.cpu_util_percent if metric else 0
-                s.memory_percent = metric.ram_util_percent if metric else 0
-                s.disk_percent = metric.ssd_util_percent if metric else 0
+                setattr(s, 'cpu_percent', metric.cpu_util_percent if metric else 0)
+                setattr(s, 'memory_percent', metric.ram_util_percent if metric else 0)
+                setattr(s, 'disk_percent', metric.ssd_util_percent if metric else 0)
                 # Add VM count from relationship
-                s.vms_list = list(s.vms)
+                setattr(s, 'vms_list', s.vms.all())
                 
                 # Add screenshot and productivity
                 ss = latest_screenshots.get(s.id)
-                s.latest_screenshot_url = f"/api/screenshot/{ss.id}" if ss else None
+                setattr(s, 'latest_screenshot_url', f"/api/screenshot/{ss.id}" if ss else None)
                 
                 prod = productivity_stats.get(s.id)
                 if prod:
-                    s.productivity_str = prod['active_time_str']
-                    s.productivity_percent = prod['percent']
+                    setattr(s, 'productivity_str', prod['active_time_str'])
+                    setattr(s, 'productivity_percent', prod['percent'])
                 else:
-                    s.productivity_str = "—"
-                    s.productivity_percent = 0
+                    setattr(s, 'productivity_str', "—")
+                    setattr(s, 'productivity_percent', 0)
             
             servers_sorted = sorted(servers, key=lambda x: x.is_online, reverse=True)
             

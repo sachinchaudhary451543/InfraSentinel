@@ -233,7 +233,14 @@
     document.addEventListener('DOMContentLoaded', () => {
         initCharts(); loadMetrics();
         try {
-            const socket = io();
+            const socket = io(window.location.origin, {
+                path: window.socketIoBasePath || '/socket.io',
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                reconnection: true,
+                timeout: 20000,
+                withCredentials: true
+            });
             socket.on('new_metrics', data => {
                 const sid = document.getElementById('serverSelect').value;
                 if (!sid || parseInt(sid) === data.server_id) {

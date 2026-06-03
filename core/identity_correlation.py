@@ -64,15 +64,29 @@ class IdentityCorrelationService:
             db.session.commit()
             return
         
-        # Try to find Employee
-        employee = Employee.query.filter_by(tenant_id=tenant_id, local_username=clean_user).first()
+        # Try to find Employee by username, email, or email prefix in a single case-insensitive search.
+        try:
+            employee = Employee.query.filter(
+                Employee.tenant_id == tenant_id,
+                or_(
+                    Employee.local_username.ilike(clean_user),
+                    Employee.email.ilike(clean_user),
+                    Employee.email.ilike(f"%{clean_user}%")
+                )
+            ).first()
+        except Exception:
+            # Fallback to exact match if ilike not supported for the backend
+            employee = Employee.query.filter_by(tenant_id=tenant_id, local_username=clean_user).first()
+
         if not employee:
             # Check if there's an AzureUser we can map to
             azure_user = AzureUser.query.filter(
                 AzureUser.tenant_id == tenant_id,
                 or_(
                     AzureUser.email.ilike(f"{clean_user}%"),
-                    AzureUser.employee_id.ilike(f"{clean_user}%")
+                    AzureUser.employee_id.ilike(f"{clean_user}%"),
+                    AzureUser.mail_nickname.ilike(f"{clean_user}%"),
+                    AzureUser.sam_account_name.ilike(f"{clean_user}%")
                 )
             ).first()
             

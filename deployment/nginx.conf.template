@@ -1,0 +1,205 @@
+# ServerMonitor Portal - NGINX Configuration Template
+# This config properly handles Socket.IO WebSocket connections and reverse proxying
+
+# HTTP redirect to HTTPS
+server {
+    listen 80;
+    server_name servermonitor.yourdomain.com;
+    
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# Main HTTPS server
+server {
+    listen 443 ssl http2;
+    server_name servermonitor.yourdomain.com;
+    
+    # SSL Configuration
+    ssl_certificate /etc/nginx/ssl/your_cert.crt;
+    ssl_certificate_key /etc/nginx/ssl/your_key.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # Logging
+    access_log /var/log/nginx/servermonitor_access.log combined;
+    error_log /var/log/nginx/servermonitor_error.log warn;
+    
+    # General settings
+    client_max_body_size 100M;
+    proxy_read_timeout 86400s;
+    proxy_connect_timeout 86400s;
+    proxy_send_timeout 86400s;
+    
+    # ========== Socket.IO WebSocket Endpoint ==========
+    # Critical: Must handle WebSocket upgrades and long polling
+    location /socket.io {
+        # Disable buffering for WebSocket
+        proxy_buffering off;
+        
+        # Proxy to backend (Flask + flask_socketio)
+        proxy_pass http://localhost:5000/socket.io;
+        
+        # WebSocket upgrade headers
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        
+        # Essential headers for proxying
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        
+        # Long polling support
+        proxy_redirect off;
+        
+        # WebSocket timeout (86400 = 24 hours)
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+    
+    # ========== Tenant-scoped Socket.IO (if using multi-tenant) ==========
+    # Pattern: /t/<tenant_id>/socket.io
+    location ~ ^/t/(?<tenant>[^/]+)/socket.io {
+        # Disable buffering for WebSocket
+        proxy_buffering off;
+        
+        # Proxy to backend with tenant prefix
+        proxy_pass http://localhost:5000/t/$tenant/socket.io;
+        
+        # WebSocket upgrade headers
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        
+        # Essential headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        
+        # Long polling support
+        proxy_redirect off;
+        
+        # WebSocket timeout
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+    
+    # ========== Static Files (Socket.IO fallback) ==========
+    # If CDNs fail, Socket.IO loads from here
+    location /static/vendor/ {
+        alias /path/to/web/static/vendor/;
+        
+        # Cache for 1 week
+        expires 1w;
+        add_header Cache-Control "public, max-age=604800";
+        add_header X-Content-Type-Options "nosniff";
+    }
+    
+    # ========== API Endpoints ==========
+    location /api {
+        proxy_pass http://localhost:5000;
+        
+        # Standard proxy settings
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Short timeout for API
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 10s;
+    }
+    
+    # ========== Main Portal Application ==========
+    location / {
+        proxy_pass http://localhost:5000;
+        
+        # Proxy headers
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeouts for regular HTTP
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 10s;
+    }
+    
+    # ========== Health Check Endpoint ==========
+    # Optional: for monitoring or ELB health checks
+    location /health {
+        access_log off;
+        proxy_pass http://localhost:5000/health;
+    }
+}
+
+# ========== Upstream Backend ==========
+# Define your backend server(s)
+upstream backend {
+    server localhost:5000 weight=1 max_fails=3 fail_timeout=30s;
+    
+    # For load balancing with multiple backends:
+    # server backend-1.internal:5000 weight=1;
+    # server backend-2.internal:5000 weight=1;
+    # server backend-3.internal:5000 weight=1;
+    # keepalive 32;
+}
+
+# ========== Rate Limiting (Optional) ==========
+# Limit API abuse
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=50r/s;
+
+server {
+    # ... other config ...
+    
+    location /api {
+        limit_req zone=api_limit burst=100 nodelay;
+        proxy_pass http://backend;
+    }
+}
+
+# ========== IMPORTANT NOTES ==========
+# 1. WebSocket Support:
+#    - proxy_http_version 1.1 (REQUIRED)
+#    - Upgrade and Connection headers (REQUIRED)
+#    - proxy_buffering off (RECOMMENDED for live data)
+#    - Long timeouts (86400s for persistent connections)
+#
+# 2. Testing:
+#    # Check NGINX syntax
+#    nginx -t
+#
+#    # Reload without restart
+#    nginx -s reload
+#
+#    # Check Socket.IO connection in browser console:
+#    console.log(window.io);  // Should be defined
+#
+# 3. Common Issues:
+#    - 400 Bad Request: Check Upgrade header is being forwarded
+#    - WebSocket closed: Check proxy_buffering (must be off)
+#    - Slow performance: Check proxy_read_timeout isn't too low
+#    - Stale connections: Check firewall/LB timeout (set to 86400s+)
+#
+# 4. Production Settings:
+#    - Enable gzip for static assets
+#    - Use ssl_stapling for OCSP validation
+#    - Monitor /var/log/nginx/ for errors
+#    - Consider rate limiting for API endpoints
+#    - Use upstream keepalive for backend connections
+#
+# 5. Troubleshooting Commands:
+#    tail -f /var/log/nginx/servermonitor_error.log
+#    tail -f /var/log/nginx/servermonitor_access.log
+#    curl -v https://servermonitor.yourdomain.com/health

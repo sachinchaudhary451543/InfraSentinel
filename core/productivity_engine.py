@@ -5,7 +5,7 @@ ActivitySession, AppUsage, FocusSession, and AttendanceRecord.
 """
 from datetime import datetime, timedelta
 import logging
-from web.models import db, EmployeeDeviceAssignment, ActivitySession, AppUsage, AttendanceRecord, ProductivityClassification, EmployeeActivity
+from web.models import db, Server, EmployeeDeviceAssignment, ActivitySession, AppUsage, AttendanceRecord, ProductivityClassification, EmployeeActivity
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,29 @@ class ProductivityEngine:
         ).first()
         
         if not assignment:
-            # If no assignment exists yet, the Identity Correlation Engine hasn't run or failed.
-            # We skip detailed productivity tracking until identity is resolved.
+            # If no assignment exists yet, attempt to resolve it again before skipping.
+            from core.identity_correlation import IdentityCorrelationService
+            try:
+                server = Server.query.get(server_id)
+                hostname = server.hostname if server else ''
+                serial_number = getattr(server, 'serial_number', '') if server else ''
+                IdentityCorrelationService.correlate_agent_payload(
+                    tenant_id=tenant_id,
+                    server_id=server_id,
+                    hostname=hostname,
+                    serial_number=serial_number,
+                    logged_in_user=logged_in_user
+                )
+                assignment = EmployeeDeviceAssignment.query.filter_by(
+                    tenant_id=tenant_id,
+                    server_id=server_id,
+                    is_active=True
+                ).first()
+            except Exception as e:
+                logger.warning(f"Identity re-correlation failed for productivity: {e}")
+
+        if not assignment:
+            # Still no active assignment; skip detailed productivity tracking.
             return
             
         employee_id = assignment.employee_id

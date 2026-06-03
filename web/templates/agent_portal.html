@@ -16,6 +16,12 @@
                 <span class="text-[0.65rem] text-indigo-400 font-bold uppercase tracking-wider block">Your Tenant</span>
                 <span class="text-sm font-bold text-indigo-700">{{ tenant.name if tenant else 'Global' }}</span>
             </div>
+            <div class="flex items-center gap-2">
+                <button id="downloadIntuneBtn" onclick="downloadIntune()" class="ml-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-sm">Download Intune Package</button>
+                <button id="generateIntuneBtn" onclick="generateIntune()" class="ml-2 px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-2xl text-sm">Generate .intunewin (server)</button>
+                <a href="/agent/packaging-guide" target="_blank" class="ml-2 inline-block px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-2xl text-sm">Packaging Guide</a>
+                <div id="intuneStatus" class="ml-4 text-sm text-slate-500"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -269,7 +275,57 @@
     document.addEventListener('DOMContentLoaded', () => {
         loadBots();
         loadDiscoveredSystems();
+        // Check Intune tool availability
+        fetch('/agent/intune-tool-health').then(r => r.json()).then(j => {
+            const st = document.getElementById('intuneStatus');
+            const genBtn = document.getElementById('generateIntuneBtn');
+            if (j.available) {
+                st.innerHTML = '<span class="text-emerald-600 font-semibold">Intune tool available</span>';
+            } else {
+                // Show a warning but allow fallback ZIP generation via the button
+                st.innerHTML = '<span class="text-amber-500 font-semibold">Intune tool not configured — fallback ZIP will be returned</span>';
+            }
+        }).catch(()=>{
+            const st = document.getElementById('intuneStatus');
+            st.innerHTML = '<span class="text-rose-500 font-semibold">Intune tool check failed</span>';
+        });
     });
+
+    function downloadIntune() {
+        window.location.href = '/agent/download-intune-package';
+    }
+
+    async function generateIntune() {
+        const btn = document.getElementById('generateIntuneBtn');
+        btn.disabled = true;
+        btn.innerText = 'Generating...';
+        try {
+            const res = await fetch('/agent/generate-intunewin', { method: 'POST' });
+            if (!res.ok) {
+                const j = await res.json().catch(()=>({error:'Unknown'}));
+                alert('Server failed to generate package: ' + (j.error||res.statusText));
+                return;
+            }
+            const blob = await res.blob();
+            const disp = res.headers.get('content-disposition') || '';
+            let fname = 'ServerMonitor-Intune.zip';
+            const m = /filename="?([^";]+)"?/.exec(disp);
+            if (m) fname = m[1];
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            alert('Error generating package: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = 'Generate .intunewin (server)';
+        }
+    }
 
     function switchTab(tab) {
         // Hide all tabs

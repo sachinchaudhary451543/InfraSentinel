@@ -144,8 +144,8 @@ class Server(db.Model):
     address = db.Column(db.String(255))
     
     # Screenshot configuration
-    screenshot_enabled = db.Column(db.Boolean, default=False)
-    screenshot_interval_minutes = db.Column(db.Integer, default=10)
+    screenshot_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text('true'))  # ENABLED BY DEFAULT for all new servers
+    screenshot_interval_minutes = db.Column(db.Integer, nullable=False, default=10, server_default=db.text('10'))
     
     metrics = db.relationship('Metric', backref='server', lazy='dynamic')
     vms = db.relationship('VM', backref='host_server', lazy='dynamic')
@@ -247,12 +247,20 @@ class Metric(db.Model):
 class EmployeeActivity(db.Model):
     """Tracking employee productivity"""
     id = db.Column(db.Integer, primary_key=True)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'))
-    user = db.Column(db.String(100))
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False, index=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False, index=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), index=True)  # Linked to employee for productivity tracking
+    user = db.Column(db.String(100), index=True)  # Local username from agent
     app = db.Column(db.String(255))
     window_title = db.Column(db.String(512))
     idle_time = db.Column(db.Integer)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    __table_args__ = (
+        db.Index('idx_employee_activity_tenant_server_user', 'tenant_id', 'server_id', 'user'),
+        db.Index('idx_employee_activity_tenant_timestamp', 'tenant_id', 'timestamp'),
+        db.Index('idx_employee_activity_employee_timestamp', 'employee_id', 'timestamp'),
+    )
 
 
 class Screenshot(db.Model):
@@ -682,6 +690,9 @@ class EmployeeDeviceAssignment(db.Model):
     
     # Tracking
     created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
     
     __table_args__ = (
         db.Index('idx_emp_dev_active', 'tenant_id', 'is_active'),

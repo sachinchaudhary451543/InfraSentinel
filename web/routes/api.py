@@ -9,6 +9,7 @@ import mimetypes
 import logging
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from typing import Any, cast
 from sqlalchemy.exc import OperationalError
@@ -20,6 +21,60 @@ from web.services.notification_service import create_notification
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__)
+
+LOCAL_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Kolkata'))
+
+
+def _as_utc_naive(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(ZoneInfo('UTC')).replace(tzinfo=None)
+
+
+def _as_local(dt):
+    if not dt:
+        return None
+    try:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+        return dt.astimezone(LOCAL_TZ)
+    except Exception as e:
+        logger.warning(f"Timezone conversion failed for {dt}: {e}. Returning None.")
+        return None
+
+
+def _local_day_bounds_utc_naive(day):
+    start_local = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=LOCAL_TZ)
+    end_local = datetime(day.year, day.month, day.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
+    return _as_utc_naive(start_local), _as_utc_naive(end_local)
+
+
+def _queue_remote_command(db, RemoteCommand, server_id, command, *, parameters=None, timeout_seconds=120, created_by=None):
+    """Queue a command, storing long scripts in parameters for Postgres varchar safety."""
+    cmd = RemoteCommand()
+    cmd.server_id = server_id
+    cmd.command = command if len(command) <= 250 else command[:250]
+    if len(command) > 250:
+        payload = {}
+        if parameters:
+            try:
+                payload = json.loads(parameters) if isinstance(parameters, str) else dict(parameters)
+            except Exception:
+                payload = {'parameters': parameters}
+        payload['script'] = command
+        cmd.parameters = json.dumps(payload)
+    elif parameters is not None:
+        cmd.parameters = json.dumps(parameters) if isinstance(parameters, (dict, list)) else parameters
+    else:
+        cmd.parameters = None
+    cmd.status = 'pending'
+    cmd.timeout_seconds = timeout_seconds
+    if created_by:
+        cmd.created_by = created_by
+    db.session.add(cmd)
+    return cmd
 
 
 def _retry_db_commit(db, attempts=3, delay=0.5):
@@ -52,6 +107,53 @@ def _retry_db_flush(db, attempts=3, delay=0.25):
             db.session.rollback()
             raise
     return False
+
+
+def _resolve_screenshot_local_path(shot, update_db=False):
+    """Resolve a screenshot local path from stored path or known screenshot folder."""
+    if not shot:
+        return None
+
+    path = (shot.local_file_path or '').strip()
+    if path:
+        try:
+            if os.path.isfile(path):
+                return os.path.abspath(path)
+        except Exception:
+            pass
+
+    try:
+        from web.app import app as flask_app
+        app_root = os.path.dirname(flask_app.root_path)
+        base_dir = os.path.join(app_root, 'data', 'screenshots')
+
+        if shot.filename:
+            candidate = os.path.abspath(os.path.join(base_dir, shot.filename))
+            if os.path.isfile(candidate):
+                if update_db and candidate != path:
+                    shot.local_file_path = candidate
+                    try:
+                        from web.models import db
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                return candidate
+
+        if path:
+            candidate = os.path.abspath(os.path.join(base_dir, os.path.basename(path)))
+            if os.path.isfile(candidate):
+                if update_db and candidate != path:
+                    shot.local_file_path = candidate
+                    try:
+                        from web.models import db
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                return candidate
+    except Exception:
+        pass
+
+    return None
 
 #
 # Legacy agent compatibility endpoints
@@ -174,10 +276,10 @@ def legacy_api_screenshot_upload():
     fname = f"screenshot_{server.id}_{hostname}_{ts_str}.jpg"
 
     try:
-        base_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            '..', 'data', 'screenshots'
-        )
+        # Use Flask app root (ServerMonitor) as base and join data/screenshots
+        from web.app import app as flask_app
+        app_root = os.path.dirname(flask_app.root_path)  # web -> ServerMonitor
+        base_dir = os.path.join(app_root, 'data', 'screenshots')
         os.makedirs(base_dir, exist_ok=True)
         file_path = os.path.abspath(os.path.join(base_dir, fname))
         f.save(file_path)
@@ -226,12 +328,11 @@ def api_screenshot_view(screenshot_id):
     if not current_user.is_superadmin and shot.tenant_id != current_user.tenant_id:
         abort(403)
 
-    # Defensive: check local file path and also attempt to resolve relative paths
-    file_exists = False
-    try:
-        file_exists = bool(shot.local_file_path and os.path.isfile(shot.local_file_path))
-    except Exception:
-        file_exists = False
+    # Defensive: check local file path and also attempt to resolve the screenshot folder if the stored path is stale.
+    serve_path = _resolve_screenshot_local_path(shot, update_db=True)
+    if serve_path:
+        shot.local_file_path = serve_path
+    file_exists = bool(serve_path)
 
     if not file_exists:
         logger.warning(f"Screenshot missing on disk: id={screenshot_id}, path={shot.local_file_path}")
@@ -289,8 +390,8 @@ def api_screenshot_view(screenshot_id):
         as_attachment=False,
         download_name=shot.filename or os.path.basename(serve_path),
     ))
-    # Cache aggressively; filenames are unique per capture timestamp.
-    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    # Cache by URL token; the client receives a unique timestamp query parameter per screenshot.
+    resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'
     return resp
 
 
@@ -346,8 +447,7 @@ def api_server_screenshots(server_id):
     if date_str:
         try:
             target = datetime.strptime(date_str, '%Y-%m-%d').date()
-            day_start = datetime(target.year, target.month, target.day, 0, 0, 0)
-            day_end   = datetime(target.year, target.month, target.day, 23, 59, 59)
+            day_start, day_end = _local_day_bounds_utc_naive(target)
             q = q.filter(Screenshot.captured_at >= day_start,
                          Screenshot.captured_at <= day_end)
         except ValueError:
@@ -359,36 +459,55 @@ def api_server_screenshots(server_id):
     shots = q.offset((page - 1) * per_page).limit(per_page).all()
 
     # Distinct dates (for the date filter tabs) – always across ALL screenshots
-    all_dates_rows = (
-        db.session.query(
-            db.func.date(Screenshot.captured_at).label('d')
-        )
+    all_capture_rows = (
+        db.session.query(Screenshot.captured_at)
         .filter(Screenshot.server_id == server_id)
-        .group_by(db.func.date(Screenshot.captured_at))
-        .order_by(db.func.date(Screenshot.captured_at).desc())
+        .order_by(Screenshot.captured_at.desc())
         .all()
     )
-    distinct_dates = [str(r.d) for r in all_dates_rows if r.d]
+    distinct_dates = []
+    seen_dates = set()
+    for row in all_capture_rows:
+        try:
+            local_dt = _as_local(row.captured_at)
+            if not local_dt:
+                continue
+            local_date = local_dt.date().isoformat()
+            if local_date not in seen_dates:
+                distinct_dates.append(local_date)
+                seen_dates.add(local_date)
+        except Exception as e:
+            logger.warning(f"Failed to process screenshot date {row.captured_at}: {e}")
+            continue
 
     result = []
     for s in shots:
-        has_local = bool(s.local_file_path and os.path.isfile(s.local_file_path))
-        # Only expose local thumbnails as image src to avoid hotlinking to SharePoint.
-        thumb_url = f'/api/screenshot/{s.id}?size=thumb' if has_local else None
+        local_path = _resolve_screenshot_local_path(s, update_db=True)
+        has_local = bool(local_path)
+        ts = int((s.uploaded_at or s.captured_at or datetime.utcnow()).timestamp())
+        image_url = f'/api/screenshot/{s.id}?t={ts}' if (has_local or bool(s.sharepoint_url)) else None
+        thumb_url = f'/api/screenshot/{s.id}?size=thumb&t={ts}' if image_url else None
+
+        captured_local = _as_local(s.captured_at)
+        uploaded_local = _as_local(s.uploaded_at)
+
         result.append({
             'id':            s.id,
             'filename':      s.filename,
             'captured_at':   s.captured_at.isoformat() if s.captured_at else None,
-            'captured_date': s.captured_at.strftime('%Y-%m-%d') if s.captured_at else None,
+            'captured_at_local': captured_local.isoformat() if captured_local else None,
+            'uploaded_at_local': uploaded_local.isoformat() if uploaded_local else None,
+            'captured_date': captured_local.date().isoformat() if captured_local else None,
+            'timezone':      str(LOCAL_TZ),
             'active_user':   s.active_user or '',
             'file_size_kb':  s.file_size_kb or 0,
             'sharepoint_url': s.sharepoint_url or None,
-            'image_url':     f'/api/screenshot/{s.id}' if has_local else None,
+            'image_url':     image_url,
             'thumb_url':     thumb_url,
-            'has_image':     bool(s.sharepoint_url or has_local),
+            'has_image':     bool(image_url),
         })
 
-    return jsonify({
+    resp = jsonify({
         'success':     True,
         'total':       total,
         'page':        page,
@@ -396,6 +515,8 @@ def api_server_screenshots(server_id):
         'dates':       distinct_dates,
         'screenshots': result,
     })
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -486,20 +607,37 @@ def api_remote_software(server_id):
         return jsonify({'error': 'Software name required'}), 400
 
     if action == 'uninstall':
-        powershell_cmd = f'choco uninstall {software} -y'
+        software_literal = "'" + software.replace("'", "''") + "'"
+        powershell_cmd = f'''
+$target = {software_literal}
+$paths = @(
+  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+  'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+)
+$app = Get-ItemProperty $paths -ErrorAction SilentlyContinue |
+  Where-Object {{ $_.DisplayName -eq $target }} |
+  Select-Object -First 1
+if (-not $app) {{
+  Write-Error "Installed software not found: $target"
+  exit 1
+}}
+$cmd = $app.QuietUninstallString
+if (-not $cmd) {{ $cmd = $app.UninstallString }}
+if (-not $cmd) {{
+  Write-Error "No uninstall command found for: $target"
+  exit 1
+}}
+Write-Host "Running uninstall for $target"
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -Wait -NoNewWindow
+'''.strip()
     else:
         powershell_cmd = f'choco install {software} -y --allow-empty-checksums'
 
-    remote_cmd = RemoteCommand()
-    remote_cmd.server_id = server_id
-    remote_cmd.command = powershell_cmd
-    remote_cmd.parameters = json.dumps({
+    remote_cmd = _queue_remote_command(db, RemoteCommand, server_id, powershell_cmd, parameters={
         'action': action,
         'software': software,
         'requested_by': current_user.username
-    })
-    remote_cmd.status = 'pending'
-    db.session.add(remote_cmd)
+    }, created_by=current_user.username)
 
     audit = AuditLog()
     audit.tenant_id = current_user.tenant_id
@@ -547,12 +685,8 @@ def api_remote_repair(server_id):
     
     try:
         # Build RemoteCommand via attribute assignment to satisfy static analysis
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command_name
-        cmd.parameters = json.dumps(params) if isinstance(params, (dict, list)) and params else (params if params else None)
-        cmd.status = 'pending'
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command_name, parameters=params or None,
+                                    timeout_seconds=600, created_by=current_user.username)
         db.session.commit()
         
         return jsonify({
@@ -572,18 +706,35 @@ def api_remote_repair(server_id):
 @login_required
 def api_agent_restart(server_id):
     """Queue agent restart on target system"""
-    from web.models import Server
+    from web.models import db, RemoteCommand, Server
     server = Server.query.get_or_404(server_id)
     
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
     
-    import random
-    command_id = random.randint(1000, 9999)
+    script = r'''
+$svc = Get-Service -Name "ServerMonitorAgent" -ErrorAction SilentlyContinue
+if ($svc) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Restart-Service -Name ServerMonitorAgent -Force"'
+    Write-Host "ServerMonitorAgent service restart scheduled"
+} else {
+    Write-Host "ServerMonitorAgent service not found; exiting current agent process"
+    Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; Get-Process agent -ErrorAction SilentlyContinue | Stop-Process -Force"'
+}
+'''.strip()
+
+    try:
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, script, timeout_seconds=60,
+                                    created_by=current_user.username)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to queue agent restart: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
     
     return jsonify({
         'success': True,
-        'command_id': command_id,
+        'command_id': cmd.id,
         'message': 'Agent restart queued for next heartbeat'
     })
 
@@ -602,17 +753,21 @@ def get_server_software_list(server_id):
     if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
         abort(403)
     
-    # Get latest metric with software list from agent
-    metric = Metric.query.filter_by(server_id=server_id)\
-        .order_by(Metric.timestamp.desc()).first()
-    
     software_list = []
-    if metric and metric.details:
+    metrics = Metric.query.filter_by(server_id=server_id)\
+        .order_by(Metric.timestamp.desc()).limit(50).all()
+
+    for metric in metrics:
+        if not metric.details:
+            continue
         try:
             details = json.loads(metric.details) if isinstance(metric.details, str) else metric.details
-            software_list = details.get('installed_software', [])
-        except:
-            pass
+            candidate = details.get('installed_software', [])
+            if candidate:
+                software_list = candidate
+                break
+        except Exception:
+            continue
     
     return jsonify({
         'success': True,
@@ -667,7 +822,7 @@ def upload_software_package(server_id):
         
         file.save(file_path)
         file_size = os.path.getsize(file_path)
-        file_url = f"/api/v2/server/{server_id}/software-download/{saved_filename}"
+        file_url = f"{request.host_url.rstrip('/')}/api/v2/server/{server_id}/software-download/{saved_filename}"
         
         # Build PowerShell command to download and execute
         powershell_cmd = f'''
@@ -691,17 +846,11 @@ Write-Host "Installation completed"
 '''.strip()
         
         # Queue the command
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = powershell_cmd
-        cmd.parameters = json.dumps({
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, powershell_cmd, parameters={
             'file': saved_filename,
             'size': file_size,
             'uploaded_by': current_user.username
-        })
-        cmd.status = 'pending'
-        cmd.timeout_seconds = 600  # 10 minutes for installation
-        db.session.add(cmd)
+        }, timeout_seconds=600, created_by=current_user.username)
         
         # Audit log
         audit = AuditLog()
@@ -803,7 +952,7 @@ def agent_metrics():
       }
     }
     """
-    from web.models import db, Server, Metric, Screenshot, EmployeeActivity
+    from web.models import db, Server, Metric, Screenshot, EmployeeActivity, EmployeeDeviceAssignment
     import traceback
 
     logger.info("📥 Metrics endpoint called")
@@ -850,6 +999,12 @@ def agent_metrics():
                 server.source     = 'agent'
                 server.type       = 'agent'
                 server.agent_installed = True
+                # Ensure screenshots and remote-control defaults are enabled for newly auto-created servers
+                try:
+                    server.screenshot_enabled = True
+                    server.screenshot_interval_minutes = 10
+                except Exception:
+                    pass
                 db.session.add(server)
                 logger.info(f"Auto-created server record for hostname={hostname}")
 
@@ -885,18 +1040,25 @@ def agent_metrics():
             return jsonify({'success': False, 'error': 'Database is busy. Try again shortly.'}), 503
         
         # ── Identity Correlation Engine ───────────────────────────────────
-        try:
-            from core.identity_correlation import IdentityCorrelationService
-            serial_number = data.get('serial_number') or ''
-            IdentityCorrelationService.correlate_agent_payload(
-                tenant_id=server.tenant_id,
-                server_id=server.id,
-                hostname=hostname,
-                serial_number=serial_number,
-                logged_in_user=logged_in_user
-            )
-        except Exception as e:
-            logger.error(f"Identity correlation failed: {str(e)}")
+        if logged_in_user:
+            try:
+                existing_assignment = EmployeeDeviceAssignment.query.filter_by(
+                    tenant_id=server.tenant_id,
+                    server_id=server.id,
+                    is_active=True
+                ).first()
+                if not existing_assignment:
+                    from core.identity_correlation import IdentityCorrelationService
+                    serial_number = data.get('serial_number') or ''
+                    IdentityCorrelationService.correlate_agent_payload(
+                        tenant_id=server.tenant_id,
+                        server_id=server.id,
+                        hostname=hostname,
+                        serial_number=serial_number,
+                        logged_in_user=logged_in_user
+                    )
+            except Exception as e:
+                logger.error(f"Identity correlation failed: {str(e)}")
 
         # ── Store Metric row ──────────────────────────────────────────────
         metrics_raw = data.get('metrics') or {}
@@ -939,6 +1101,7 @@ def agent_metrics():
         # ── Employee activity (logged_in_user) ────────────────────────────────
         if logged_in_user:
             activity = EmployeeActivity()
+            activity.tenant_id = server.tenant_id
             activity.server_id = server.id
             activity.user      = logged_in_user
             activity.timestamp = now
@@ -950,8 +1113,22 @@ def agent_metrics():
                 activity.window_title = browser_url
             else:
                 activity.window_title = window_title or None
+            
+            # Try to link to employee if identity correlation has been done
+            try:
+                assignment = EmployeeDeviceAssignment.query.filter_by(
+                    tenant_id=server.tenant_id,
+                    server_id=server.id,
+                    is_active=True
+                ).first()
+                if assignment and assignment.employee_id:
+                    activity.employee_id = assignment.employee_id
+                    logger.debug(f"Activity linked to employee {assignment.employee_id}")
+            except Exception as e:
+                logger.debug(f"Could not link activity to employee: {e}")
+            
             db.session.add(activity)
-            logger.info(f"Employee activity added: user={logged_in_user}")
+            logger.info(f"Employee activity added: user={logged_in_user}, tenant_id={server.tenant_id}")
 
             # Commit activity before calling ProductivityEngine to avoid database locks
             try:
@@ -983,24 +1160,31 @@ def agent_metrics():
         screenshot_enabled = server.screenshot_enabled
         screenshot_interval_minutes = server.screenshot_interval_minutes or 10
 
+        ss_image_b64 = None
         if ss_data and ss_data.get('success') and ss_data.get('image'):
+            logger.info(f"[DEBUG] Processing screenshot from server {server.id} ({hostname}): success={ss_data.get('success')}, image_len={len(ss_data.get('image', ''))}")
             try:
                 import base64 as _b64
                 import os as _os
 
-                img_bytes = _b64.b64decode(ss_data['image'])
+                ss_image_b64 = ss_data.get('image')
+                img_bytes = _b64.b64decode(ss_image_b64, validate=True)
+                if len(img_bytes) < 100:
+                    # Log more context for tiny/invalid payloads to help troubleshooting
+                    logger.warning(f"Tiny/invalid screenshot payload from server {server.id} ({hostname}) - decoded size={len(img_bytes)} bytes")
+                    raise ValueError("Screenshot payload decoded to an empty or invalid image")
                 ext       = 'jpg' if ss_data.get('format', 'jpeg') == 'jpeg' else ss_data.get('format', 'png')
                 ts_str    = now.strftime('%Y%m%d_%H%M%S')
                 fname     = f"screenshot_{server.id}_{hostname}_{ts_str}.{ext}"
 
                 # Save next to the database in a screenshots sub-folder
-                # current_app not required here; compute base dir directly
-                base_dir  = _os.path.join(
-                    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                    '..', 'data', 'screenshots'
-                )
+                # Use Flask app root (ServerMonitor) as base and join data/screenshots
+                from web.app import app as flask_app
+                app_root = _os.path.dirname(flask_app.root_path)  # web -> ServerMonitor
+                base_dir = _os.path.join(app_root, 'data', 'screenshots')
                 _os.makedirs(base_dir, exist_ok=True)
                 file_path = _os.path.join(base_dir, fname)
+                file_path = _os.path.abspath(file_path)  # Normalize the path
 
                 with open(file_path, 'wb') as f:
                     f.write(img_bytes)
@@ -1017,11 +1201,36 @@ def agent_metrics():
                 shot.active_user    = logged_in_user or ''
                 shot.os_info        = os_info
                 shot.ip_address     = ip
-                shot.local_file_path = _os.path.abspath(file_path)
+                shot.local_file_path = file_path
                 db.session.add(shot)
                 logger.info(f"Screenshot saved: {file_path}")
             except Exception as e:
                 logger.error(f"Failed to save screenshot: {e}")
+
+        # Emit screenshot frame over SocketIO for live preview (non-persistent stream)
+        if ss_image_b64:
+            from web.app import socketio
+            sio = cast(Any, socketio)
+
+            def _emit_screenshot_frame(b64data, shot_obj_id=None):
+                try:
+                    payload = {
+                        'server_id': server.id,
+                        'timestamp': now.isoformat() + 'Z',
+                        'image_b64': b64data,
+                        'screenshot_id': shot_obj_id
+                    }
+                    logger.info(f"[DEBUG] Emitting screenshot_frame to room={server.tenant_id} for server_id={server.id}, b64_size={len(b64data)} bytes")
+                    sio.emit('screenshot_frame', payload, room=str(server.tenant_id))
+                    logger.info(f"[DEBUG] Screenshot_frame emitted successfully for server {server.id}")
+                except Exception as e:
+                    logger.error(f"SocketIO screenshot emit failed for server {server.id}: {e}", exc_info=True)
+
+            logger.info(f"[DEBUG] Starting screenshot emit background task for server {server.id} to tenant {server.tenant_id}")
+            try:
+                socketio.start_background_task(_emit_screenshot_frame, ss_image_b64, None)
+            except Exception as e:
+                logger.error(f"Failed to start screenshot_frame background task for server {server.id}: {e}", exc_info=True)
 
         logger.info("About to commit final transaction")
         try:
@@ -1045,7 +1254,7 @@ def agent_metrics():
         except Exception:
             pass
         
-        # ── Emit real-time update via SocketIO (non-blocking) ────────────────────
+        # ── Emit real-time update via Socket.IO in a background task ──────────────
         def _emit_metrics_update():
             try:
                 from web.app import socketio
@@ -1057,11 +1266,8 @@ def agent_metrics():
                 }, room=str(tenant_id))
             except Exception as e:
                 logger.error(f"SocketIO emit failed: {e}")
-        
-        # Emit in background thread to avoid blocking the HTTP response
-        import threading
-        emit_thread = threading.Thread(target=_emit_metrics_update, daemon=True)
-        emit_thread.start()
+
+        socketio.start_background_task(_emit_metrics_update)
 
         logger.info("Metrics endpoint returning success")
         return jsonify({
@@ -1131,6 +1337,7 @@ def agent_poll_commands():
             'command_id': c.id,
             'command':    c.command,
             'parameters': c.parameters or '',
+            'timeout_seconds': c.timeout_seconds or 120,
         }
         for c in pending
     ])
@@ -1502,10 +1709,19 @@ def api_screenshot_config(server_id):
         abort(403)
     
     data = request.get_json() or {}
-    enabled = data.get('enabled', False)
-    interval = data.get('interval', 10)
+    enabled_raw = data.get('enabled', data.get('screenshot_enabled', False))
+    if isinstance(enabled_raw, str):
+        enabled = enabled_raw.strip().lower() in ('1', 'true', 'yes', 'on')
+    else:
+        enabled = bool(enabled_raw)
+    interval = data.get('interval', data.get('screenshot_interval_minutes', 10))
     
     try:
+        try:
+            interval = int(interval)
+        except (TypeError, ValueError):
+            interval = 10
+
         # Validate interval
         if interval < 5:
             interval = 5
@@ -1551,12 +1767,8 @@ def api_terminal_command(server_id):
     
     try:
         # Queue the command directly — agent will run it in PowerShell as-is
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command
-        cmd.parameters = None
-        cmd.status = 'pending'
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command, timeout_seconds=120,
+                                    created_by=current_user.username)
         db.session.commit()
         
         return jsonify({
@@ -1627,13 +1839,8 @@ def api_queue_terminal_command():
     
     try:
         # Create and queue the command
-        cmd = RemoteCommand()
-        cmd.server_id = server_id
-        cmd.command = command
-        cmd.parameters = None
-        cmd.status = 'pending'
-        cmd.timeout_seconds = timeout
-        db.session.add(cmd)
+        cmd = _queue_remote_command(db, RemoteCommand, server_id, command, timeout_seconds=timeout,
+                                    created_by=current_user.username)
         db.session.commit()
         
         logger.info(f"Queued terminal command {cmd.id} on server {server_id}: {command[:100]}")
@@ -1740,7 +1947,7 @@ def api_inventory_sync_debug():
     Returns token acquisition status and a small sample from Microsoft Graph for the current tenant.
     Admin-only: only users belonging to the tenant may call this while signed in.
     """
-    from web.models import Tenant
+    from web.models import Tenant, db
     try:
         tenant = db.session.get(Tenant, current_user.tenant_id)
         if not tenant:

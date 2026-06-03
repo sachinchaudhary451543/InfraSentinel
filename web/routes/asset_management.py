@@ -4,7 +4,10 @@ Employees, Devices, Login/Logout tracking, Software Deployment, and Remote Acces
 """
 
 import logging
+import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from typing import Any
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort, flash, make_response
 from flask_login import login_required, current_user
 from web.utils import require_tenant_access
@@ -16,12 +19,26 @@ from web.active_agents_monitor import ActiveAgentsMonitor
 from web.models import (
     db, Server, Metric, EmployeeAssetLog, DeviceActivity, EmployeeDeviceAssignment,
     SystemAlert, AuditLog, RemoteCommand, Tenant,
-    AzureUser, AzureDevice, AzureDeviceOwner, Screenshot, Employee
+    AzureUser, AzureDevice, AzureDeviceOwner, Screenshot, Employee,
+    EmployeeActivity, ActivitySession, AppUsage, DeploymentJob,
+    SharePointMetricQueue, VM
 )
 
 logger = logging.getLogger("[ASSET_MGMT]")
 
 asset_mgmt_bp = Blueprint('asset_mgmt', __name__)
+LOCAL_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Kolkata'))
+
+
+def _today_local():
+    return datetime.now(LOCAL_TZ).date()
+
+
+def _local_day_bounds_utc_naive(target_date):
+    start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=LOCAL_TZ)
+    end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
+    utc = ZoneInfo('UTC')
+    return start.astimezone(utc).replace(tzinfo=None), end.astimezone(utc).replace(tzinfo=None)
 
 
 def _seconds_to_hms(value):
@@ -32,6 +49,61 @@ def _seconds_to_hms(value):
 
 def _compact_identity(value):
     return (value or '').lower().replace('.', '').replace('_', '').replace('-', '')
+
+
+def _resolve_asset_log_employee_key(
+    log,
+    employee_dict,
+    manual_by_local,
+    manual_by_azure_id,
+    azure_users_by_email,
+    azure_users_by_employee_id,
+    azure_users_by_mail_nickname,
+    azure_users_by_sam
+):
+    """Normalize asset log identity to an existing manual employee email when possible."""
+    raw_email = (log.employee_email or '').strip().lower()
+    raw_employee_id = (log.employee_id or '').strip()
+
+    if raw_email and raw_email in employee_dict:
+        return raw_email
+
+    compact_email_prefix = ''
+    if raw_email and '@' in raw_email:
+        compact_email_prefix = _compact_identity(raw_email.split('@', 1)[0])
+        if compact_email_prefix and compact_email_prefix in manual_by_local:
+            return manual_by_local[compact_email_prefix]
+
+    compact_employee_id = _compact_identity(raw_employee_id)
+    if compact_employee_id and compact_employee_id in manual_by_local:
+        return manual_by_local[compact_employee_id]
+
+    def _match_azure_user(azure_user):
+        if not azure_user:
+            return None
+        user_key = (azure_user.user_id or '').lower()
+        return manual_by_azure_id.get(user_key)
+
+    if raw_email and raw_email in azure_users_by_email:
+        mapped = _match_azure_user(azure_users_by_email[raw_email])
+        if mapped:
+            return mapped
+
+    for key, lookup in (
+        (raw_employee_id, azure_users_by_employee_id),
+        (raw_employee_id, azure_users_by_mail_nickname),
+        (raw_employee_id, azure_users_by_sam)
+    ):
+        if key and key.lower() in lookup:
+            mapped = _match_azure_user(lookup[key.lower()])
+            if mapped:
+                return mapped
+
+    if raw_email:
+        return raw_email
+    if raw_employee_id:
+        return raw_employee_id
+    return ''
 
 
 def _build_employee_device_maps(tenant_id, day_start, day_end):
@@ -70,9 +142,17 @@ def _build_employee_device_maps(tenant_id, day_start, day_end):
         DeviceActivity.login_time <= day_end
     ).order_by(DeviceActivity.login_time.desc()).all() if server_ids else []
 
+    employee_activity_rows = EmployeeActivity.query.filter(
+        EmployeeActivity.server_id.in_(server_ids),
+        EmployeeActivity.timestamp >= day_start,
+        EmployeeActivity.timestamp <= day_end
+    ).order_by(EmployeeActivity.timestamp.desc()).all() if server_ids else []
+
     latest_activity_by_user = {}
-    for act in activity_rows:
-        user_key = (act.session_user or '').strip().lower()
+    for act in activity_rows + employee_activity_rows:
+        user_key = (act.session_user if hasattr(act, 'session_user') else act.user or '').strip().lower()
+        if user_key and '\\' in user_key:
+            user_key = user_key.split('\\').pop().strip()
         if user_key and user_key not in latest_activity_by_user:
             latest_activity_by_user[user_key] = act
 
@@ -119,6 +199,8 @@ def _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps):
         username_candidates = [local_username]
         if emp.email:
             username_candidates.append(emp.email.split('@', 1)[0].lower())
+        if emp.email:
+            username_candidates.append(emp.email.lower())
 
         for username in username_candidates:
             if not username:
@@ -244,6 +326,15 @@ def _find_employee_for_server(server, tenant_id):
             return emp
 
     return None
+
+
+def _get_active_employee_assignment(employee_id, tenant_id):
+    """Return the current active employee-device assignment."""
+    return EmployeeDeviceAssignment.query.filter_by(
+        tenant_id=tenant_id,
+        employee_id=employee_id,
+        is_active=True
+    ).first()
 
 
 def _build_productivity_rows(tenant_id, target_date):
@@ -552,7 +643,20 @@ def get_employees_scroll():
                     metric_lookup[m.server_id] = (m.cpu_util_percent or 0)
         
         for log in asset_logs:
-            emp_email = log.employee_email.lower()
+            emp_email = _resolve_asset_log_employee_key(
+                log,
+                employee_dict,
+                manual_by_local,
+                manual_by_azure_id,
+                {u.email.lower(): u for u in azure_users if u.email},
+                {u.employee_id.lower(): u for u in azure_users if u.employee_id},
+                {u.mail_nickname.lower(): u for u in azure_users if u.mail_nickname},
+                {u.sam_account_name.lower(): u for u in azure_users if u.sam_account_name}
+            )
+
+            if not emp_email:
+                continue
+
             if emp_email not in employee_dict:
                 # User not in Azure, create skeleton
                 if q and q not in emp_email and q not in log.hostname.lower():
@@ -1037,9 +1141,9 @@ def productivity_overview():
         # Get target date from query args or default to today
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
             
         emp_rows = _build_productivity_rows(tenant_id, target_date)
         
@@ -1064,9 +1168,9 @@ def productivity_export():
         tenant_id = current_user.tenant_id
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
         emp_rows = _build_productivity_rows(tenant_id, target_date)
         output = io.StringIO()
@@ -1100,12 +1204,11 @@ def productivity_screenshots():
         tenant_id = current_user.tenant_id
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
-        day_start = datetime.combine(target_date, datetime.min.time())
-        day_end = datetime.combine(target_date, datetime.max.time())
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
 
         screenshots = Screenshot.query.filter(
             Screenshot.tenant_id == tenant_id,
@@ -1151,12 +1254,19 @@ def employee_productivity_detail(employee_id):
         emp = Employee.query.get_or_404(employee_id)
         if emp.tenant_id != tenant_id:
             abort(403)
-            
+
+        assignment = _get_active_employee_assignment(emp.id, tenant_id)
+        assigned_server = None
+        if assignment and assignment.server_id:
+            assigned_server = Server.query.get(assignment.server_id)
+
+        servers = Server.query.filter_by(tenant_id=tenant_id, agent_installed=True).order_by(Server.hostname.asc()).all()
+
         date_str = (request.args.get('date') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
             
         attendance = AttendanceRecord.query.filter_by(employee_id=emp.id, date=target_date).first()
         
@@ -1172,8 +1282,7 @@ def employee_productivity_detail(employee_id):
             if attendance.last_activity:
                 attendance_last_activity_display = attendance.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist)
         
-        day_start = datetime.combine(target_date, datetime.min.time())
-        day_end = datetime.combine(target_date, datetime.max.time())
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
         sessions = ActivitySession.query.filter(
             ActivitySession.employee_id == emp.id,
             ActivitySession.start_time >= day_start,
@@ -1262,12 +1371,64 @@ def employee_productivity_detail(employee_id):
             attendance_first_activity_display=attendance_first_activity_display,
             attendance_last_activity_display=attendance_last_activity_display,
             selected_date=target_date.strftime('%Y-%m-%d'),
-            today=target_date.strftime('%b %d, %Y')
+            today=target_date.strftime('%b %d, %Y'),
+            assigned_server=assigned_server,
+            servers=servers,
+            current_assignment=assignment
         )
     except Exception as e:
         logger.error(f"Error loading employee productivity detail: {e}")
         flash(f"Error loading details: {str(e)}", "error")
         return redirect(url_for('asset_mgmt.productivity_overview'))
+
+
+@asset_mgmt_bp.route('/assets/productivity/<int:employee_id>/assign', methods=['POST'])
+@login_required
+def assign_employee_device(employee_id):
+    """Manually assign an agent server to a productivity employee."""
+    try:
+        tenant_id = current_user.tenant_id
+        employee = Employee.query.get_or_404(employee_id)
+        if not current_user.is_superadmin and employee.tenant_id != tenant_id:
+            abort(403)
+
+        selected_server_id = (request.form.get('server_id') or '').strip()
+        assignment = _get_active_employee_assignment(employee.id, employee.tenant_id)
+        if assignment:
+            assignment.is_active = False
+            assignment.unassigned_at = datetime.utcnow()
+            db.session.add(assignment)
+
+        if selected_server_id:
+            try:
+                server_id = int(selected_server_id)
+            except ValueError:
+                server_id = None
+
+            if server_id:
+                server = Server.query.get(server_id)
+                if server and server.tenant_id == employee.tenant_id:
+                    db.session.add(EmployeeDeviceAssignment(
+                        tenant_id=employee.tenant_id,
+                        employee_id=employee.id,
+                        server_id=server.id,
+                        assignment_source='admin_manual',
+                        is_active=True,
+                        assigned_at=datetime.utcnow()
+                    ))
+
+        db.session.commit()
+        flash('Employee device mapping updated successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating employee device assignment: {e}")
+        flash('Unable to update device mapping.', 'danger')
+
+    return redirect(url_for(
+        'asset_mgmt.employee_productivity_detail',
+        employee_id=employee_id,
+        date=request.form.get('date') or _today_local().strftime('%Y-%m-%d')
+    ))
 
 
 @asset_mgmt_bp.route('/assets/remote-control/<int:server_id>/screenshots')
@@ -1282,13 +1443,15 @@ def remote_control_screenshots(server_id):
         tenant = Tenant.query.get(server.tenant_id)
         sharepoint_configured = (tenant and tenant.sharepoint_connected and tenant.sharepoint_site_url)
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_screenshots.html',
             server=server,
             sharepoint_configured=sharepoint_configured,
             screenshot_enabled=bool(server.screenshot_enabled),
             screenshot_interval=int(server.screenshot_interval_minutes or 10),
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading screenshots page: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
@@ -1316,13 +1479,15 @@ def remote_control_logs(server_id):
 
         commands = RemoteCommand.query.filter_by(server_id=server_id).order_by(RemoteCommand.created_at.desc()).limit(50).all()
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_logs.html',
             server=server,
             logs=paginated.items,
             pagination=paginated,
             commands=commands,
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading remote logs: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
@@ -1349,12 +1514,11 @@ def remote_control_productivity(server_id):
 
         user_filter = (request.args.get('user') or '').strip()
         try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else datetime.utcnow().date()
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
-            target_date = datetime.utcnow().date()
+            target_date = _today_local()
 
-        day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
-        day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+        day_start, day_end = _local_day_bounds_utc_naive(target_date)
 
         base = db.session.query(EmployeeActivity).filter(
             EmployeeActivity.server_id == server_id,
@@ -1380,7 +1544,7 @@ def remote_control_productivity(server_id):
             if u and u[0]
         ])
 
-        return render_template(
+        resp = make_response(render_template(
             'remote_productivity.html',
             server=server,
             percent=percent,
@@ -1390,7 +1554,9 @@ def remote_control_productivity(server_id):
             users=users,
             selected_date=target_date.strftime('%Y-%m-%d'),
             selected_user=user_filter,
-        )
+        ))
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return resp
     except Exception as e:
         logger.error(f"Error loading productivity page: {e}")
         return redirect(url_for('asset_mgmt.remote_control_server', server_id=server_id))
@@ -1499,29 +1665,61 @@ def resolve_incident(alert_id):
 @asset_mgmt_bp.route('/assets/api/v2/asset/<int:server_id>/delete', methods=['POST'])
 @login_required
 def delete_server(server_id):
-    """Delete a server and all its associated data"""
+    """Soft-remove a server from active inventory while preserving historical data."""
     try:
         server = Server.query.get_or_404(server_id)
         
         # Check authorization
         if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-            
-        # Delete related records
-        from web.models import Screenshot
-        Screenshot.query.filter_by(server_id=server_id).delete()
-        Metric.query.filter_by(server_id=server_id).delete()
-        DeviceActivity.query.filter_by(server_id=server_id).delete()
-        SystemAlert.query.filter_by(server_id=server_id).delete()
-        RemoteCommand.query.filter_by(server_id=server_id).delete()
-        EmployeeAssetLog.query.filter_by(server_id=server_id).delete()
-        
-        db.session.delete(server)
+
+        now = datetime.utcnow()
+        server.status = 'deleted'
+        server.device_active_status = 'removed'
+        server.monitoring_active = False
+        server.agent_installed = False
+        server.last_seen = server.last_seen or now
+
+        EmployeeDeviceAssignment.query.filter_by(
+            server_id=server_id,
+            is_active=True
+        ).update({
+            'is_active': False,
+            'unassigned_at': now
+        }, synchronize_session=False)
+
+        SystemAlert.query.filter_by(
+            server_id=server_id,
+            is_active=True
+        ).update({
+            'is_active': False,
+            'resolved_at': now
+        }, synchronize_session=False)
+
+        RemoteCommand.query.filter(
+            RemoteCommand.server_id == server_id,
+            RemoteCommand.status.in_(['pending', 'sent', 'running'])
+        ).update({
+            'status': 'cancelled',
+            'completed_at': now,
+            'error_output': 'Device removed from active inventory'
+        }, synchronize_session=False)
+
+        audit = AuditLog(
+            tenant_id=server.tenant_id,
+            user_id=current_user.id,
+            user=current_user.username,
+            action='soft_remove_device',
+            resource=f'Server:{server.hostname or server.name}',
+            details='Device removed from active inventory. Historical screenshots, metrics, and activity were preserved.',
+            status='success'
+        )
+        db.session.add(audit)
         db.session.commit()
         
-        logger.info(f"Server {server_id} ({server.hostname}) deleted by {current_user.username}")
+        logger.info(f"Server {server_id} ({server.hostname}) soft-removed by {current_user.username}")
         
-        return jsonify({'success': True, 'message': 'Device deleted successfully'})
+        return jsonify({'success': True, 'message': 'Device removed from active inventory. Historical data preserved.'})
         
     except Exception as e:
         logger.error(f"Error deleting server {server_id}: {e}")
@@ -1794,7 +1992,7 @@ def manual_azure_sync():
         )
         
         # Trigger full comprehensive sync
-        res = AzureSyncService.get_full_sync(db, tenant, client)
+        res: dict[str, Any] = AzureSyncService.get_full_sync(db, tenant, client)
         
         if 'error' in res:
             return jsonify({'success': False, 'error': res['error']}), 500

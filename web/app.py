@@ -39,6 +39,12 @@ load_env_file()
 # Add parent directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception:
+    pass
+
 from flask import Flask, redirect, url_for, session, g, request
 from flask_login import LoginManager
 from flask_socketio import SocketIO
@@ -157,6 +163,20 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 app.config['DEBUG'] = False
 
+# Load root config.json into app.config (optional server settings)
+try:
+    cfg_path = os.path.join(ROOT_DIR, 'config.json')
+    if os.path.exists(cfg_path):
+        import json as _json
+        with open(cfg_path, 'r', encoding='utf-8') as _cf:
+            _cfg = _json.load(_cf)
+            # Normalize keys to upper-case environment-style names
+            for _k, _v in _cfg.items():
+                app.config.setdefault(_k.upper(), _v)
+        logging.info('Loaded configuration from config.json into app.config')
+except Exception as e:
+    logging.warning(f'Could not load config.json into app.config: {e}')
+
 
 def format_seconds(value):
     """Format seconds as HH:MM:SS for productivity labels."""
@@ -229,14 +249,17 @@ def _slugify_tenant(value):
 # Initialize SocketIO
 # Production uses Gunicorn + Gevent (with Redis message queue if available), development uses Waitress.
 # async_mode MUST be 'gevent' to match the GeventWebSocketWorker used in the Dockerfile.
-# Without it, flask-socketio auto-detects incorrectly and each worker's session store is isolated,
-# causing 400 Bad Request errors on cross-worker polling/upgrade requests.
+# Gevent monkey patching is required for compatibility with RedisManager and websocket upgrades.
+# Without it, Redis-backed Socket.IO will fail with runtime errors and connections may return 400/401.
 redis_url = os.environ.get('REDIS_URL')
 socketio_kwargs = {
     "cors_allowed_origins": "*",
     "async_mode": "gevent",       # CRITICAL: must match gunicorn+gevent worker type
+    "path": "/socket.io",
     "logger": False,
     "engineio_logger": False,
+    "allow_upgrades": True,
+    "async_handlers": True,
     "ping_timeout": 60,
     "ping_interval": 25,
 }
@@ -255,7 +278,7 @@ socketio = SocketIO(
 app.wsgi_app = TenantPathPrefixMiddleware(app.wsgi_app)
 
 # Security hardening: Fix proxy headers for proper X-Forwarded-* handling
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Enable HTTP response compression to reduce payload sizes (gzip/brotli)
 try:
@@ -317,12 +340,15 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # If using Postgres, tune engine options for production workloads
 if DATABASE_URL.startswith('postgres') or DATABASE_URL.startswith('postgresql'):
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
-    # sensible defaults; can be tuned via env vars
+    sslmode = os.environ.get('PGSSLMODE', 'require')
+    connect_args = {} if 'sslmode' in DATABASE_URL else {'sslmode': sslmode}
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
         'pool_size': int(os.environ.get('SQL_POOL_SIZE', '10')),
         'max_overflow': int(os.environ.get('SQL_MAX_OVERFLOW', '20')),
+        'pool_timeout': int(os.environ.get('SQL_POOL_TIMEOUT', '30')),
         'pool_pre_ping': True,
-        'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800'))
+        'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800')),
+        'connect_args': connect_args,
     })
     logging.info('Configured SQLAlchemy for Postgres with engine options')
 else:
@@ -683,7 +709,13 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static', 'favicon_io'),
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
+@app.route('/favicon.png')
+def favicon_png():
+    return send_from_directory(os.path.join(app.root_path, 'static', 'favicon_io'),
+                               'favicon-32x32.png', mimetype='image/png')
+
 @app.route('/health')
+@app.route('/api/v2/health')
 def health():
     """Health check endpoint for monitoring uptime."""
     return {"status": "ok"}, 200
@@ -754,7 +786,11 @@ def ensure_initial_setup():
 
 
 # Run setup on import as well (WSGI/waitress entrypoints do not execute __main__)
-ensure_initial_setup()
+try:
+    ensure_initial_setup()
+except Exception as e:
+    logging.error('Initial setup failed during import-time startup: %s', e)
+    logging.exception(e)
 
 
 def _run_smoke_tests():
@@ -791,7 +827,11 @@ def _run_smoke_tests():
 
 
 # Run smoke tests after startup validation
-_run_smoke_tests()
+try:
+    _run_smoke_tests()
+except Exception as e:
+    logging.error('Smoke tests failed during import-time startup: %s', e)
+    logging.exception(e)
 
 # Apply database optimizations (indexes, analysis)
 try:

@@ -28,6 +28,12 @@ from datetime import timedelta
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception:
+    pass
+
 from flask import Flask, render_template, redirect, url_for, session
 from flask_socketio import SocketIO
 from flask_cors import CORS
