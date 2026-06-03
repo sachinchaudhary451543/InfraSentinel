@@ -199,19 +199,26 @@ function filterWfRows() {
       const pathname = window.location.pathname || '';
       const parts = pathname.split('/').filter(Boolean);
       let socketPath = window.socketIoBasePath || '/socket.io';
-      
-      // If the base path is not present for any reason, fall back to tenant-aware detection.
-      if (!window.socketIoBasePath && parts.length >= 2 && parts[0] === 't') {
+
+      // If the base path is not present or was overwritten, fall back to tenant-aware detection.
+      if ((!window.socketIoBasePath || !window.socketIoBasePath.trim()) && parts.length >= 2 && parts[0] === 't') {
         socketPath = `/${parts[0]}/${parts[1]}/socket.io`;
       }
-      
+
+      // Normalize duplicate slashes in the socket path.
+      socketPath = socketPath.replace(/\/+/g, '/');
+
+      console.log('[Workforce Live] Socket.IO path:', socketPath, 'basePath:', window.socketIoBasePath);
+
       // Create socket with the correct path and explicit origin to avoid proxy path issues
       const socket = io(window.location.origin, {
         path: socketPath,
         transports: ['websocket', 'polling'],
         upgrade: true,
         reconnection: true,
+        reconnectionAttempts: 10,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
         timeout: 20000,
         withCredentials: true
       });

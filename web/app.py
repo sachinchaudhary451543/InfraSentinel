@@ -255,6 +255,7 @@ redis_url = os.environ.get('REDIS_URL')
 socketio_kwargs = {
     "cors_allowed_origins": "*",
     "async_mode": "gevent",       # CRITICAL: must match gunicorn+gevent worker type
+    "path": "/socket.io",
     "logger": False,
     "engineio_logger": False,
     "allow_upgrades": True,
