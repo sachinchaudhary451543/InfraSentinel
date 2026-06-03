@@ -667,12 +667,6 @@
                     <i class="fa-solid fa-chart-simple"></i>
                     <span>Productivity</span>
                 </a>
-                {% set workforce_url = safe_url_for('analytics_api.workforce_dashboard') %}
-                <a href="{{ workforce_url if workforce_url != '#' else url_for('asset_mgmt.productivity_overview') }}"
-                    class="nav-item {% if request.endpoint == 'analytics_api.workforce_dashboard' %}active{% endif %}">
-                    <i class="fa-solid fa-brain"></i>
-                    <span>Workforce Intelligence</span>
-                </a>
                 <a href="{{ url_for('discovery.discover_domain') }}"
                     class="nav-item {% if request.endpoint and request.endpoint.startswith('discovery.') %}active{% endif %}">
                     <i class="fa-solid fa-radar"></i>

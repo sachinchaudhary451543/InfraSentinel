@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, render_template
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for, current_app
 import logging
 from flask_login import login_required, current_user
 from datetime import datetime, time
@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 @login_required
 def workforce_dashboard():
     """Workforce Intelligence Dashboard page."""
+    if not current_app.config.get('WORKFORCE_FEATURE_ENABLED', False):
+        return redirect(url_for('asset_mgmt.productivity_overview'))
+
     tenant_id = current_user.tenant_id
 
     import pytz
