@@ -14,6 +14,7 @@ import os
 import sys
 import sqlite3
 import re
+import threading
 from typing import Optional
 from urllib.parse import unquote
 
@@ -96,6 +97,11 @@ from admin_portal.models import db, User, Tenant
 
 # Initialize database with app
 db.init_app(app)
+
+
+@app.route('/health')
+def health():
+    return {'status': 'ok'}, 200
 
 
 def _resolve_tenant_by_identifier(identifier: Optional[str]) -> Optional[Tenant]:
@@ -389,8 +395,42 @@ def ensure_initial_setup():
                 db.session.rollback()
 
 
-# Run setup on import as well (WSGI/waitress entrypoints do not execute __main__)
-ensure_initial_setup()
+# Run setup on import in a background thread so import does not fail when DB is temporarily
+# unavailable (managed Postgres on Render may be slow to accept connections).
+def _start_deferred_admin_setup(max_retries=6, initial_delay_seconds=5):
+    import time
+
+    def _worker():
+        delay = initial_delay_seconds
+        for attempt in range(1, max_retries + 1):
+            try:
+                logging.info(f"[ADMIN-DEFERRED-SETUP] Attempt {attempt} to initialize admin DB")
+                ensure_initial_setup()
+                logging.info('[ADMIN-DEFERRED-SETUP] Admin initial setup completed')
+                return
+            except Exception as e:
+                logging.warning(f"[ADMIN-DEFERRED-SETUP] Attempt {attempt} failed: {e}")
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+
+        logging.error('[ADMIN-DEFERRED-SETUP] Admin initial setup failed after retries; entering continuous retry loop')
+        while True:
+            try:
+                ensure_initial_setup()
+                logging.info('[ADMIN-DEFERRED-SETUP] Admin initial setup eventually succeeded')
+                return
+            except Exception:
+                logging.exception('[ADMIN-DEFERRED-SETUP] Background retry failed; sleeping 60s before next try')
+                time.sleep(60)
+
+    t = threading.Thread(target=_worker, daemon=True, name='AdminDeferredInitialSetup')
+    t.start()
+
+
+try:
+    _start_deferred_admin_setup()
+except Exception:
+    logging.exception('Failed to start deferred admin initial setup thread')
 
 
 if __name__ == '__main__':

@@ -40,19 +40,20 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Run with Gunicorn + Gevent for production
-CMD ["gunicorn", \
-    "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", \
-    "-w", "4", \
-    "-b", "0.0.0.0:8080", \
-    "--access-logfile", "-", \
-    "--error-logfile", "-", \
-    "--log-level", "info", \
-    "--timeout", "120", \
-    "--graceful-timeout", "30", \
-    "--keep-alive", "10", \
-    "--max-requests", "1000", \
-    "--max-requests-jitter", "50", \
-    "web.app:app"]
+CMD ["sh", "-c", "gunicorn \
+    -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    -w 4 \
+    -b 0.0.0.0:${PORT:-8080} \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 10 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    web.app:app"]
+

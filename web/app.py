@@ -785,12 +785,44 @@ def ensure_initial_setup():
             logging.info("Created default admin user (admin/admin)")
 
 
-# Run setup on import as well (WSGI/waitress entrypoints do not execute __main__)
+# Run setup on import in a background thread so import does not fail when DB is temporarily
+# unavailable (Render/managed Postgres may not be ready at container start).
+def _start_deferred_initial_setup(max_retries=6, initial_delay_seconds=5):
+    import time
+
+    def _worker():
+        delay = initial_delay_seconds
+        for attempt in range(1, max_retries + 1):
+            try:
+                logging.info(f"[DEFERRED-SETUP] Attempt {attempt} to initialize database")
+                ensure_initial_setup()
+                logging.info('[DEFERRED-SETUP] Initial setup completed')
+                return
+            except Exception as e:
+                logging.warning(f"[DEFERRED-SETUP] Attempt {attempt} failed: {e}")
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+
+        # If initial attempts failed, continue running periodic retries in background
+        logging.error('[DEFERRED-SETUP] Initial setup failed after retries; entering continuous retry loop')
+        while True:
+            try:
+                ensure_initial_setup()
+                logging.info('[DEFERRED-SETUP] Initial setup eventually succeeded')
+                return
+            except Exception:
+                logging.exception('[DEFERRED-SETUP] Background retry failed; sleeping 60s before next try')
+                time.sleep(60)
+
+    t = threading.Thread(target=_worker, daemon=True, name='DeferredInitialSetup')
+    t.start()
+
+
+# Start deferred initial setup at import time (non-blocking)
 try:
-    ensure_initial_setup()
-except Exception as e:
-    logging.error('Initial setup failed during import-time startup: %s', e)
-    logging.exception(e)
+    _start_deferred_initial_setup()
+except Exception:
+    logging.exception('Failed to start deferred initial setup thread')
 
 
 def _run_smoke_tests():

@@ -15,6 +15,10 @@ logger = logging.getLogger("[DB_OPTIMIZATION]")
 def create_critical_indexes(db: SQLAlchemy):
     """Create missing indexes for query performance"""
 
+    if db.engine.dialect.name != 'postgresql':
+        logger.info('Skipping create_critical_indexes: not a PostgreSQL database')
+        return
+
     connection = db.engine.connect()
 
     indexes = [
@@ -168,6 +172,10 @@ def create_critical_indexes(db: SQLAlchemy):
 
 def analyze_database(db: SQLAlchemy):
     """Analyze PostgreSQL database"""
+
+    if db.engine.dialect.name != 'postgresql':
+        logger.info('Skipping analyze_database: not a PostgreSQL database')
+        return
 
     try:
         connection = db.engine.connect()

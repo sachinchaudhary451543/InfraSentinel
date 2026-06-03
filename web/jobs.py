@@ -124,9 +124,10 @@ def register_sharepoint_sync_job(app):
         existing_job.remove()
     
     # Schedule job to run every 5 minutes
+    trigger = IntervalTrigger(minutes=5) if APSCHEDULER_AVAILABLE else None
     scheduler.add_job(
         sync_job,
-        IntervalTrigger(minutes=5),
+        trigger,
         id='sharepoint_sync',
         name='SharePoint Sync Task',
         misfire_grace_time=10,
@@ -273,9 +274,10 @@ def register_azure_inventory_sync_job(app):
     if existing_job:
         existing_job.remove()
 
+    trigger = IntervalTrigger(hours=6) if APSCHEDULER_AVAILABLE else None
     scheduler.add_job(
         azure_sync_job,
-        IntervalTrigger(hours=6),
+        trigger,
         id='azure_inventory_sync',
         name='Azure Inventory Sync',
         misfire_grace_time=300,
@@ -397,9 +399,10 @@ def register_device_status_cleanup_job(app):
     if existing:
         existing.remove()
 
+    trigger = IntervalTrigger(hours=1) if APSCHEDULER_AVAILABLE else None
     scheduler.add_job(
         status_cleanup_job,
-        IntervalTrigger(hours=1),
+        trigger,
         id='device_status_cleanup',
         name='Device Status Cleanup',
         misfire_grace_time=300,
