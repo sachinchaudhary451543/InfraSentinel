@@ -1181,7 +1181,6 @@ def agent_metrics():
                     logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
             else:
                 logger.info("Skipping ProductivityEngine because workforce feature is disabled")
-                logger.error(traceback.format_exc())
 
         # ── Screenshot (base64 inline, save to disk) ───────────────────────────
         ss_data = data.get('screenshot')

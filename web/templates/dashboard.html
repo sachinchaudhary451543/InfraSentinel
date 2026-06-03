@@ -2915,30 +2915,20 @@
                         return;
                     }
 
-                    let buf = historyBuffers[sid];
-                    if (!buf || !buf.labels || !Array.isArray(buf.labels)) {
-                        buf = {
-                            labels: [],
-                            liveCpu: [],
-                            liveRam: [],
-                            baselineCpu: [],
-                            baselineRam: [],
-                            baselinePatternCpu: [],
-                            baselinePatternRam: []
-                        };
-                    }
+                    let buf = historyBuffers[sid] || {};
+                    buf.labels = Array.isArray(buf.labels) ? buf.labels : [];
+                    buf.liveCpu = Array.isArray(buf.liveCpu) ? buf.liveCpu : [];
+                    buf.liveRam = Array.isArray(buf.liveRam) ? buf.liveRam : [];
+                    buf.baselineCpu = Array.isArray(buf.baselineCpu) ? buf.baselineCpu : [];
+                    buf.baselineRam = Array.isArray(buf.baselineRam) ? buf.baselineRam : [];
+                    buf.baselinePatternCpu = Array.isArray(buf.baselinePatternCpu) ? buf.baselinePatternCpu : [];
+                    buf.baselinePatternRam = Array.isArray(buf.baselinePatternRam) ? buf.baselinePatternRam : [];
 
-                    if (buf.labels && Array.isArray(buf.labels)) {
-                        buf.labels.push(now);
-                    }
-                    if (buf.liveCpu && Array.isArray(buf.liveCpu)) {
-                        buf.liveCpu.push(parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0);
-                    }
-                    if (buf.liveRam && Array.isArray(buf.liveRam)) {
-                        buf.liveRam.push(parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0);
-                    }
-                const cpuPattern = (buf.baselinePatternCpu && buf.baselinePatternCpu.length) ? buf.baselinePatternCpu : [parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0];
-                const ramPattern = (buf.baselinePatternRam && buf.baselinePatternRam.length) ? buf.baselinePatternRam : [parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0];
+                    buf.labels.push(now);
+                    buf.liveCpu.push(parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0);
+                    buf.liveRam.push(parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0);
+                const cpuPattern = (buf.baselinePatternCpu.length) ? buf.baselinePatternCpu : [parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0];
+                const ramPattern = (buf.baselinePatternRam.length) ? buf.baselinePatternRam : [parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0];
                 buf.baselineCpu.push(cpuPattern[(buf.liveCpu.length - 1) % cpuPattern.length]);
                 buf.baselineRam.push(ramPattern[(buf.liveRam.length - 1) % ramPattern.length]);
 

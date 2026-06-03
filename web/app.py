@@ -332,13 +332,41 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data'
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, 'central.db')
 
+def _is_postgres_url(url: str) -> bool:
+    if not url:
+        return False
+    lower_url = url.strip().lower()
+    return lower_url.startswith('postgres://') or lower_url.startswith('postgresql://') or lower_url.startswith('postgresql+')
+
+
+def _test_postgres_connection(url: str) -> bool:
+    try:
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.pool import NullPool
+        sslmode = os.environ.get('PGSSLMODE', 'require')
+        connect_args = {} if 'sslmode' in url else {'sslmode': sslmode, 'connect_timeout': int(os.environ.get('PG_CONNECT_TIMEOUT', '5'))}
+        engine = create_engine(url, poolclass=NullPool, connect_args=connect_args)
+        with engine.connect() as conn:
+            conn.execute(text('SELECT 1'))
+        engine.dispose()
+        return True
+    except Exception as exc:
+        logging.warning(f'Postgres connection test failed: {exc}')
+        return False
+
+
 # Support switching to Postgres in production via DATABASE_URL env var.
 DATABASE_URL = os.environ.get('DATABASE_URL', f'sqlite:///{DB_PATH}')
+if _is_postgres_url(DATABASE_URL) and not _test_postgres_connection(DATABASE_URL):
+    fallback_url = f'sqlite:///{DB_PATH}'
+    logging.warning('Postgres database is unreachable; falling back to local SQLite database for recovery: %s', fallback_url)
+    DATABASE_URL = fallback_url
+
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # If using Postgres, tune engine options for production workloads
-if DATABASE_URL.startswith('postgres') or DATABASE_URL.startswith('postgresql'):
+if _is_postgres_url(DATABASE_URL):
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
     sslmode = os.environ.get('PGSSLMODE', 'require')
     connect_args = {} if 'sslmode' in DATABASE_URL else {'sslmode': sslmode}
