@@ -18,72 +18,70 @@ with app.app_context():
     print(f"Correct base directory: {correct_base_dir}")
     print()
     
-    # Find all screenshots with incorrect paths
+    # Find all screenshots with incorrect paths or missing local_file_path
     all_shots = Screenshot.query.all()
-    broken_shots = []
     fixed_shots = []
     
     for shot in all_shots:
-        if not shot.local_file_path:
-            print(f"ID {shot.id}: No local_file_path set - skipping")
+        if not shot.filename and not shot.local_file_path:
+            print(f"ID {shot.id}: No filename or local_file_path available - skipping")
             continue
-        
-        # Check if path is in the wrong location
-        if shot.local_file_path.startswith('C:\\data\\') or shot.local_file_path.startswith('C:/data/'):
-            broken_shots.append(shot)
-            
-            # Check if file exists at that location
-            if os.path.isfile(shot.local_file_path):
-                # Compute the correct path
-                fname = os.path.basename(shot.local_file_path)
-                correct_path = os.path.join(correct_base_dir, fname)
-                correct_path = os.path.abspath(correct_path)
-                
-                # Copy file to correct location if not already there
-                if not os.path.isfile(correct_path):
-                    try:
-                        os.makedirs(correct_base_dir, exist_ok=True)
-                        shutil.copy2(shot.local_file_path, correct_path)
-                        print(f"ID {shot.id}: Copied file from {shot.local_file_path}")
-                        print(f"          to {correct_path}")
-                    except Exception as e:
-                        print(f"ID {shot.id}: FAILED to copy - {e}")
-                        continue
-                else:
-                    print(f"ID {shot.id}: File already exists at correct location")
-                
-                # Update database record
+
+        fname = os.path.basename(shot.filename or shot.local_file_path)
+        correct_path = os.path.abspath(os.path.join(correct_base_dir, fname))
+        current_path = (shot.local_file_path or '').strip()
+
+        current_exists = os.path.isfile(current_path) if current_path else False
+        correct_exists = os.path.isfile(correct_path)
+
+        if correct_exists and current_path != correct_path:
+            print(f"ID {shot.id}: Updating db path to current screenshots folder")
+            shot.local_file_path = correct_path
+            db.session.add(shot)
+            fixed_shots.append(shot)
+            continue
+
+        if current_exists and not correct_exists and current_path != correct_path:
+            print(f"ID {shot.id}: Copying file from old location to correct screenshots folder")
+            try:
+                os.makedirs(correct_base_dir, exist_ok=True)
+                shutil.copy2(current_path, correct_path)
                 shot.local_file_path = correct_path
                 db.session.add(shot)
                 fixed_shots.append(shot)
-                print(f"          Database updated")
-            else:
-                print(f"ID {shot.id}: File NOT FOUND at {shot.local_file_path} - updating DB only")
-                fname = os.path.basename(shot.local_file_path)
-                correct_path = os.path.join(correct_base_dir, fname)
-                correct_path = os.path.abspath(correct_path)
-                shot.local_file_path = correct_path
-                db.session.add(shot)
-                fixed_shots.append(shot)
-        else:
-            # Check if it's already in the correct location or if it's valid
-            if shot.local_file_path.lower().find('servermonitor') != -1:
-                print(f"ID {shot.id}: Already correct path")
-            else:
-                print(f"ID {shot.id}: Unexpected path format - {shot.local_file_path[:50]}")
+                print(f"          Copied to {correct_path}")
+            except Exception as e:
+                print(f"ID {shot.id}: FAILED to copy - {e}")
+            continue
+
+        if current_exists and current_path == correct_path:
+            print(f"ID {shot.id}: Path already correct")
+            continue
+
+        if not current_exists and correct_exists:
+            print(f"ID {shot.id}: Current path missing, but correct screenshot exists. Updating path.")
+            shot.local_file_path = correct_path
+            db.session.add(shot)
+            fixed_shots.append(shot)
+            continue
+
+        if current_exists:
+            print(f"ID {shot.id}: File exists at current path but correct path not available: {current_path}")
+            continue
+
+        print(f"ID {shot.id}: No screenshot file found for {fname}. Expected {correct_path}")
     
     print()
     print(f"Summary:")
     print(f"  Total screenshots: {len(all_shots)}")
-    print(f"  Broken (wrong path): {len(broken_shots)}")
     print(f"  Fixed: {len(fixed_shots)}")
     
     if fixed_shots:
         try:
             db.session.commit()
-            print(f"\n✓ Successfully committed {len(fixed_shots)} record updates")
+            print(f"\nSuccessfully committed {len(fixed_shots)} record updates")
         except Exception as e:
-            print(f"\n✗ Failed to commit: {e}")
+            print(f"\nFailed to commit: {e}")
             db.session.rollback()
             sys.exit(1)
     else:

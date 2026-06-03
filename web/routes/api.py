@@ -135,6 +135,7 @@ def _resolve_screenshot_local_path(shot, update_db=False):
                     try:
                         from web.models import db
                         db.session.commit()
+                        logger.info(f"Updated screenshot path for id={shot.id} to {candidate}")
                     except Exception:
                         db.session.rollback()
                 return candidate
@@ -147,6 +148,7 @@ def _resolve_screenshot_local_path(shot, update_db=False):
                     try:
                         from web.models import db
                         db.session.commit()
+                        logger.info(f"Updated screenshot path for id={shot.id} to {candidate}")
                     except Exception:
                         db.session.rollback()
                 return candidate
