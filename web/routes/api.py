@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from typing import Any, cast
 from sqlalchemy.exc import OperationalError
 
-from flask import Blueprint, send_file, jsonify, abort, request, make_response, url_for
+from flask import Blueprint, send_file, jsonify, abort, request, make_response, url_for, current_app
 from flask_login import login_required, current_user
 from web.services.notification_service import create_notification
 
@@ -154,6 +154,29 @@ def _resolve_screenshot_local_path(shot, update_db=False):
         pass
 
     return None
+
+
+def _process_productivity_background(tenant_id, server_id, logged_in_user,
+                                     active_app, window_title, browser_url,
+                                     idle_time_seconds, timestamp):
+    """Process productivity data in a background task outside the main request."""
+    try:
+        from web.app import app as flask_app
+        with flask_app.app_context():
+            from core.productivity_engine import ProductivityEngine
+            ProductivityEngine.process_agent_activity(
+                tenant_id=tenant_id,
+                server_id=server_id,
+                logged_in_user=logged_in_user,
+                active_app=active_app,
+                window_title=window_title,
+                browser_url=browser_url,
+                idle_time_seconds=idle_time_seconds,
+                timestamp=timestamp,
+            )
+            logger.info("ProductivityEngine background processed successfully")
+    except Exception as e:
+        logger.error(f"Background ProductivityEngine failed: {e}", exc_info=True)
 
 #
 # Legacy agent compatibility endpoints
@@ -1138,21 +1161,24 @@ def agent_metrics():
                 logger.warning(f"Failed to commit employee activity: {commit_err}")
 
             # ── Phase 6: Detailed Productivity Engine (Relational Models) ────────
-            try:
-                from core.productivity_engine import ProductivityEngine
-                ProductivityEngine.process_agent_activity(
-                    tenant_id=server.tenant_id,
-                    server_id=server.id,
-                    logged_in_user=logged_in_user,
-                    active_app=active_app,
-                    window_title=window_title,
-                    browser_url=browser_url,
-                    idle_time_seconds=int(max(0, idle_time_seconds)),
-                    timestamp=now
-                )
-                logger.info("ProductivityEngine processed successfully")
-            except Exception as e:
-                logger.error(f"Failed to process detailed productivity metrics: {str(e)}")
+            if current_app.config.get('WORKFORCE_FEATURE_ENABLED', False):
+                try:
+                    from web.app import socketio as socketio_instance
+                    socketio_instance.start_background_task(
+                        _process_productivity_background,
+                        server.tenant_id,
+                        server.id,
+                        logged_in_user,
+                        active_app,
+                        window_title,
+                        browser_url,
+                        int(max(0, idle_time_seconds)),
+                        now
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
+            else:
+                logger.info("Skipping ProductivityEngine because workforce feature is disabled")
                 logger.error(traceback.format_exc())
 
         # ── Screenshot (base64 inline, save to disk) ───────────────────────────

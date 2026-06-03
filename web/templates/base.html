@@ -1041,10 +1041,10 @@
         });
     </script>
 
-    <!-- Load Chart.js synchronously (needed for dashboard charts) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <!-- Load Socket.IO client from resilient CDN list; avoid using server /socket.io/socket.io.js path as a fallback
-         (server endpoint may respond with 400 to plain GET requests). We still expose tenant-aware socket base path. -->
+    <!-- Load local Chart.js synchronously (needed for dashboard charts) -->
+    <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+    <!-- Load Socket.IO client from a local vendor copy first, then fall back to public CDNs.
+         Avoid using the server /socket.io/socket.io.js path directly because plain GET requests may return 400. -->
     <script>
     (function() {
         const pathname = window.location.pathname || '';
@@ -1058,39 +1058,30 @@
 
         window.socketIoBasePath = socketIoBasePath;
 
-        const cdns = [
+        const sources = [
+            "{{ url_for('static', filename='vendor/socket.io.min.js') }}",
             'https://cdn.socket.io/4.6.1/socket.io.min.js',
             'https://cdn.jsdelivr.net/npm/socket.io-client@4.6.1/dist/socket.io.min.js',
             'https://unpkg.com/socket.io-client@4.6.1/dist/socket.io.min.js'
         ];
 
         function tryLoad(index) {
-            if (index >= cdns.length) {
-                console.warn('[Base] Socket.IO client failed to load from all CDNs; attempting local static fallback');
-                // Final fallback: load local static vendor copy (add socket.io client under web/static/vendor/)
-                const local = '/static/vendor/socket.io.min.js';
-                const sLocal = document.createElement('script');
-                sLocal.async = false;
-                sLocal.src = local;
-                sLocal.onload = function() {
-                    console.log('[Base] Socket.IO client loaded from local fallback', local);
-                };
-                sLocal.onerror = function() {
-                    console.error('[Base] Socket.IO client failed to load from local fallback', local);
-                };
-                document.head.appendChild(sLocal);
+            if (index >= sources.length) {
+                console.error('[Base] Socket.IO client failed to load from all sources');
                 return;
             }
-            const src = cdns[index];
+            const src = sources[index];
             const s = document.createElement('script');
             s.async = false;
             s.src = src;
-            s.crossOrigin = 'anonymous';
+            if (src.startsWith('https://')) {
+                s.crossOrigin = 'anonymous';
+            }
             s.onload = function() {
                 console.log('[Base] Socket.IO client loaded from', src);
             };
             s.onerror = function() {
-                console.warn('[Base] Failed to load Socket.IO client from', src, '; trying next CDN');
+                console.warn('[Base] Failed to load Socket.IO client from', src, '; trying next source');
                 tryLoad(index + 1);
             };
             document.head.appendChild(s);
