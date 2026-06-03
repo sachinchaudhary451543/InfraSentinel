@@ -129,10 +129,17 @@ def _build_employee_device_maps(tenant_id, day_start, day_end):
 
     latest_screenshot_by_server = {}
     if server_ids:
-        screenshots = Screenshot.query.filter(Screenshot.server_id.in_(server_ids)).order_by(Screenshot.server_id.asc(), Screenshot.captured_at.desc()).all()
-        for screenshot in screenshots:
-            if screenshot.server_id not in latest_screenshot_by_server:
-                latest_screenshot_by_server[screenshot.server_id] = screenshot.id
+        # Optimized: Use GROUP BY subquery to fetch only the latest screenshot per server
+        # instead of loading ALL screenshots and filtering in Python.
+        from sqlalchemy import func as sa_func
+        ss_subq = db.session.query(
+            Screenshot.server_id,
+            sa_func.max(Screenshot.id).label('max_id')
+        ).filter(
+            Screenshot.server_id.in_(server_ids)
+        ).group_by(Screenshot.server_id).subquery()
+        for row in db.session.query(ss_subq.c.server_id, ss_subq.c.max_id).all():
+            latest_screenshot_by_server[row[0]] = row[1]
 
     assignment_by_emp = {a.employee_id: a for a in assignments}
 
@@ -156,13 +163,23 @@ def _build_employee_device_maps(tenant_id, day_start, day_end):
         if user_key and user_key not in latest_activity_by_user:
             latest_activity_by_user[user_key] = act
 
-    asset_logs = EmployeeAssetLog.query.filter_by(tenant_id=tenant_id).order_by(EmployeeAssetLog.login_timestamp.desc()).all()
+    # Optimized: Fetch only the latest asset log per employee_email using GROUP BY subquery
+    # instead of loading the entire unbounded EmployeeAssetLog table.
+    from sqlalchemy import func as sa_func
+    log_subq = db.session.query(
+        EmployeeAssetLog.employee_email,
+        sa_func.max(EmployeeAssetLog.id).label('max_id')
+    ).filter_by(tenant_id=tenant_id).group_by(
+        EmployeeAssetLog.employee_email
+    ).subquery()
+    latest_log_ids = [r.max_id for r in db.session.query(log_subq.c.max_id).all()]
+    latest_logs = EmployeeAssetLog.query.filter(
+        EmployeeAssetLog.id.in_(latest_log_ids)
+    ).all() if latest_log_ids else []
     latest_log_by_email = {}
-    for log in asset_logs:
+    for log in latest_logs:
         if log.employee_email:
-            key = log.employee_email.lower()
-            if key not in latest_log_by_email:
-                latest_log_by_email[key] = log
+            latest_log_by_email[log.employee_email.lower()] = log
 
     return {
         'server_map': server_map,
@@ -339,6 +356,8 @@ def _get_active_employee_assignment(employee_id, tenant_id):
 
 def _build_productivity_rows(tenant_id, target_date):
     from web.models import ActivitySession, AttendanceRecord
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
 
     employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True).all()
     attendance = AttendanceRecord.query.filter_by(tenant_id=tenant_id, date=target_date).all()
@@ -373,8 +392,7 @@ def _build_productivity_rows(tenant_id, target_date):
         idle_sec = sum(s.idle_minutes or 0 for s in emp_sessions)
         prod_sec = sum(s.productive_minutes or 0 for s in emp_sessions)
 
-        import pytz
-        ist = pytz.timezone('Asia/Kolkata')
+        # pytz imported at module level to avoid re-importing on every loop iteration
         first_act_str = '—'
         last_act_str = '—'
         if att:
@@ -642,16 +660,23 @@ def get_employees_scroll():
                 if max_ts_by_server.get(m.server_id) == m.timestamp:
                     metric_lookup[m.server_id] = (m.cpu_util_percent or 0)
         
+        # Build Azure lookup dicts ONCE before the loop instead of rebuilding
+        # 4 comprehensions on every iteration (O(N*M) -> O(N+M)).
+        _azure_by_email = {u.email.lower(): u for u in azure_users if u.email}
+        _azure_by_emp_id = {u.employee_id.lower(): u for u in azure_users if u.employee_id}
+        _azure_by_nickname = {u.mail_nickname.lower(): u for u in azure_users if u.mail_nickname}
+        _azure_by_sam = {u.sam_account_name.lower(): u for u in azure_users if u.sam_account_name}
+
         for log in asset_logs:
             emp_email = _resolve_asset_log_employee_key(
                 log,
                 employee_dict,
                 manual_by_local,
                 manual_by_azure_id,
-                {u.email.lower(): u for u in azure_users if u.email},
-                {u.employee_id.lower(): u for u in azure_users if u.employee_id},
-                {u.mail_nickname.lower(): u for u in azure_users if u.mail_nickname},
-                {u.sam_account_name.lower(): u for u in azure_users if u.sam_account_name}
+                _azure_by_email,
+                _azure_by_emp_id,
+                _azure_by_nickname,
+                _azure_by_sam
             )
 
             if not emp_email:

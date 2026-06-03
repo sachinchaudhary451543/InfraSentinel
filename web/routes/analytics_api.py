@@ -102,6 +102,62 @@ def workforce_dashboard():
         total_productive_str = _hms(total_productive)
         
         # Build employee detail rows for the table
+        # Servers with agent installed for this tenant
+        servers = Server.query.filter_by(tenant_id=tenant_id, agent_installed=True).all()
+
+        # --- BATCH PREFETCH to avoid N+1 queries ---
+        # Pre-fetch all servers referenced by assignments in one query
+        assignment_server_ids = [a.server_id for a in assignments if a.server_id]
+        prefetched_servers = {}
+        if assignment_server_ids:
+            for srv in Server.query.filter(Server.id.in_(assignment_server_ids)).all():
+                prefetched_servers[srv.id] = srv
+
+        # Pre-fetch latest screenshot per server using GROUP BY subquery
+        all_server_ids = list(set(assignment_server_ids + [s.id for s in servers]))
+        prefetched_screenshots = {}
+        if all_server_ids:
+            from sqlalchemy import func as sa_func, and_
+            ss_subq = db.session.query(
+                Screenshot.server_id,
+                sa_func.max(Screenshot.id).label('max_id')
+            ).filter(
+                Screenshot.server_id.in_(all_server_ids)
+            ).group_by(Screenshot.server_id).subquery()
+            ss_rows = db.session.query(Screenshot).join(
+                ss_subq, and_(
+                    Screenshot.server_id == ss_subq.c.server_id,
+                    Screenshot.id == ss_subq.c.max_id
+                )
+            ).all()
+            for ss in ss_rows:
+                prefetched_screenshots[ss.server_id] = ss
+
+        # Pre-fetch latest EmployeeActivity per server using GROUP BY subquery
+        prefetched_activities = {}
+        if all_server_ids:
+            act_subq = db.session.query(
+                EmployeeActivity.server_id,
+                sa_func.max(EmployeeActivity.id).label('max_id')
+            ).filter(
+                EmployeeActivity.server_id.in_(all_server_ids)
+            ).group_by(EmployeeActivity.server_id).subquery()
+            act_rows = db.session.query(EmployeeActivity).join(
+                act_subq, and_(
+                    EmployeeActivity.server_id == act_subq.c.server_id,
+                    EmployeeActivity.id == act_subq.c.max_id
+                )
+            ).all()
+            for act in act_rows:
+                prefetched_activities[act.server_id] = act
+
+        # Pre-fetch all employees referenced by assignments
+        assignment_emp_ids = [a.employee_id for a in assignments if a.employee_id]
+        prefetched_employees = {}
+        if assignment_emp_ids:
+            for emp_obj in Employee.query.filter(Employee.id.in_(assignment_emp_ids)).all():
+                prefetched_employees[emp_obj.id] = emp_obj
+
         emp_rows = []
         for emp in employees:
             att = next((a for a in attendance if a.employee_id == emp.id), None)
@@ -121,7 +177,7 @@ def workforce_dashboard():
             server_status = 'offline'
             last_seen = None
             if assignment and assignment.server_id:
-                srv = db.session.get(Server, assignment.server_id)
+                srv = prefetched_servers.get(assignment.server_id)
                 if srv:
                     device_name = srv.hostname or srv.name or ''
                     device_ip = srv.ip or ''
@@ -129,7 +185,7 @@ def workforce_dashboard():
                     server_status = getattr(srv, 'status_label', 'offline')
                     last_seen = getattr(srv, 'last_seen', None)
 
-                    latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
+                    latest_ss = prefetched_screenshots.get(srv.id)
                     screenshot_thumb, screenshot_available = _screenshot_thumb(latest_ss)
 
             first_act_str = '—'
@@ -163,8 +219,7 @@ def workforce_dashboard():
             })
 
         # Focus: only agent-installed systems and the employees linked to them
-        # Servers with agent installed for this tenant
-        servers = Server.query.filter_by(tenant_id=tenant_id, agent_installed=True).all()
+        # (servers variable is already loaded earlier)
 
         # Active assignments (correlated devices) - used to map servers -> employees
         # (we already fetched assignments earlier; reuse them)
@@ -175,10 +230,10 @@ def workforce_dashboard():
         for srv in servers:
             # find linked employee for this server if any
             assignment = next((a for a in assignments if a.server_id == srv.id), None)
-            emp = db.session.get(Employee, assignment.employee_id) if assignment and assignment.employee_id else None
-            latest_ss = Screenshot.query.filter_by(server_id=srv.id).order_by(Screenshot.captured_at.desc()).first()
+            emp = prefetched_employees.get(assignment.employee_id) if assignment and assignment.employee_id else None
+            latest_ss = prefetched_screenshots.get(srv.id)
             screenshot_thumb, screenshot_available = _screenshot_thumb(latest_ss)
-            latest_activity = EmployeeActivity.query.filter_by(server_id=srv.id).order_by(EmployeeActivity.timestamp.desc()).first()
+            latest_activity = prefetched_activities.get(srv.id)
             emp_sessions = [s for s in sessions if emp and s.employee_id == emp.id]
             active_sec = sum(s.active_minutes or 0 for s in emp_sessions)
             idle_sec = sum(s.idle_minutes or 0 for s in emp_sessions)
