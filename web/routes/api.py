@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from typing import Any, cast
 from sqlalchemy.exc import OperationalError
 
-from flask import Blueprint, send_file, jsonify, abort, request, make_response
+from flask import Blueprint, send_file, jsonify, abort, request, make_response, url_for
 from flask_login import login_required, current_user
 from web.services.notification_service import create_notification
 
@@ -485,8 +485,8 @@ def api_server_screenshots(server_id):
         local_path = _resolve_screenshot_local_path(s, update_db=True)
         has_local = bool(local_path)
         ts = int((s.uploaded_at or s.captured_at or datetime.utcnow()).timestamp())
-        image_url = f'/api/screenshot/{s.id}?t={ts}' if (has_local or bool(s.sharepoint_url)) else None
-        thumb_url = f'/api/screenshot/{s.id}?size=thumb&t={ts}' if image_url else None
+        image_url = url_for('api.api_screenshot_view', screenshot_id=s.id, t=ts) if (has_local or bool(s.sharepoint_url)) else None
+        thumb_url = url_for('api.api_screenshot_view', screenshot_id=s.id, size='thumb', t=ts) if image_url else None
 
         captured_local = _as_local(s.captured_at)
         uploaded_local = _as_local(s.uploaded_at)
@@ -502,8 +502,8 @@ def api_server_screenshots(server_id):
             'active_user':   s.active_user or '',
             'file_size_kb':  s.file_size_kb or 0,
             'sharepoint_url': s.sharepoint_url or None,
-            'image_url':     image_url,
-            'thumb_url':     thumb_url,
+            'image_url':     url_for('api.api_screenshot_view', screenshot_id=s.id, t=ts) if (has_local or bool(s.sharepoint_url)) else None,
+            'thumb_url':     url_for('api.api_screenshot_view', screenshot_id=s.id, size='thumb', t=ts) if (has_local or bool(s.sharepoint_url)) else None,
             'has_image':     bool(image_url),
         })
 
@@ -1209,28 +1209,31 @@ def agent_metrics():
 
         # Emit screenshot frame over SocketIO for live preview (non-persistent stream)
         if ss_image_b64:
-            from web.app import socketio
-            sio = cast(Any, socketio)
-
-            def _emit_screenshot_frame(b64data, shot_obj_id=None):
-                try:
-                    payload = {
-                        'server_id': server.id,
-                        'timestamp': now.isoformat() + 'Z',
-                        'image_b64': b64data,
-                        'screenshot_id': shot_obj_id
-                    }
-                    logger.info(f"[DEBUG] Emitting screenshot_frame to room={server.tenant_id} for server_id={server.id}, b64_size={len(b64data)} bytes")
-                    sio.emit('screenshot_frame', payload, room=str(server.tenant_id))
-                    logger.info(f"[DEBUG] Screenshot_frame emitted successfully for server {server.id}")
-                except Exception as e:
-                    logger.error(f"SocketIO screenshot emit failed for server {server.id}: {e}", exc_info=True)
-
-            logger.info(f"[DEBUG] Starting screenshot emit background task for server {server.id} to tenant {server.tenant_id}")
             try:
-                socketio.start_background_task(_emit_screenshot_frame, ss_image_b64, None)
+                from web.app import socketio as socketio_instance
+                sio = cast(Any, socketio_instance)
+
+                def _emit_screenshot_frame(b64data, shot_obj_id=None):
+                    try:
+                        payload = {
+                            'server_id': server.id,
+                            'timestamp': now.isoformat() + 'Z',
+                            'image_b64': b64data,
+                            'screenshot_id': shot_obj_id
+                        }
+                        logger.info(f"[DEBUG] Emitting screenshot_frame to room={server.tenant_id} for server_id={server.id}, b64_size={len(b64data)} bytes")
+                        sio.emit('screenshot_frame', payload, room=str(server.tenant_id))
+                        logger.info(f"[DEBUG] Screenshot_frame emitted successfully for server {server.id}")
+                    except Exception as e:
+                        logger.error(f"SocketIO screenshot emit failed for server {server.id}: {e}", exc_info=True)
+
+                logger.info(f"[DEBUG] Starting screenshot emit background task for server {server.id} to tenant {server.tenant_id}")
+                try:
+                    socketio_instance.start_background_task(_emit_screenshot_frame, ss_image_b64, None)
+                except Exception as e:
+                    logger.error(f"Failed to start screenshot_frame background task for server {server.id}: {e}", exc_info=True)
             except Exception as e:
-                logger.error(f"Failed to start screenshot_frame background task for server {server.id}: {e}", exc_info=True)
+                logger.warning(f"SocketIO is unavailable for screenshot emit: {e}")
 
         logger.info("About to commit final transaction")
         try:
@@ -1257,9 +1260,8 @@ def agent_metrics():
         # ── Emit real-time update via Socket.IO in a background task ──────────────
         def _emit_metrics_update():
             try:
-                from web.app import socketio
-                sio = cast(Any, socketio)
-                sio.emit('metrics_update', {
+                from web.app import socketio as socketio_instance
+                cast(Any, socketio_instance).emit('metrics_update', {
                     'server_id': server_id,
                     'timestamp': now.isoformat() + 'Z',
                     'metrics':   {'cpu': cpu, 'ram': ram, 'disk': disk},
@@ -1267,7 +1269,11 @@ def agent_metrics():
             except Exception as e:
                 logger.error(f"SocketIO emit failed: {e}")
 
-        socketio.start_background_task(_emit_metrics_update)
+        try:
+            from web.app import socketio as socketio_instance
+            socketio_instance.start_background_task(_emit_metrics_update)
+        except Exception as e:
+            logger.warning(f"SocketIO background task skipped: {e}")
 
         logger.info("Metrics endpoint returning success")
         return jsonify({

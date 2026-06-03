@@ -67,7 +67,7 @@ def workforce_dashboard():
                 return None, False
             local_path = _resolve_screenshot_local_path(shot)
             if local_path or shot.sharepoint_url:
-                return f"/api/screenshot/{shot.id}?size=thumb", True
+                return url_for('api.api_screenshot_view', screenshot_id=shot.id, size='thumb'), True
             return None, False
 
         # Gather summary data for the template using India/local business day.

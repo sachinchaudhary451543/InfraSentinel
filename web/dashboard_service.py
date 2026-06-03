@@ -7,6 +7,7 @@ All required data fetched in minimal queries instead of per-server lookups.
 
 import logging
 from datetime import datetime
+from flask import url_for
 from sqlalchemy import and_, func
 
 from web.models import (
@@ -265,7 +266,13 @@ class OptimizedDashboardService:
                 
                 # Add screenshot and productivity
                 ss = latest_screenshots.get(s.id)
-                setattr(s, 'latest_screenshot_url', f"/api/screenshot/{ss.id}" if ss else None)
+                latest_screenshot_url = None
+                if ss:
+                    try:
+                        latest_screenshot_url = url_for('api.api_screenshot_view', screenshot_id=ss.id)
+                    except RuntimeError:
+                        latest_screenshot_url = f"/api/screenshot/{ss.id}"
+                setattr(s, 'latest_screenshot_url', latest_screenshot_url)
                 
                 prod = productivity_stats.get(s.id)
                 if prod:
