@@ -782,7 +782,11 @@ def ensure_initial_setup():
 
 
 # Run setup on import as well (WSGI/waitress entrypoints do not execute __main__)
-ensure_initial_setup()
+try:
+    ensure_initial_setup()
+except Exception as e:
+    logging.error('Initial setup failed during import-time startup: %s', e)
+    logging.exception(e)
 
 
 def _run_smoke_tests():
