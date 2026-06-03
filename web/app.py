@@ -715,6 +715,7 @@ def favicon_png():
                                'favicon-32x32.png', mimetype='image/png')
 
 @app.route('/health')
+@app.route('/api/v2/health')
 def health():
     """Health check endpoint for monitoring uptime."""
     return {"status": "ok"}, 200
@@ -826,7 +827,11 @@ def _run_smoke_tests():
 
 
 # Run smoke tests after startup validation
-_run_smoke_tests()
+try:
+    _run_smoke_tests()
+except Exception as e:
+    logging.error('Smoke tests failed during import-time startup: %s', e)
+    logging.exception(e)
 
 # Apply database optimizations (indexes, analysis)
 try:
