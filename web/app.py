@@ -340,12 +340,15 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # If using Postgres, tune engine options for production workloads
 if DATABASE_URL.startswith('postgres') or DATABASE_URL.startswith('postgresql'):
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
-    # sensible defaults; can be tuned via env vars
+    sslmode = os.environ.get('PGSSLMODE', 'require')
+    connect_args = {} if 'sslmode' in DATABASE_URL else {'sslmode': sslmode}
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].update({
         'pool_size': int(os.environ.get('SQL_POOL_SIZE', '10')),
         'max_overflow': int(os.environ.get('SQL_MAX_OVERFLOW', '20')),
+        'pool_timeout': int(os.environ.get('SQL_POOL_TIMEOUT', '30')),
         'pool_pre_ping': True,
-        'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800'))
+        'pool_recycle': int(os.environ.get('SQL_POOL_RECYCLE', '1800')),
+        'connect_args': connect_args,
     })
     logging.info('Configured SQLAlchemy for Postgres with engine options')
 else:
