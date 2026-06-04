@@ -21,7 +21,8 @@
         document.documentElement.setAttribute('data-theme', 'light');
     </script>
     <!-- Compiled Tailwind CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='dist/css/tailwind.prod.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/css/tailwind.prod.min.css') }}"
+        onerror="this.onerror=null;window.__tailwindCssFailed=true;var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.defer=true;document.head.appendChild(s);">
     <style>
         * {
             margin: 0;
@@ -1042,7 +1043,8 @@
     </script>
 
     <!-- Load local Chart.js synchronously (needed for dashboard charts) -->
-    <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';s.defer=false;document.head.appendChild(s);"></script>
     <!-- Load Socket.IO client from a local vendor copy first, then fall back to public CDNs.
          Avoid using the server /socket.io/socket.io.js path directly because plain GET requests may return 400. -->
     <script>
