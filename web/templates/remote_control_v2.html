@@ -299,7 +299,28 @@
                 out.textContent = data.rdp_command || data.message || 'RDP ready';
                 out.classList.remove('hidden');
             }
-            toast('RDP command generated.');
+            
+            // Copy command to clipboard
+            if (data.rdp_command) {
+                try {
+                    await navigator.clipboard.writeText(data.rdp_command);
+                    toast('RDP command generated & copied to clipboard.');
+                } catch (clipErr) {
+                    console.error("Clipboard copy failed: ", clipErr);
+                    toast('RDP command generated.');
+                }
+            } else {
+                toast('RDP command generated.');
+            }
+
+            // Trigger the .rdp file download
+            const downloadUrl = `/api/v2/server/${serverId}/remote/rdp/download`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
         } catch (e) {
             toast('RDP failed: ' + (e?.message || e), false);
         }

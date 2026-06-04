@@ -27,7 +27,7 @@ def load_config():
     for config_path in config_paths:
         if config_path.exists():
             try:
-                with open(config_path) as f:
+                with open(config_path, encoding='utf-8-sig') as f:
                     config = json.load(f)
                     logger.info(f"Loaded config from: {config_path}")
                     return config.get('AGENT_KEY', ''), config.get('SERVER_URL', ''), config.get('INTERVAL', 30)
@@ -58,6 +58,19 @@ def capture_screenshot():
     """Capture system screenshot and encode as base64"""
     try:
         if platform.system() == 'Windows':
+            # Set DPI Awareness first to prevent cropped/half screenshots on scaled displays
+            try:
+                import ctypes
+                try:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+                except Exception:
+                    try:
+                        ctypes.windll.shcore.SetProcessDpiAwareness(1) # PROCESS_SYSTEM_DPI_AWARE
+                    except Exception:
+                        ctypes.windll.user32.SetProcessDPIAware()
+            except Exception as dpi_error:
+                logger.warning(f"Could not set DPI awareness: {dpi_error}")
+
             try:
                 from PIL import ImageGrab
                 screenshot = ImageGrab.grab()

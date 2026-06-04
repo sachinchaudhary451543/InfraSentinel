@@ -578,6 +578,32 @@ def api_remote_rdp(server_id):
     })
 
 
+@api_bp.route('/api/v2/server/<int:server_id>/remote/rdp/download')
+@login_required
+def api_remote_rdp_download(server_id):
+    """Generate and return a downloadable .rdp file for native connection"""
+    from web.models import Server
+    from flask import make_response, send_file
+    from io import BytesIO
+    
+    server = Server.query.get_or_404(server_id)
+    
+    if not current_user.is_superadmin and server.tenant_id != current_user.tenant_id:
+        abort(403)
+        
+    rdp_content = f"full address:s:{server.ip or server.hostname}\nprompt for credentials:i:1\nusername:s:Administrator\nscreen mode id:i:2\nuse multimon:i:0\n"
+    
+    buf = BytesIO(rdp_content.encode('utf-8'))
+    resp = make_response(send_file(
+        buf,
+        mimetype='application/x-rdp',
+        as_attachment=True,
+        download_name=f"{server.hostname}.rdp"
+    ))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
+
+
 @api_bp.route('/api/v2/server/<int:server_id>/enable-monitoring', methods=['POST'])
 @login_required
 def api_enable_monitoring(server_id):

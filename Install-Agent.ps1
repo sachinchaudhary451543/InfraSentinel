@@ -32,10 +32,10 @@ function Write-Status {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $prefix = switch ($Level) {
-        "SUCCESS" { "✓" }
-        "ERROR" { "✗" }
-        "WARNING" { "⚠" }
-        default { "•" }
+        "SUCCESS" { "[SUCCESS]" }
+        "ERROR" { "[ERROR]" }
+        "WARNING" { "[WARNING]" }
+        default { "[INFO]" }
     }
     Write-Host "[$timestamp] $prefix $Message" -ForegroundColor $(
         switch ($Level) {
@@ -107,30 +107,32 @@ python "$agentPyPath" >> "$InstallPath\service.log" 2>&1
     $existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
     if ($existingService) {
         Write-Status "Service already exists. Removing old service..."
-        Stop-Service -Name $serviceName -ErrorAction SilentlyContinue -Force
+        nssm.exe stop $serviceName | Out-Null
         Start-Sleep -Seconds 2
-        sc.exe delete $serviceName | Out-Null
+        nssm.exe remove $serviceName confirm | Out-Null
         Start-Sleep -Seconds 1
     }
     
-    # Create new service
+    # Create new service using NSSM
     $pythonExe = (Get-Command python).Source
-    $serviceCmd = "sc.exe create $serviceName binPath= `"$pythonExe `"$agentPyPath`"`" DisplayName= `"$displayName`" start= auto"
-    
-    Invoke-Expression $serviceCmd | Out-Null
+    nssm.exe install $serviceName "$pythonExe" "$agentPyPath" | Out-Null
     
     if ($?) {
-        Write-Status "Windows Service installed successfully" "SUCCESS"
+        nssm.exe set $serviceName AppDirectory "$InstallPath" | Out-Null
+        nssm.exe set $serviceName Description "Monitors system health and sends metrics to ServerMonitor portal" | Out-Null
+        nssm.exe set $serviceName DisplayName "$displayName" | Out-Null
+        nssm.exe set $serviceName Start SERVICE_AUTO_START | Out-Null
+        nssm.exe set $serviceName AppStdout "$InstallPath\service.log" | Out-Null
+        nssm.exe set $serviceName AppStderr "$InstallPath\service_err.log" | Out-Null
+        
+        Write-Status "Windows Service installed successfully using NSSM" "SUCCESS"
         Write-Status "Service Name: $serviceName"
         Write-Status "Service Type: Automatic (Auto-start on boot)"
     }
     else {
-        Write-Status "Failed to install Windows Service" "ERROR"
+        Write-Status "Failed to install Windows Service using NSSM" "ERROR"
         exit 1
     }
-    
-    # Set service description
-    sc.exe description $serviceName "Monitors system health and sends metrics to ServerMonitor portal" | Out-Null
     
     # Start service if AutoStart is enabled
     if ($AutoStart) {

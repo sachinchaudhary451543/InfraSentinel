@@ -361,8 +361,15 @@ def _build_productivity_rows(tenant_id, target_date):
 
     employees = Employee.query.filter_by(tenant_id=tenant_id, is_active=True).all()
     attendance = AttendanceRecord.query.filter_by(tenant_id=tenant_id, date=target_date).all()
-    day_start = datetime.combine(target_date, datetime.min.time())
-    day_end = datetime.combine(target_date, datetime.max.time())
+
+    # Convert IST day bounds to UTC-naive for correct DB comparison.
+    # The DB stores timestamps in UTC, so "target_date 00:00 IST" must become
+    # "target_date-1 18:30 UTC" for IST (UTC+5:30).
+    local_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+    local_end = ist.localize(datetime.combine(target_date, datetime.max.time()))
+    day_start = local_start.astimezone(pytz.UTC).replace(tzinfo=None)
+    day_end = local_end.astimezone(pytz.UTC).replace(tzinfo=None)
+
     sessions = ActivitySession.query.filter(
         ActivitySession.tenant_id == tenant_id,
         ActivitySession.start_time >= day_start,

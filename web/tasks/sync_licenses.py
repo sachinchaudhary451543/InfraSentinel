@@ -301,7 +301,7 @@ def run_license_sync(tenant_id: Optional[int] = None):
                 azure_user.job_title = user_data.get('jobTitle')
                 azure_user.mail_nickname = user_data.get('mailNickname')
                 azure_user.sam_account_name = user_data.get('onPremisesSamAccountName')
-                azure_user.employee_id = azure_user.mail_nickname or upn.split('@', 1)[0]
+                azure_user.employee_id = user_data.get('employeeId') or user_data.get('employee_id') or azure_user.mail_nickname or upn.split('@', 1)[0]
                 azure_user.last_synced = datetime.utcnow()
                 db.session.flush()
 

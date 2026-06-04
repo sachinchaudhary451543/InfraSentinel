@@ -75,23 +75,27 @@ class AgentServiceManager:
             python_exe = sys.executable
             logger.info(f"Using Python: {python_exe}")
             
-            # Create Windows Service using nssm (Non-Sucking Service Manager) if available
-            # Or use pywin32/win32serviceutil if installed
-            # Use sc.exe to create service (most reliable on modern Windows)
-            logger.info(f"Installing {SERVICE_DISPLAY_NAME}...")
+            logger.info(f"Installing {SERVICE_DISPLAY_NAME} using NSSM...")
             
-            # Build command as string (required when shell=True)
-            cmd_str = f'sc create {SERVICE_NAME} binPath= "{python_exe} \"{AGENT_SCRIPT}\"" DisplayName= "{SERVICE_DISPLAY_NAME}" start= auto'
+            # 1. Install service with nssm
+            install_cmd = f'nssm install {SERVICE_NAME} "{python_exe}" "{AGENT_SCRIPT}"'
+            result = subprocess.run(install_cmd, capture_output=True, text=True, shell=True)
             
-            result = subprocess.run(cmd_str, capture_output=True, text=True, shell=True)
-            
-            if result.returncode != 0 and "already exists" not in result.stdout:
-                logger.error(f"Failed to create service: {result.stderr}")
+            if result.returncode != 0 and "already exists" not in result.stderr and "already exists" not in result.stdout:
+                logger.error(f"Failed to create service: {result.stderr or result.stdout}")
                 return False
             
-            # Set service description using sc.exe (as string for shell=True)
-            desc_cmd_str = f'sc description {SERVICE_NAME} "{SERVICE_DESCRIPTION}"'
-            subprocess.run(desc_cmd_str, capture_output=True, text=True, shell=True)
+            # 2. Configure service parameters using nssm
+            subprocess.run(f'nssm set {SERVICE_NAME} AppDirectory "{BASE_DIR}"', capture_output=True, shell=True)
+            subprocess.run(f'nssm set {SERVICE_NAME} Description "{SERVICE_DESCRIPTION}"', capture_output=True, shell=True)
+            subprocess.run(f'nssm set {SERVICE_NAME} DisplayName "{SERVICE_DISPLAY_NAME}"', capture_output=True, shell=True)
+            subprocess.run(f'nssm set {SERVICE_NAME} Start SERVICE_AUTO_START', capture_output=True, shell=True)
+            
+            # Set stdout and stderr redirection
+            stdout_path = BASE_DIR / "service.log"
+            stderr_path = BASE_DIR / "service_err.log"
+            subprocess.run(f'nssm set {SERVICE_NAME} AppStdout "{stdout_path}"', capture_output=True, shell=True)
+            subprocess.run(f'nssm set {SERVICE_NAME} AppStderr "{stderr_path}"', capture_output=True, shell=True)
             
             logger.info(f"✅ Service installed successfully: {SERVICE_DISPLAY_NAME}")
             logger.info(f"   Service Name: {SERVICE_NAME}")
@@ -119,11 +123,10 @@ class AgentServiceManager:
             logger.info(f"Removing {SERVICE_DISPLAY_NAME}...")
             
             # Stop service if running
-            stop_cmd = f"net stop {SERVICE_NAME}"
-            subprocess.run(stop_cmd, capture_output=True, text=True, shell=True)
+            subprocess.run(f"nssm stop {SERVICE_NAME}", capture_output=True, text=True, shell=True)
             
-            # Remove service
-            cmd = f"sc delete {SERVICE_NAME}"
+            # Remove service using nssm (skip confirmation)
+            cmd = f"nssm remove {SERVICE_NAME} confirm"
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
             return_code = result.returncode
             
@@ -147,7 +150,7 @@ class AgentServiceManager:
             sys.exit(1)
         
         try:
-            cmd = f"net start {SERVICE_NAME}"
+            cmd = f"nssm start {SERVICE_NAME}"
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
             
             if result.returncode == 0:
@@ -170,7 +173,7 @@ class AgentServiceManager:
             sys.exit(1)
         
         try:
-            cmd = f"net stop {SERVICE_NAME}"
+            cmd = f"nssm stop {SERVICE_NAME}"
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
             
             if result.returncode == 0:
@@ -188,15 +191,16 @@ class AgentServiceManager:
     def status():
         """Check service status"""
         try:
-            cmd = f"sc query {SERVICE_NAME}"
+            cmd = f"nssm status {SERVICE_NAME}"
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
             
-            if "RUNNING" in result.stdout:
+            status_out = result.stdout.strip()
+            if "SERVICE_RUNNING" in status_out:
                 logger.info(f"✓ Service Status: RUNNING")
-            elif "STOPPED" in result.stdout:
+            elif "SERVICE_STOPPED" in status_out:
                 logger.info(f"✓ Service Status: STOPPED")
             else:
-                logger.info(f"✓ Service Status: UNKNOWN")
+                logger.info(f"✓ Service Status: {status_out or 'UNKNOWN'}")
             
             print(result.stdout)
             

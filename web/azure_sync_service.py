@@ -169,9 +169,9 @@ class AzureSyncService:
                 user.mail_nickname = user_data.get('mailNickname')
                 user.sam_account_name = user_data.get('onPremisesSamAccountName')
 
-                # Extract employee ID from email or use from extensionAttribute
+                # Extract employee ID from Azure AD employeeId attribute (camelCase from Graph API)
                 email_parts = user.email.split('@')
-                user.employee_id = user_data.get('employee_id') or user_data.get('mailNickname') or email_parts[0]
+                user.employee_id = user_data.get('employeeId') or user_data.get('employee_id') or user_data.get('mailNickname') or email_parts[0]
 
                 # Detect activity from Azure (lastActivityDateTime via Intune)
                 last_activity = user_data.get('lastActivityDateTime')

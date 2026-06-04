@@ -104,7 +104,7 @@
             <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=screenshot.server_id) }}">
                 <div class="h-56 bg-slate-100 overflow-hidden">
                     <img src="{{ url_for('api.api_screenshot_view', screenshot_id=screenshot.id) }}"
-                        alt="Screenshot {{ screenshot.id }}" class="h-full w-full object-cover">
+                        alt="Screenshot {{ screenshot.id }}" class="h-full w-full object-contain">
                 </div>
             </a>
             <div class="p-4">

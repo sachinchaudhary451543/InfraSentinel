@@ -175,7 +175,7 @@ def get_users(tenant_record: Optional[object] = None) -> List[Dict[str, Any]]:
         return []
     try:
         # Append filter for active users only
-        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,jobTitle,department,mail&$filter=accountEnabled eq true"
+        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,jobTitle,department,mail,employeeId,mailNickname,onPremisesSamAccountName&$filter=accountEnabled eq true"
         return _paged_get(url, token)
     except Exception as e:
         logger.error(f"get_users failed: {e}")
@@ -242,7 +242,7 @@ def get_users_with_licenses(tenant_record: Optional[object] = None) -> List[Dict
     if not token:
         return []
     try:
-        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,assignedLicenses"
+        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,assignedLicenses,employeeId,mailNickname,onPremisesSamAccountName"
         return _paged_get(url, token)
     except Exception as e:
         logger.error(f"get_users_with_licenses failed: {e}")

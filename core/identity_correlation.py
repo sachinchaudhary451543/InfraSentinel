@@ -91,27 +91,55 @@ class IdentityCorrelationService:
             ).first()
             
             if azure_user:
-                # Create Employee record from AzureUser
-                employee = Employee(
-                    tenant_id=tenant_id,
-                    name=azure_user.display_name or clean_user,
-                    email=azure_user.email,
-                    local_username=clean_user,
-                    department=azure_user.department,
-                    designation=azure_user.job_title
-                )
-                db.session.add(employee)
-                db.session.commit()
+                # First check if an Employee with this AzureUser's email already exists
+                # This prevents creating duplicates when the agent's local username
+                # (office ID) doesn't match the UPN prefix
+                existing_emp = Employee.query.filter(
+                    Employee.tenant_id == tenant_id,
+                    Employee.email == azure_user.email
+                ).first() if azure_user.email else None
+                
+                if existing_emp:
+                    # Update existing employee with the agent's local username
+                    existing_emp.local_username = clean_user
+                    if not existing_emp.department and azure_user.department:
+                        existing_emp.department = azure_user.department
+                    if not existing_emp.designation and azure_user.job_title:
+                        existing_emp.designation = azure_user.job_title
+                    employee = existing_emp
+                    db.session.commit()
+                else:
+                    # Create Employee record from AzureUser
+                    employee = Employee(
+                        tenant_id=tenant_id,
+                        name=azure_user.display_name or clean_user,
+                        email=azure_user.email,
+                        local_username=clean_user,
+                        department=azure_user.department,
+                        designation=azure_user.job_title
+                    )
+                    db.session.add(employee)
+                    db.session.commit()
             else:
-                # Create a placeholder employee
-                employee = Employee(
+                # Before creating a placeholder, check if one already exists
+                # with this local_username (prevents duplicate placeholders)
+                placeholder = Employee.query.filter_by(
                     tenant_id=tenant_id,
-                    name=clean_user,
-                    email=f"{clean_user}@unknown.local",
                     local_username=clean_user
-                )
-                db.session.add(employee)
-                db.session.commit()
+                ).first()
+                
+                if placeholder:
+                    employee = placeholder
+                else:
+                    # Create a placeholder employee
+                    employee = Employee(
+                        tenant_id=tenant_id,
+                        name=clean_user,
+                        email=f"{clean_user}@unknown.local",
+                        local_username=clean_user
+                    )
+                    db.session.add(employee)
+                    db.session.commit()
         
         # 2. Find AzureDevice (optional, best effort mapping by hostname)
         azure_device = AzureDevice.query.filter(

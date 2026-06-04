@@ -79,7 +79,7 @@ def list_users_with_assigned_licenses(token: str, top: int = 100) -> List[Dict[s
     users = []
     url = "https://graph.microsoft.com/v1.0/users"
     params = {
-        "$select": "id,displayName,mail,userPrincipalName,assignedLicenses,department,jobTitle,mailNickname,onPremisesSamAccountName",
+        "$select": "id,displayName,mail,userPrincipalName,assignedLicenses,department,jobTitle,mailNickname,onPremisesSamAccountName,employeeId",
         "$top": top,
     }
     while url:

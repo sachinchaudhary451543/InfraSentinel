@@ -111,7 +111,7 @@ def get_users_from_graph(access_token: str) -> List[Dict]:
     """
     users = []
     # Only fetch active (enabled) accounts to prevent importing stale data
-    next_url = "/users?$select=id,userPrincipalName,mail,displayName,jobTitle,department,mailNickname,onPremisesSamAccountName,accountEnabled&$filter=accountEnabled eq true"
+    next_url = "/users?$select=id,userPrincipalName,mail,displayName,jobTitle,department,mailNickname,onPremisesSamAccountName,employeeId,accountEnabled&$filter=accountEnabled eq true"
     
     while next_url:
         result = _make_graph_request(next_url, access_token)
@@ -344,7 +344,7 @@ def sync_users_to_database(users: List[Dict], tenant_id: str, db_session) -> int
                 existing.display_name = display_name
                 existing.job_title = user.get("jobTitle")
                 existing.department = user.get("department")
-                existing.employee_id = prefix
+                existing.employee_id = user.get("employeeId") or user.get("mailNickname") or prefix
                 existing.mail_nickname = user.get("mailNickname")
                 existing.sam_account_name = user.get("onPremisesSamAccountName")
                 existing.last_synced = datetime.utcnow()
@@ -356,7 +356,7 @@ def sync_users_to_database(users: List[Dict], tenant_id: str, db_session) -> int
                     display_name=display_name,
                     job_title=user.get("jobTitle"),
                     department=user.get("department"),
-                    employee_id=prefix,
+                    employee_id=user.get("employeeId") or user.get("mailNickname") or prefix,
                     mail_nickname=user.get("mailNickname"),
                     sam_account_name=user.get("onPremisesSamAccountName"),
                     last_synced=datetime.utcnow()

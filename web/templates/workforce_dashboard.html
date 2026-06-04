@@ -96,7 +96,7 @@
       {% for agent in live_agents %}
       <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden agent-card" data-server-id="{{ agent.server_id }}">
         <div class="relative h-40 bg-slate-950/5 overflow-hidden">
-          <img src="{{ agent.screenshot_thumb or 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 fill=%27%23f8fafc%27/%3E%3Ctext x=%2750%27 y=%2755%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27%239ca3af%27 font-family=%27Arial,sans-serif%27 font-size=%2710%27%3ELive preview pending%3C/text%3E%3C/svg%3E'}}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-cover live-preview-img">
+          <img src="{{ agent.screenshot_thumb or 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 fill=%27%23f8fafc%27/%3E%3Ctext x=%2750%27 y=%2755%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27%239ca3af%27 font-family=%27Arial,sans-serif%27 font-size=%2710%27%3ELive preview pending%3C/text%3E%3C/svg%3E'}}" alt="Live preview for {{ agent.name }}" class="w-full h-full object-contain live-preview-img">
           {% if not agent.screenshot_thumb %}
           <div class="no-preview-overlay absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-sm font-semibold px-4 text-center bg-slate-950/10">
             <i class="fa-solid fa-monitor-waveform text-3xl mb-3"></i>
