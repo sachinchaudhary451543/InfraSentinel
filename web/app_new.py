@@ -64,6 +64,7 @@ app.config['SECRET_KEY'] = os.environ.get(
 )
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('ENVIRONMENT', 'dev') == 'prod'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['WORKFORCE_FEATURE_ENABLED'] = os.getenv('WORKFORCE_FEATURE_ENABLED', 'True').lower() in ('true', '1', 'yes')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
