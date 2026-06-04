@@ -1188,25 +1188,21 @@ def agent_metrics():
             except Exception as commit_err:
                 logger.warning(f"Failed to commit employee activity: {commit_err}")
 
-            # ── Phase 6: Detailed Productivity Engine (Relational Models) ────────
-            if current_app.config.get('WORKFORCE_FEATURE_ENABLED', False):
-                try:
-                    from web.app import socketio as socketio_instance
-                    socketio_instance.start_background_task(
-                        _process_productivity_background,
-                        server.tenant_id,
-                        server.id,
-                        logged_in_user,
-                        active_app,
-                        window_title,
-                        browser_url,
-                        int(max(0, idle_time_seconds)),
-                        now
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
-            else:
-                logger.info("Skipping ProductivityEngine because workforce feature is disabled")
+            try:
+                from web.app import socketio as socketio_instance
+                socketio_instance.start_background_task(
+                    _process_productivity_background,
+                    server.tenant_id,
+                    server.id,
+                    logged_in_user,
+                    active_app,
+                    window_title,
+                    browser_url,
+                    int(max(0, idle_time_seconds)),
+                    now
+                )
+            except Exception as e:
+                logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
 
         # ── Screenshot (base64 inline, save to disk) ───────────────────────────
         ss_data = data.get('screenshot')

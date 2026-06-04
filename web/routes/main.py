@@ -62,13 +62,20 @@ def dashboard():
         return render_template('dashboard.html', **template_data)
 
     except Exception as e:
-        logger.error(f"Dashboard error: {e}")
+        logger.exception(f"Dashboard error: {e}")
         # Safe fallback — render with empty data
-        return render_template('dashboard.html',
-                               servers=[], inventory=[], total_systems=0, agent_count=0,
-                               online_count=0, alert_count=0,
-                               vm_count=0, discovered_count=0,
-                               user=current_user, now=datetime.now(timezone.utc).replace(tzinfo=None))
+        try:
+            return render_template('dashboard.html',
+                                   servers=[], inventory=[], total_systems=0, agent_count=0,
+                                   online_count=0, alert_count=0,
+                                   vm_count=0, discovered_count=0,
+                                   user=current_user, now=datetime.now(timezone.utc).replace(tzinfo=None))
+        except Exception as fallback_error:
+            logger.exception(f"Dashboard fallback render failed: {fallback_error}")
+            return (
+                '<h1>Dashboard temporarily unavailable</h1>'
+                '<p>Please refresh in a moment while telemetry data is reloading.</p>'
+            ), 200
 
 
 @main_bp.route('/licenses')

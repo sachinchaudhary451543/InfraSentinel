@@ -516,8 +516,8 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
 
     local_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
     local_end = ist.localize(datetime.combine(target_date, datetime.max.time()))
-    day_start = local_start.replace(tzinfo=None)
-    day_end = local_end.replace(tzinfo=None)
+    day_start = local_start.astimezone(pytz.UTC).replace(tzinfo=None)
+    day_end = local_end.astimezone(pytz.UTC).replace(tzinfo=None)
     logger.debug(f"Productivity query bounds for {target_date}: start={day_start}, end={day_end}")
 
     attendance = AttendanceRecord.query.filter(
@@ -544,12 +544,44 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
     sessions_by_employee = {row.employee_id: row for row in session_rows}
     logger.debug(f"Fetched productivity aggregates for {len(session_rows)} employees in tenant {tenant_id} on {target_date}")
 
+    productive_app_filter = db.or_(
+        EmployeeActivity.app.ilike('%excel%'),
+        EmployeeActivity.app.ilike('%word%'),
+        EmployeeActivity.app.ilike('%outlook%'),
+        EmployeeActivity.app.ilike('%teams%'),
+        EmployeeActivity.app.ilike('%slack%'),
+        EmployeeActivity.app.ilike('%chrome%'),
+        EmployeeActivity.app.ilike('%edge%'),
+        EmployeeActivity.app.ilike('%code%'),
+        EmployeeActivity.app.ilike('%studio%'),
+        EmployeeActivity.app.ilike('%powershell%'),
+        EmployeeActivity.app.ilike('%terminal%'),
+        EmployeeActivity.app.ilike('%cmd%'),
+        EmployeeActivity.app.ilike('%ssh%'),
+        EmployeeActivity.app.ilike('%postman%'),
+    )
+    activity_rows = db.session.query(
+        EmployeeActivity.employee_id,
+        db.func.sum(db.case((EmployeeActivity.idle_time < 60, 30), else_=0)).label('active_sec'),
+        db.func.sum(db.case((EmployeeActivity.idle_time >= 60, 30), else_=0)).label('idle_sec'),
+        db.func.sum(db.case((db.and_(EmployeeActivity.idle_time < 60, productive_app_filter), 30), else_=0)).label('prod_sec'),
+        db.func.min(EmployeeActivity.timestamp).label('first_activity'),
+        db.func.max(EmployeeActivity.timestamp).label('last_activity'),
+    ).filter(
+        EmployeeActivity.tenant_id == tenant_id,
+        EmployeeActivity.employee_id.in_(employee_ids),
+        EmployeeActivity.timestamp >= day_start,
+        EmployeeActivity.timestamp <= day_end,
+    ).group_by(EmployeeActivity.employee_id).all() if employee_ids else []
+    activity_by_employee = {row.employee_id: row for row in activity_rows if row.employee_id}
+
     device_maps = _build_employee_device_maps(tenant_id, day_start, day_end)
     emp_rows = []
 
     for emp in employees:
         att = attendance_by_employee.get(emp.id)
         session_summary = sessions_by_employee.get(emp.id)
+        activity_summary = activity_by_employee.get(emp.id)
         device_info = _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps)
 
         if search_query and not (
@@ -566,12 +598,13 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
         if not device_info.get('server_id'):
             continue
 
-        if not session_summary and not att and not device_info.get('name'):
+        if not session_summary and not activity_summary and not att and not device_info.get('name'):
             continue
 
-        active_sec = session_summary.active_sec if session_summary else 0
-        idle_sec = session_summary.idle_sec if session_summary else 0
-        prod_sec = session_summary.prod_sec if session_summary else 0
+        metric_summary = session_summary or activity_summary
+        active_sec = metric_summary.active_sec if metric_summary else 0
+        idle_sec = metric_summary.idle_sec if metric_summary else 0
+        prod_sec = metric_summary.prod_sec if metric_summary else 0
 
         first_act_str = '-'
         last_act_str = '-'
@@ -580,14 +613,14 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
                 first_act_str = att.first_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
             if att.last_activity:
                 last_act_str = att.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
-        elif session_summary:
-            if session_summary.first_activity:
-                first_act_str = session_summary.first_activity.strftime('%I:%M %p')
-            if session_summary.last_activity:
-                last_act_str = session_summary.last_activity.strftime('%I:%M %p')
+        elif metric_summary:
+            if metric_summary.first_activity:
+                first_act_str = metric_summary.first_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
+            if metric_summary.last_activity:
+                last_act_str = metric_summary.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
 
         row_status = 'absent'
-        if session_summary:
+        if session_summary or activity_summary:
             row_status = 'present'
         elif att and att.status:
             row_status = att.status
