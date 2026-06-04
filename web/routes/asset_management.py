@@ -47,6 +47,33 @@ def _seconds_to_hms(value):
     return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
 
 
+class SimplePagination:
+    """Small pagination object for list-backed views."""
+    def __init__(self, items, page, per_page, total):
+        self.items = items
+        self.page = page
+        self.per_page = per_page
+        self.total = total
+        self.pages = max(1, (total + per_page - 1) // per_page) if per_page else 1
+        self.has_prev = page > 1
+        self.has_next = page < self.pages
+        self.prev_num = page - 1
+        self.next_num = page + 1
+
+    def iter_pages(self, left_edge=2, left_current=2, right_current=2, right_edge=2):
+        last = 0
+        for num in range(1, self.pages + 1):
+            if (
+                num <= left_edge
+                or (self.page - left_current <= num <= self.page + right_current)
+                or num > self.pages - right_edge
+            ):
+                if last + 1 != num:
+                    yield None
+                yield num
+                last = num
+
+
 def _compact_identity(value):
     return (value or '').lower().replace('.', '').replace('_', '').replace('-', '')
 
@@ -463,6 +490,136 @@ def _build_productivity_rows(tenant_id, target_date):
         })
 
     # SORT: Online agents' employees first, then by active time descending
+    emp_rows.sort(key=lambda x: (-x['is_agent_online'], -x['active_sec']))
+    return emp_rows
+
+
+def _build_productivity_rows(tenant_id, target_date, search_query=''):
+    from web.models import ActivitySession, AttendanceRecord
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+
+    search_query = (search_query or '').strip()
+    search_lower = search_query.lower()
+    employees_q = Employee.query.filter_by(tenant_id=tenant_id, is_active=True)
+    if search_query:
+        like = f'%{search_query}%'
+        employees_q = employees_q.filter(db.or_(
+            Employee.name.ilike(like),
+            Employee.display_name.ilike(like),
+            Employee.email.ilike(like),
+            Employee.department.ilike(like),
+            Employee.local_username.ilike(like),
+        ))
+    employees = employees_q.order_by(Employee.display_name.asc(), Employee.name.asc()).all()
+    employee_ids = [emp.id for emp in employees]
+
+    local_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
+    local_end = ist.localize(datetime.combine(target_date, datetime.max.time()))
+    day_start = local_start.replace(tzinfo=None)
+    day_end = local_end.replace(tzinfo=None)
+    logger.debug(f"Productivity query bounds for {target_date}: start={day_start}, end={day_end}")
+
+    attendance = AttendanceRecord.query.filter(
+        AttendanceRecord.tenant_id == tenant_id,
+        AttendanceRecord.date == target_date,
+        AttendanceRecord.employee_id.in_(employee_ids)
+    ).all() if employee_ids else []
+    attendance_by_employee = {a.employee_id: a for a in attendance}
+
+    session_rows = db.session.query(
+        ActivitySession.employee_id,
+        db.func.sum(db.func.coalesce(ActivitySession.active_minutes, 0)).label('active_sec'),
+        db.func.sum(db.func.coalesce(ActivitySession.idle_minutes, 0)).label('idle_sec'),
+        db.func.sum(db.func.coalesce(ActivitySession.productive_minutes, 0)).label('prod_sec'),
+        db.func.min(ActivitySession.start_time).label('first_activity'),
+        db.func.max(db.func.coalesce(ActivitySession.end_time, ActivitySession.start_time)).label('last_activity'),
+        db.func.count(ActivitySession.id).label('session_count'),
+    ).filter(
+        ActivitySession.tenant_id == tenant_id,
+        ActivitySession.start_time >= day_start,
+        ActivitySession.start_time <= day_end,
+        ActivitySession.employee_id.in_(employee_ids)
+    ).group_by(ActivitySession.employee_id).all() if employee_ids else []
+    sessions_by_employee = {row.employee_id: row for row in session_rows}
+    logger.debug(f"Fetched productivity aggregates for {len(session_rows)} employees in tenant {tenant_id} on {target_date}")
+
+    device_maps = _build_employee_device_maps(tenant_id, day_start, day_end)
+    emp_rows = []
+
+    for emp in employees:
+        att = attendance_by_employee.get(emp.id)
+        session_summary = sessions_by_employee.get(emp.id)
+        device_info = _resolve_employee_device(tenant_id, emp, day_start, day_end, device_maps)
+
+        if search_query and not (
+            search_lower in (device_info.get('name') or '').lower()
+            or search_lower in (device_info.get('ip') or '').lower()
+            or search_lower in (emp.name or '').lower()
+            or search_lower in (emp.display_name or '').lower()
+            or search_lower in (emp.email or '').lower()
+            or search_lower in (emp.department or '').lower()
+            or search_lower in (emp.local_username or '').lower()
+        ):
+            continue
+
+        if not device_info.get('server_id'):
+            continue
+
+        if not session_summary and not att and not device_info.get('name'):
+            continue
+
+        active_sec = session_summary.active_sec if session_summary else 0
+        idle_sec = session_summary.idle_sec if session_summary else 0
+        prod_sec = session_summary.prod_sec if session_summary else 0
+
+        first_act_str = '-'
+        last_act_str = '-'
+        if att:
+            if att.first_activity:
+                first_act_str = att.first_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
+            if att.last_activity:
+                last_act_str = att.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist).strftime('%I:%M %p')
+        elif session_summary:
+            if session_summary.first_activity:
+                first_act_str = session_summary.first_activity.strftime('%I:%M %p')
+            if session_summary.last_activity:
+                last_act_str = session_summary.last_activity.strftime('%I:%M %p')
+
+        row_status = 'absent'
+        if session_summary:
+            row_status = 'present'
+        elif att and att.status:
+            row_status = att.status
+        elif device_info.get('status') == 'present':
+            row_status = 'present'
+
+        is_agent_online = False
+        server_id = device_info.get('server_id')
+        if server_id:
+            server = device_maps['server_map'].get(server_id)
+            is_agent_online = getattr(server, 'is_online', False) if server else False
+
+        emp_rows.append({
+            'id': emp.id,
+            'name': emp.display_name or emp.name or emp.email or emp.local_username or 'Unknown',
+            'email': emp.email or '',
+            'department': emp.department or '',
+            'device': device_info.get('name', ''),
+            'device_ip': device_info.get('ip', ''),
+            'server_id': device_info.get('server_id'),
+            'screenshot_id': device_maps['latest_screenshot_by_server'].get(device_info.get('server_id')),
+            'status': row_status,
+            'first_activity': first_act_str,
+            'last_activity': last_act_str,
+            'active_sec': active_sec,
+            'active_str': _seconds_to_hms(active_sec),
+            'idle_str': _seconds_to_hms(idle_sec),
+            'productive_str': _seconds_to_hms(prod_sec),
+            'source': device_info.get('source', 'unassigned'),
+            'is_agent_online': is_agent_online
+        })
+
     emp_rows.sort(key=lambda x: (-x['is_agent_online'], -x['active_sec']))
     return emp_rows
 
@@ -1138,13 +1295,29 @@ def system_controls():
     """System controls landing page (per-tenant list of servers)."""
     try:
         from web.models import EmployeeDeviceAssignment, Employee
+        search_query = (request.args.get('q') or '').strip()
+        page = max(1, request.args.get('page', 1, type=int))
+        per_page = 20
         q = Server.query
         tenant_id = current_user.tenant_id if not current_user.is_superadmin else None
         
         if tenant_id:
             q = q.filter_by(tenant_id=tenant_id)
-            
-        servers = q.order_by(Server.hostname.asc()).all()
+
+        if search_query:
+            like = f'%{search_query}%'
+            q = q.filter(db.or_(
+                Server.hostname.ilike(like),
+                Server.name.ilike(like),
+                Server.ip.ilike(like),
+            ))
+
+        pagination = q.order_by(Server.hostname.asc()).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+        servers = pagination.items
         
         # Attach assignment data for the UI
         assignments = []
@@ -1162,10 +1335,10 @@ def system_controls():
         for s in servers:
             s.assigned_employee_name = assignment_map.get(s.id)
             
-        return render_template('system_controls.html', servers=servers)
+        return render_template('system_controls.html', servers=servers, pagination=pagination, q=search_query)
     except Exception as e:
         logger.error(f"Error loading system controls: {e}")
-        return render_template('system_controls.html', servers=[], error=str(e))
+        return render_template('system_controls.html', servers=[], error=str(e), q='', pagination=None)
 
 
 @asset_mgmt_bp.route('/assets/productivity')
@@ -1174,6 +1347,9 @@ def productivity_overview():
     """HR View: Employee Productivity List."""
     try:
         tenant_id = current_user.tenant_id
+        search_query = (request.args.get('q') or '').strip()
+        page = max(1, request.args.get('page', 1, type=int))
+        per_page = 20
         
         # Get target date from query args or default to today
         date_str = (request.args.get('date') or '').strip()
@@ -1182,11 +1358,16 @@ def productivity_overview():
         except ValueError:
             target_date = _today_local()
             
-        emp_rows = _build_productivity_rows(tenant_id, target_date)
+        emp_rows = _build_productivity_rows(tenant_id, target_date, search_query)
+        total = len(emp_rows)
+        start = (page - 1) * per_page
+        pagination = SimplePagination(emp_rows[start:start + per_page], page, per_page, total)
         
         return render_template(
             'productivity_overview.html',
-            employees=emp_rows,
+            employees=pagination.items,
+            pagination=pagination,
+            q=search_query,
             selected_date=target_date.strftime('%Y-%m-%d'),
             page_title='Employee Productivity',
             page_description='Employee productivity and linked agent system screenshots for the selected date.',
@@ -1194,7 +1375,7 @@ def productivity_overview():
         )
     except Exception as e:
         logger.error(f"Error loading productivity view: {e}")
-        return render_template('productivity_overview.html', employees=[], selected_date='', error=str(e))
+        return render_template('productivity_overview.html', employees=[], selected_date='', error=str(e), q='', pagination=None)
 
 
 @asset_mgmt_bp.route('/assets/productivity/report')
@@ -1208,8 +1389,9 @@ def productivity_export():
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else _today_local()
         except ValueError:
             target_date = _today_local()
+        search_query = (request.args.get('q') or '').strip()
 
-        emp_rows = _build_productivity_rows(tenant_id, target_date)
+        emp_rows = _build_productivity_rows(tenant_id, target_date, search_query)
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([

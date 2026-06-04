@@ -9,7 +9,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request
 from flask_login import login_required, current_user
 
-from web.routes.asset_management import _build_productivity_rows
+from web.routes.asset_management import SimplePagination, _build_productivity_rows
 
 logger = logging.getLogger("[ANALYTICS_API]")
 analytics_api_bp = Blueprint('analytics_api', __name__, url_prefix='/analytics')
@@ -26,11 +26,19 @@ def workforce_dashboard():
         except ValueError:
             target_date = datetime.utcnow().date()
 
-        emp_rows = _build_productivity_rows(current_user.tenant_id, target_date)
+        search_query = (request.args.get('q') or '').strip()
+        page = max(1, request.args.get('page', 1, type=int))
+        per_page = 20
+        emp_rows = _build_productivity_rows(current_user.tenant_id, target_date, search_query)
+        total = len(emp_rows)
+        start = (page - 1) * per_page
+        pagination = SimplePagination(emp_rows[start:start + per_page], page, per_page, total)
 
         return render_template(
             'productivity_overview.html',
-            employees=emp_rows,
+            employees=pagination.items,
+            pagination=pagination,
+            q=search_query,
             selected_date=target_date.strftime('%Y-%m-%d'),
             page_title='Workforce Intelligence',
             page_description='Monitor employee productivity and system activity linked through Azure and local assignments.',
@@ -45,5 +53,7 @@ def workforce_dashboard():
             page_title='Workforce Intelligence',
             page_description='Unable to load workforce analytics at this time.',
             workforce_mode=True,
+            q='',
+            pagination=None,
             error=str(e)
         )

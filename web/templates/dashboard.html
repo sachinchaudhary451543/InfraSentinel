@@ -2878,20 +2878,6 @@
                 }
             });
 
-            async function loadAlertsForServer(serverId) {
-                try {
-                    const res = await fetch(`/api/v2/server/${serverId}/alerts`);
-                    if (!res.ok) throw new Error(`${res.status}`);
-                    const data = await res.json();
-                    const alertsEl = document.getElementById('live-alerts-' + serverId);
-                    if (alertsEl && data.success) {
-                        alertsEl.innerText = data.alert_count || 0;
-                    }
-                } catch (err) {
-                    // Silently fail
-                }
-            }
-
             let dashboardSocket = null;
 
             function handleMetricsUpdate(data) {
@@ -2909,6 +2895,10 @@
                     if (ramEl) ramEl.innerText = parseFloat(((data.metrics && data.metrics.ram) || 0)).toFixed(1) + '%';
                     if (diskEl) diskEl.innerText = parseFloat(((data.metrics && data.metrics.disk) || 0)).toFixed(1) + '%';
                     if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
+                    const alertsEl = document.getElementById('live-alerts-' + sid);
+                    if (alertsEl && data.alert_count !== undefined && data.alert_count !== null) {
+                        alertsEl.innerText = data.alert_count || 0;
+                    }
 
                     if (!historyBuffers) {
                         console.warn('historyBuffers not initialized yet');
@@ -2972,8 +2962,6 @@
                         }).join('');
                     }
                 }
-
-                loadAlertsForServer(sid).catch(() => null);
 
                 if (data.activity) {
                     const prodEl = document.getElementById('live-prod-score-' + sid);
@@ -3088,7 +3076,6 @@
                         if (!card.dataset.initialized && serverId) {
                             card.dataset.initialized = 'true';
                             initChartsWhenReady(serverId);
-                            loadAlertsForServer(serverId).catch(() => null);
                             loadHistoricalData(serverId, selectedHistoryRange).catch(() => null);
                             loadForecast(serverId).catch(() => null);
                         }

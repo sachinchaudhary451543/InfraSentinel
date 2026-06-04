@@ -21,38 +21,107 @@
     </div>
 
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div
-            class="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div class="flex items-center gap-2 text-slate-800 font-black text-xs uppercase tracking-widest">
                 <i class="fa-solid fa-sliders text-indigo-600"></i>
                 <span>Systems</span>
             </div>
-            <div class="relative">
-                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input id="sysSearch" type="text" placeholder="Search hostname or IP..."
-                    class="pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 w-72">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div class="inline-flex rounded-xl bg-slate-100 border border-slate-200 p-1 w-fit" role="group" aria-label="Layout">
+                    <button type="button" id="tableViewBtn" class="view-toggle px-3 py-2 rounded-lg text-xs font-black text-slate-600">
+                        <i class="fa-solid fa-table-list mr-1.5"></i>Table
+                    </button>
+                    <button type="button" id="gridViewBtn" class="view-toggle px-3 py-2 rounded-lg text-xs font-black text-slate-600">
+                        <i class="fa-solid fa-grip mr-1.5"></i>Grid
+                    </button>
+                </div>
+                <form method="GET" class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input id="sysSearch" name="q" type="text" value="{{ q or '' }}" placeholder="Search hostname or IP..."
+                        autocomplete="off"
+                        class="pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 w-full sm:w-80">
+                </form>
             </div>
         </div>
 
-        <div class="p-5" id="sysList">
+        {% if servers %}
+        <div id="sysTableView" class="overflow-x-auto">
+            <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead>
+                    <tr class="bg-slate-50/80 border-b border-slate-100 text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest">
+                        <th class="py-4 px-5">Hostname & IP</th>
+                        <th class="py-4 px-5">Status</th>
+                        <th class="py-4 px-5">Screens</th>
+                        <th class="py-4 px-5">Check-in</th>
+                        <th class="py-4 px-5">Agent</th>
+                        <th class="py-4 px-5">Assigned Employee</th>
+                        <th class="py-4 px-5 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">
+                    {% for s in servers %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">
+                                    <i class="fa-solid fa-server"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="text-sm font-black text-slate-900 truncate">{{ s.hostname or s.name }}</div>
+                                    <div class="text-[0.7rem] text-slate-400 font-mono truncate">{{ s.ip or '-' }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="text-[0.65rem] font-black px-2.5 py-1 rounded-full border {% if s.is_online %}bg-emerald-50 text-emerald-700 border-emerald-100{% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
+                                {% if s.is_online %}ONLINE{% else %}OFFLINE{% endif %}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-xs font-bold text-slate-700">
+                            {% if s.screenshot_enabled %}Enabled{% else %}Disabled{% endif %}
+                        </td>
+                        <td class="py-4 px-5 text-xs font-bold text-slate-700">{{ s.screenshot_interval_minutes or 10 }}m</td>
+                        <td class="py-4 px-5 text-xs font-bold text-slate-700">
+                            {% if s.agent_installed %}Installed{% else %}Missing{% endif %}
+                        </td>
+                        <td class="py-4 px-5 text-xs font-bold text-slate-600">{{ s.assigned_employee_name or 'Unassigned' }}</td>
+                        <td class="py-4 px-5">
+                            <div class="flex items-center justify-end gap-1.5">
+                                <a title="Controls" href="{{ url_for('asset_mgmt.remote_control_server', server_id=s.id) }}" class="w-9 h-9 inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+                                    <i class="fa-solid fa-bolt"></i>
+                                </a>
+                                <a title="Images" href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=s.id) }}" class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-700 hover:border-indigo-200 transition-colors">
+                                    <i class="fa-solid fa-images"></i>
+                                </a>
+                                <a title="Logs" href="{{ url_for('asset_mgmt.remote_control_logs', server_id=s.id) }}" class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-700 hover:border-indigo-200 transition-colors">
+                                    <i class="fa-solid fa-clipboard-list"></i>
+                                </a>
+                                <a title="Productivity" href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=s.id) }}" class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-700 hover:border-indigo-200 transition-colors">
+                                    <i class="fa-solid fa-chart-simple"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="sysGridView" class="hidden p-5">
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {% for s in servers %}
-                <div class="sys-row rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all p-5 flex flex-col gap-4"
-                    data-h="{{ (s.hostname or s.name or '')|lower }}" data-ip="{{ (s.ip or '')|lower }}">
+                <div class="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all p-5 flex flex-col gap-4">
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
-                            <div
-                                class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">
+                            <div class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">
                                 <i class="fa-solid fa-server"></i>
                             </div>
                             <div class="min-w-0">
                                 <div class="text-sm font-black text-slate-900 truncate">{{ s.hostname or s.name }}</div>
-                                <div class="text-[0.7rem] text-slate-400 font-mono truncate">{{ s.ip or '—' }}</div>
+                                <div class="text-[0.7rem] text-slate-400 font-mono truncate">{{ s.ip or '-' }}</div>
                             </div>
                         </div>
-                        <span class="text-[0.65rem] font-black px-2 py-1 rounded-full border
-                            {% if s.is_online %}bg-emerald-50 text-emerald-700 border-emerald-100
-                            {% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
+                        <span class="text-[0.65rem] font-black px-2 py-1 rounded-full border {% if s.is_online %}bg-emerald-50 text-emerald-700 border-emerald-100{% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
                             {% if s.is_online %}ONLINE{% else %}OFFLINE{% endif %}
                         </span>
                     </div>
@@ -60,274 +129,101 @@
                     <div class="grid grid-cols-3 gap-2 text-center">
                         <div class="rounded-xl bg-slate-50 border border-slate-200 p-2">
                             <div class="text-[0.65rem] font-black text-slate-500 uppercase">Screens</div>
-                            <div class="text-xs font-black text-slate-800 mt-1">
-                                {% if s.screenshot_enabled %}On{% else %}Off{% endif %}
-                            </div>
+                            <div class="text-xs font-black text-slate-800 mt-1">{% if s.screenshot_enabled %}On{% else %}Off{% endif %}</div>
                         </div>
                         <div class="rounded-xl bg-slate-50 border border-slate-200 p-2">
                             <div class="text-[0.65rem] font-black text-slate-500 uppercase">Interval</div>
-                            <div class="text-xs font-black text-slate-800 mt-1">{{ s.screenshot_interval_minutes or 10
-                                }}m</div>
+                            <div class="text-xs font-black text-slate-800 mt-1">{{ s.screenshot_interval_minutes or 10 }}m</div>
                         </div>
                         <div class="rounded-xl bg-slate-50 border border-slate-200 p-2">
                             <div class="text-[0.65rem] font-black text-slate-500 uppercase">Agent</div>
-                            <div class="text-xs font-black text-slate-800 mt-1">{% if s.agent_installed %}Yes{% else
-                                %}No{% endif %}</div>
+                            <div class="text-xs font-black text-slate-800 mt-1">{% if s.agent_installed %}Yes{% else %}No{% endif %}</div>
                         </div>
                     </div>
 
+                    <div class="text-xs font-bold text-slate-500">
+                        Assigned: <span class="text-slate-800">{{ s.assigned_employee_name or 'Unassigned' }}</span>
+                    </div>
+
                     <div class="flex flex-wrap gap-2">
-                        <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 transition-all text-center">
+                        <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=s.id) }}" class="flex-1 px-3 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-bolt mr-1.5"></i>Controls
                         </a>
-                        <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
+                        <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=s.id) }}" class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-images mr-1.5"></i>Images
                         </a>
-                        <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
+                        <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=s.id) }}" class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-clipboard-list mr-1.5"></i>Logs
                         </a>
-                        <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
+                        <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=s.id) }}" class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-chart-simple mr-1.5"></i>Prod
                         </a>
                     </div>
                 </div>
-                {% else %}
+                {% endfor %}
             </div>
-            <div class="p-10 text-center text-slate-500">
-                <div
-                    class="w-14 h-14 mx-auto rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 mb-3">
-                    <i class="fa-solid fa-circle-info text-slate-300 text-2xl"></i>
-                </div>
-                <div class="text-sm font-bold text-slate-800">No systems found</div>
-                <div class="text-xs text-slate-500 mt-1">Once an agent checks in, it will appear here.</div>
-            </div>
-            {% endfor %}
         </div>
+        {% else %}
+        <div class="p-10 text-center text-slate-500">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 mb-3">
+                <i class="fa-solid fa-circle-info text-slate-300 text-2xl"></i>
+            </div>
+            <div class="text-sm font-bold text-slate-800">No systems found</div>
+            <div class="text-xs text-slate-500 mt-1">Once an agent checks in, it will appear here.</div>
+        </div>
+        {% endif %}
+
+        {% if pagination and pagination.pages > 1 %}
+        <div class="px-5 py-4 border-t border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="text-xs font-bold text-slate-500">
+                Showing page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} systems
+            </div>
+            <div class="flex items-center gap-1">
+                {% if pagination.has_prev %}
+                <a href="{{ url_for('asset_mgmt.system_controls', q=q, page=pagination.prev_num) }}" class="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:text-indigo-700 hover:border-indigo-200">Prev</a>
+                {% endif %}
+                {% for p in pagination.iter_pages() %}
+                    {% if p %}
+                    <a href="{{ url_for('asset_mgmt.system_controls', q=q, page=p) }}" class="min-w-9 px-3 py-2 rounded-lg text-center text-xs font-bold {% if p == pagination.page %}bg-indigo-600 text-white{% else %}border border-slate-200 bg-white text-slate-600 hover:text-indigo-700 hover:border-indigo-200{% endif %}">{{ p }}</a>
+                    {% else %}
+                    <span class="px-2 text-slate-400">...</span>
+                    {% endif %}
+                {% endfor %}
+                {% if pagination.has_next %}
+                <a href="{{ url_for('asset_mgmt.system_controls', q=q, page=pagination.next_num) }}" class="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:text-indigo-700 hover:border-indigo-200">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
-
-<script>
-    // Global Controls Panel Functions - Must be defined BEFORE the page loads
-    let currentServerId = null;
-
-    function expandSystemControls(btn, serverId) {
-        currentServerId = serverId;
-        const panel = document.getElementById('controlsPanel');
-        const title = document.getElementById('controlsPanelTitle');
-        const screensLink = document.getElementById('controlsScreensLink');
-        const productivityLink = document.getElementById('controlsProductivityLink');
-        const logsLink = document.getElementById('controlsLogsLink');
-        const hostname = btn.parentElement.parentElement.querySelector('.text-sm.font-black').textContent;
-
-        title.textContent = 'System Controls - ' + hostname;
-        screensLink.href = '{{ url_for("asset_mgmt.remote_control_screenshots", server_id=0) }}'.replace('/0', '/' + serverId);
-        productivityLink.href = '{{ url_for("asset_mgmt.remote_control_productivity", server_id=0) }}'.replace('/0', '/' + serverId);
-        logsLink.href = '{{ url_for("asset_mgmt.remote_control_logs", server_id=0) }}'.replace('/0', '/' + serverId);
-
-        // Enable run button
-        document.getElementById('termRunBtn').disabled = false;
-        document.getElementById('termCmd').focus();
-
-        panel.classList.remove('hidden');
-    }
-
-    function closeControlsPanel() {
-        document.getElementById('controlsPanel').classList.add('hidden');
-        document.getElementById('termContainer').classList.add('hidden');
-        document.getElementById('termCmd').value = '';
-        document.getElementById('termOut').textContent = '';
-        document.getElementById('termErrors').classList.add('hidden');
-        document.getElementById('termExitCode').classList.add('hidden');
-        currentServerId = null;
-    }
-
-    async function runTerminal() {
-        const cmd = document.getElementById('termCmd').value.trim();
-        if (!cmd || !currentServerId) {
-            alert('Enter a command and select a system');
-            return;
-        }
-
-        const btn = document.getElementById('termRunBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Running...';
-
-        try {
-            const res = await fetch('/api/v2/commands', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ server_id: currentServerId, command: cmd, timeout_seconds: 120 })
-            });
-            const data = await res.json();
-            if (data.success) {
-                document.getElementById('termContainer').classList.remove('hidden');
-                document.getElementById('termStatus').textContent = 'pending';
-                document.getElementById('termStatus').className = 'text-xs font-black px-2 py-1 rounded-full bg-amber-200 text-amber-700';
-                pollCommandStatus(data.command_id);
-            } else {
-                alert('Error: ' + (data.error || 'Failed to execute command'));
-            }
-        } catch (e) {
-            alert('Error: ' + e.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-play mr-1.5"></i>Run';
-        }
-    }
-
-    function pollCommandStatus(commandId) {
-        const pollInterval = setInterval(async () => {
-            try {
-                const res = await fetch('/api/v2/commands/' + commandId);
-                const data = await res.json();
-                if (data.success) {
-                    const status = document.getElementById('termStatus');
-                    const output = document.getElementById('termOut');
-                    const errors = document.getElementById('termErrors');
-                    const errText = document.getElementById('termErrText');
-                    const exitCode = document.getElementById('termExitCode');
-                    const exitCodeVal = document.getElementById('termExitCodeVal');
-
-                    output.textContent = data.output || '(no output)';
-
-                    if (data.error_output) {
-                        errors.classList.remove('hidden');
-                        errText.textContent = data.error_output;
-                    } else {
-                        errors.classList.add('hidden');
-                    }
-
-                    if (data.status === 'completed') {
-                        status.textContent = 'completed';
-                        status.className = 'text-xs font-black px-2 py-1 rounded-full bg-emerald-200 text-emerald-700';
-                        if (data.exit_code !== null && data.exit_code !== undefined) {
-                            exitCode.classList.remove('hidden');
-                            exitCodeVal.textContent = data.exit_code;
-                            exitCodeVal.className = data.exit_code === 0 ? 'font-mono text-emerald-600 font-bold' : 'font-mono text-rose-600 font-bold';
-                        }
-                        clearInterval(pollInterval);
-                    } else if (data.status === 'failed') {
-                        status.textContent = 'failed';
-                        status.className = 'text-xs font-black px-2 py-1 rounded-full bg-rose-200 text-rose-700';
-                        if (data.exit_code !== null && data.exit_code !== undefined) {
-                            exitCode.classList.remove('hidden');
-                            exitCodeVal.textContent = data.exit_code;
-                            exitCodeVal.className = 'font-mono text-rose-600 font-bold';
-                        }
-                        clearInterval(pollInterval);
-                    } else {
-                        status.textContent = 'running';
-                        status.className = 'text-xs font-black px-2 py-1 rounded-full bg-blue-200 text-blue-700';
-                    }
-                }
-            } catch (e) {
-                console.error('Poll error:', e);
-                clearInterval(pollInterval);
-            }
-        }, 500);
-    }
-</script>
 
 <script>
     (function () {
-        // Debounced search for system controls to avoid UI jank when many rows exist
-        const input = document.getElementById('sysSearch');
-        const rows = Array.from(document.querySelectorAll('.sys-row'));
-        if (!input) return;
+        const tableView = document.getElementById('sysTableView');
+        const gridView = document.getElementById('sysGridView');
+        const tableBtn = document.getElementById('tableViewBtn');
+        const gridBtn = document.getElementById('gridViewBtn');
+        const activeClass = ['bg-white', 'text-indigo-700', 'shadow-sm'];
+        const inactiveClass = ['text-slate-600'];
 
-        let searchTimeout = null;
-        function applySysFilter() {
-            const q = (input.value || '').trim().toLowerCase();
-            // Batch DOM updates with requestAnimationFrame
-            requestAnimationFrame(() => {
-                rows.forEach(r => {
-                    const h = r.dataset.h || '';
-                    const ip = r.dataset.ip || '';
-                    const show = !q || h.includes(q) || ip.includes(q);
-                    r.style.display = show ? '' : 'none';
-                });
-            });
+        function setMode(mode) {
+            const useGrid = mode === 'grid';
+            if (tableView) tableView.classList.toggle('hidden', useGrid);
+            if (gridView) gridView.classList.toggle('hidden', !useGrid);
+            tableBtn.classList.remove(...activeClass, ...inactiveClass);
+            gridBtn.classList.remove(...activeClass, ...inactiveClass);
+            tableBtn.classList.add(...(useGrid ? inactiveClass : activeClass));
+            gridBtn.classList.add(...(useGrid ? activeClass : inactiveClass));
+            localStorage.setItem('systemControlsView', useGrid ? 'grid' : 'table');
         }
 
-        input.addEventListener('input', () => {
-            if (searchTimeout) clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                applySysFilter();
-            }, 250);
-        });
+        if (tableBtn && gridBtn) {
+            tableBtn.addEventListener('click', () => setMode('table'));
+            gridBtn.addEventListener('click', () => setMode('grid'));
+            setMode(localStorage.getItem('systemControlsView') || 'table');
+        }
     })();
 </script>
-
-<!-- Inline Controls Panel -->
-<div id="controlsPanel" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
-    onclick="closeControlsPanel()">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-        onclick="event.stopPropagation()">
-        <!-- Header -->
-        <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-            <h3 class="text-lg font-black text-slate-900" id="controlsPanelTitle">System Controls</h3>
-            <button onclick="closeControlsPanel()" class="text-slate-400 hover:text-slate-600 text-2xl">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-
-        <!-- Content -->
-        <div class="p-6 space-y-6">
-            <!-- Terminal Section -->
-            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
-                <h4 class="text-sm font-black text-slate-900 mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-terminal text-indigo-600"></i>Execute Command
-                </h4>
-                <div class="flex flex-col gap-3">
-                    <input id="termCmd" type="text" placeholder="Example: whoami, Get-ComputerInfo, systeminfo"
-                        class="px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
-                    <button id="termRunBtn" onclick="runTerminal()" disabled type="button"
-                        class="px-4 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fa-solid fa-play mr-1.5"></i>Run
-                    </button>
-                </div>
-
-                <!-- Terminal Output -->
-                <div id="termContainer" class="hidden mt-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-bold text-slate-600 uppercase">Output</span>
-                        <span id="termStatus"
-                            class="text-xs font-black px-2 py-1 rounded-full bg-slate-200 text-slate-700">pending</span>
-                    </div>
-                    <pre id="termOut"
-                        class="max-h-48 overflow-auto bg-slate-900 text-emerald-400 p-3 rounded-lg text-xs font-mono border border-slate-700 whitespace-pre-wrap break-words"></pre>
-                    <div id="termErrors" class="hidden mt-3 bg-rose-50 border border-rose-200 rounded-lg p-3">
-                        <p class="text-xs font-bold text-rose-700 mb-1">Error Output:</p>
-                        <pre id="termErrText"
-                            class="text-xs font-mono text-rose-600 max-h-32 overflow-auto whitespace-pre-wrap break-words"></pre>
-                    </div>
-                    <div id="termExitCode" class="hidden mt-2 text-xs text-slate-600">
-                        <span class="font-bold">Exit Code:</span> <span id="termExitCodeVal" class="font-mono"></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quick Links -->
-            <div class="flex flex-wrap gap-2 justify-center">
-                <a href="#" id="controlsScreensLink"
-                    class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                    <i class="fa-solid fa-images mr-1.5"></i>Live Screenshots
-                </a>
-                <a href="#" id="controlsProductivityLink"
-                    class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                    <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
-                </a>
-                <a href="#" id="controlsLogsLink"
-                    class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                    <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 {% endblock %}

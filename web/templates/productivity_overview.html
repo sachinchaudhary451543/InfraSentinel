@@ -18,13 +18,14 @@
     
     <div class="mt-4 md:mt-0 flex flex-col sm:flex-row sm:items-center gap-2">
         <form method="GET" class="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+            {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
             <input type="date" name="date" value="{{ selected_date }}" 
                 class="px-3 py-2 text-sm font-bold text-slate-700 bg-transparent outline-none cursor-pointer">
             <button type="submit" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">
                 Apply
             </button>
         </form>
-        <a href="{{ url_for('asset_mgmt.productivity_export', date=selected_date) }}" class="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">
+        <a href="{{ url_for('asset_mgmt.productivity_export', date=selected_date, q=q) }}" class="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">
             <i class="fa-solid fa-file-csv mr-2"></i>Download CSV
         </a>
     </div>
@@ -36,12 +37,13 @@
       <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
         <i class="fa-solid fa-users text-indigo-500"></i> Active Workforce
       </h3>
-      <div class="relative w-full sm:w-72">
+      <form method="GET" class="relative w-full sm:w-72">
+        <input type="hidden" name="date" value="{{ selected_date }}">
         <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-        <input type="text" id="empSearchInput" placeholder="Search employee name, email, device..."
+        <input type="text" id="empSearchInput" name="q" value="{{ q or '' }}" placeholder="Search employee name, email, device..."
           class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
-          oninput="filterEmployees()">
-      </div>
+          autocomplete="off">
+      </form>
     </div>
     
     {% if employees %}
@@ -132,21 +134,30 @@
       <div class="text-sm text-slate-500 max-w-md mx-auto">Employees will appear here automatically when agents start reporting activity and the Identity Correlation Engine links them.</div>
     </div>
     {% endif %}
+
+    {% if pagination and pagination.pages > 1 %}
+    <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="text-xs font-bold text-slate-500">
+        Showing page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} employees
+      </div>
+      <div class="flex items-center gap-1">
+        {% if pagination.has_prev %}
+        <a href="{{ url_for(request.endpoint, date=selected_date, q=q, page=pagination.prev_num) }}" class="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:text-indigo-700 hover:border-indigo-200">Prev</a>
+        {% endif %}
+        {% for p in pagination.iter_pages() %}
+          {% if p %}
+          <a href="{{ url_for(request.endpoint, date=selected_date, q=q, page=p) }}" class="min-w-9 px-3 py-2 rounded-lg text-center text-xs font-bold {% if p == pagination.page %}bg-indigo-600 text-white{% else %}border border-slate-200 bg-white text-slate-600 hover:text-indigo-700 hover:border-indigo-200{% endif %}">{{ p }}</a>
+          {% else %}
+          <span class="px-2 text-slate-400">...</span>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.has_next %}
+        <a href="{{ url_for(request.endpoint, date=selected_date, q=q, page=pagination.next_num) }}" class="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:text-indigo-700 hover:border-indigo-200">Next</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 
 </div>
-
-<script>
-function filterEmployees() {
-  const query = document.getElementById('empSearchInput').value.toLowerCase().trim();
-  const rows = document.querySelectorAll('tbody tr');
-  let visible = 0;
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const match = !query || text.includes(query);
-    row.style.display = match ? '' : 'none';
-    if (match) visible++;
-  });
-}
-</script>
 {% endblock %}

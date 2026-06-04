@@ -1300,6 +1300,12 @@ def agent_metrics():
         server_id = server.id
         tenant_id = server.tenant_id
         try:
+            from web.models import SystemAlert
+            active_alerts_count = SystemAlert.query.filter_by(server_id=server_id, is_active=True).count()
+        except Exception as e:
+            logger.warning(f"Active alert count unavailable for server {server_id}: {e}")
+            active_alerts_count = 0
+        try:
             # Notify UI if server just transitioned to online
             if prev_status != 'online':
                 try:
@@ -1318,6 +1324,7 @@ def agent_metrics():
                     'server_id': server_id,
                     'timestamp': now.isoformat() + 'Z',
                     'metrics':   {'cpu': cpu, 'ram': ram, 'disk': disk},
+                    'alert_count': active_alerts_count,
                 }, room=str(tenant_id))
             except Exception as e:
                 logger.error(f"SocketIO emit failed: {e}")
