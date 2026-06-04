@@ -20,6 +20,12 @@ Architecture:
   • Local database caches Azure AD data
 """
 
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception:
+    pass
+
 import logging
 import os
 import sys
@@ -28,11 +34,6 @@ from datetime import timedelta
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from gevent import monkey
-    monkey.patch_all()
-except Exception:
-    pass
 
 from flask import Flask, render_template, redirect, url_for, session
 from flask_socketio import SocketIO
@@ -89,13 +90,19 @@ db.init_app(app)
 CORS(app, supports_credentials=True)
 
 # WebSockets
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode='gevent',
-    ping_timeout=60,
-    ping_interval=25
-)
+socketio_kwargs = {
+    "cors_allowed_origins": "*",
+    "async_mode": 'gevent',
+    "ping_timeout": 60,
+    "ping_interval": 25
+}
+
+redis_url = os.environ.get('REDIS_URL')
+if redis_url:
+    socketio_kwargs["message_queue"] = redis_url
+    logger.info("Socket.IO initialized with Redis Message Queue adapter")
+
+socketio = SocketIO(app, **socketio_kwargs)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROUTE REGISTRATION

@@ -3,6 +3,12 @@ Unified ServerMonitor App
 Combines Intune-like Administration and Performance Metrics Monitoring.
 """
 
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception:
+    pass
+
 import logging
 import os
 import sys
@@ -39,11 +45,6 @@ load_env_file()
 # Add parent directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from gevent import monkey
-    monkey.patch_all()
-except Exception:
-    pass
 
 from flask import Flask, redirect, url_for, session, g, request
 from flask_login import LoginManager
