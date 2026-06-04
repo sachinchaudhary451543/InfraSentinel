@@ -11,7 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     FLASK_APP=web/app.py \
     FLASK_ENV=production \
-    FLASK_DEBUG=0
+    FLASK_DEBUG=0 \
+    WEB_CONCURRENCY=1 \
+    GUNICORN_WORKER_CONNECTIONS=1000
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -45,11 +47,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run with Gunicorn + Gevent for production
 CMD ["sh", "-c", "gunicorn \
     -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
-    -w 4 \
+    -w ${WEB_CONCURRENCY:-1} \
+    --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} \
     -b 0.0.0.0:${PORT:-8080} \
-    --access-logfile - \
+    --access-logfile /dev/null \
     --error-logfile - \
-    --log-level info \
+    --log-level warning \
     --timeout 120 \
     --graceful-timeout 30 \
     --keep-alive 10 \
