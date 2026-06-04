@@ -96,17 +96,14 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 animate-fade-up" style="animation-delay: 50ms;">
         <div
             class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-emerald-200 transition-all">
-            <div
-                class="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full blur-2xl group-hover:bg-emerald-100 transition-colors">
-            </div>
             <div class="relative z-10">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Active Time</h3>
-                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center"><i
+                    <div class="w-8 h-8 shrink-0 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center"><i
                             class="fa-solid fa-keyboard"></i></div>
                 </div>
                 <div class="flex items-baseline gap-2">
-                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                    <div class="text-3xl xl:text-4xl font-extrabold text-slate-800 whitespace-nowrap" style="font-family:'Outfit',sans-serif">{{
                         active_str }}</div>
                 </div>
             </div>
@@ -114,17 +111,14 @@
 
         <div
             class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-amber-200 transition-all">
-            <div
-                class="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full blur-2xl group-hover:bg-amber-100 transition-colors">
-            </div>
             <div class="relative z-10">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Idle Time</h3>
-                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><i
+                    <div class="w-8 h-8 shrink-0 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><i
                             class="fa-solid fa-mug-hot"></i></div>
                 </div>
                 <div class="flex items-baseline gap-2">
-                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                    <div class="text-3xl xl:text-4xl font-extrabold text-slate-800 whitespace-nowrap" style="font-family:'Outfit',sans-serif">{{
                         idle_str }}</div>
                 </div>
             </div>
@@ -132,17 +126,14 @@
 
         <div
             class="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] relative overflow-hidden group hover:border-indigo-200 transition-all">
-            <div
-                class="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full blur-2xl group-hover:bg-indigo-100 transition-colors">
-            </div>
             <div class="relative z-10">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">Productive Apps</h3>
-                    <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center"><i
+                    <div class="w-8 h-8 shrink-0 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center"><i
                             class="fa-solid fa-bullseye"></i></div>
                 </div>
                 <div class="flex items-baseline gap-2">
-                    <div class="text-4xl font-extrabold text-slate-800" style="font-family:'Outfit',sans-serif">{{
+                    <div class="text-3xl xl:text-4xl font-extrabold text-slate-800 whitespace-nowrap" style="font-family:'Outfit',sans-serif">{{
                         prod_str }}</div>
                 </div>
             </div>
@@ -226,7 +217,7 @@
                         {% for session in sessions %}
                         <div class="relative pl-6">
                             <div
-                                class="absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white 
+                                class="absolute -left-[10px] top-2 w-4 h-4 rounded-full border-2 border-white 
                               {% if session.idle_minutes > session.active_minutes %}bg-amber-400{% else %}bg-emerald-500{% endif %}">
                             </div>
 

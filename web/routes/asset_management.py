@@ -1330,7 +1330,7 @@ def system_controls():
         from web.models import EmployeeDeviceAssignment, Employee
         search_query = (request.args.get('q') or '').strip()
         page = max(1, request.args.get('page', 1, type=int))
-        per_page = 20
+        per_page = 100
         q = Server.query
         tenant_id = current_user.tenant_id if not current_user.is_superadmin else None
         
@@ -1382,7 +1382,7 @@ def productivity_overview():
         tenant_id = current_user.tenant_id
         search_query = (request.args.get('q') or '').strip()
         page = max(1, request.args.get('page', 1, type=int))
-        per_page = 20
+        per_page = 100
         
         # Get target date from query args or default to today
         date_str = (request.args.get('date') or '').strip()
@@ -1498,7 +1498,8 @@ def productivity_screenshots():
 @login_required
 def employee_productivity_detail(employee_id):
     """HR View: Deep dive into a specific employee's productivity."""
-    from web.models import ActivitySession, AttendanceRecord, AppUsage
+    from types import SimpleNamespace
+    from web.models import ActivitySession, AttendanceRecord, AppUsage, EmployeeActivity
     try:
         tenant_id = current_user.tenant_id
         
@@ -1534,17 +1535,41 @@ def employee_productivity_detail(employee_id):
             if attendance.last_activity:
                 attendance_last_activity_display = attendance.last_activity.replace(tzinfo=pytz.UTC).astimezone(ist)
         
-        day_start, day_end = _local_day_bounds_utc_naive(target_date)
+        day_start = ist.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.UTC).replace(tzinfo=None)
+        day_end = ist.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.UTC).replace(tzinfo=None)
         sessions = ActivitySession.query.filter(
             ActivitySession.employee_id == emp.id,
             ActivitySession.start_time >= day_start,
             ActivitySession.start_time <= day_end
         ).order_by(ActivitySession.start_time.asc()).all()
-        
-        # Aggregate totals (now stored as seconds due to ProductivityEngine precision change)
-        active_sec = sum(s.active_minutes or 0 for s in sessions)
-        idle_sec = sum(s.idle_minutes or 0 for s in sessions)
-        prod_sec = sum(s.productive_minutes or 0 for s in sessions)
+
+        activity_rows = EmployeeActivity.query.filter(
+            EmployeeActivity.tenant_id == tenant_id,
+            EmployeeActivity.employee_id == emp.id,
+            EmployeeActivity.timestamp >= day_start,
+            EmployeeActivity.timestamp <= day_end
+        ).order_by(EmployeeActivity.timestamp.asc()).all()
+
+        productive_keywords = [
+            'excel', 'word', 'outlook', 'teams', 'slack', 'zoom', 'chrome', 'edge',
+            'msedge', 'code', 'studio', 'powershell', 'terminal', 'cmd', 'ssh',
+            'postman', 'mstsc', 'explorer', 'copilot'
+        ]
+        sample_seconds = 30
+        activity_active_sec = sum(sample_seconds for a in activity_rows if int(a.idle_time or 0) < 60)
+        activity_idle_sec = sum(sample_seconds for a in activity_rows if int(a.idle_time or 0) >= 60)
+        activity_prod_sec = sum(
+            sample_seconds for a in activity_rows
+            if int(a.idle_time or 0) < 60 and any(k in (a.app or '').lower() for k in productive_keywords)
+        )
+
+        session_active_sec = sum(s.active_minutes or 0 for s in sessions)
+        session_idle_sec = sum(s.idle_minutes or 0 for s in sessions)
+        session_prod_sec = sum(s.productive_minutes or 0 for s in sessions)
+
+        active_sec = max(session_active_sec, activity_active_sec)
+        idle_sec = max(session_idle_sec, activity_idle_sec)
+        prod_sec = max(session_prod_sec, activity_prod_sec)
         
         active_str = _seconds_to_hms(active_sec)
         idle_str = _seconds_to_hms(idle_sec)
@@ -1561,6 +1586,22 @@ def employee_productivity_detail(employee_id):
             s_idle_sec = s.idle_minutes or 0
             s.active_str = _seconds_to_hms(s_active_sec)
             s.idle_str = _seconds_to_hms(s_idle_sec)
+
+        if not sessions and activity_rows:
+            first_activity = activity_rows[0].timestamp
+            last_activity = activity_rows[-1].timestamp
+            synthetic = SimpleNamespace(
+                id='activity',
+                start_time=first_activity,
+                end_time=last_activity,
+                start_time_display=first_activity.replace(tzinfo=pytz.UTC).astimezone(ist) if first_activity else None,
+                end_time_display=last_activity.replace(tzinfo=pytz.UTC).astimezone(ist) if last_activity else None,
+                active_minutes=activity_active_sec,
+                idle_minutes=activity_idle_sec,
+                active_str=_seconds_to_hms(activity_active_sec),
+                idle_str=_seconds_to_hms(activity_idle_sec),
+            )
+            sessions = [synthetic]
 
         if not attendance and sessions:
             attendance_status = 'sessions'
@@ -1587,6 +1628,14 @@ def employee_productivity_detail(employee_id):
             if name not in app_stats:
                 app_stats[name] = {'duration': 0, 'classification': app.classification}
             app_stats[name]['duration'] += (app.duration_seconds or 0)
+
+        for activity in activity_rows:
+            name = activity.app or 'Unknown'
+            if name not in app_stats:
+                app_lower = name.lower()
+                classification = 'productive' if any(k in app_lower for k in productive_keywords) else 'neutral'
+                app_stats[name] = {'duration': 0, 'classification': classification}
+            app_stats[name]['duration'] += sample_seconds
             
         # Convert app_stats to list and sort
         total_app_seconds = sum(data['duration'] for data in app_stats.values())
