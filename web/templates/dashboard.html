@@ -1992,8 +1992,6 @@
             if (tab === 'live') {
                 setTimeout(() => {
                     if (window.refreshCharts) refreshCharts();
-                    if (window.loadHistoricalDataForAll) loadHistoricalDataForAll();
-                    if (window.refreshForecasts) refreshForecasts();
                 }, 100);
             }
         }
@@ -2332,8 +2330,6 @@
 
             if (tab === 'live') {
                 refreshCharts();
-                loadHistoricalDataForAll();
-                refreshForecasts();
             }
         }
 
@@ -3076,8 +3072,6 @@
                         if (!card.dataset.initialized && serverId) {
                             card.dataset.initialized = 'true';
                             initChartsWhenReady(serverId);
-                            loadHistoricalData(serverId, selectedHistoryRange).catch(() => null);
-                            loadForecast(serverId).catch(() => null);
                         }
                     }
                 });

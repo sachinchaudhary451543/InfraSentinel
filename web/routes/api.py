@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 api_bp = Blueprint('api', __name__)
 
 LOCAL_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Kolkata'))
+_PRODUCTIVITY_TASK_LAST = {}
+_PRODUCTIVITY_TASK_MIN_INTERVAL_SECONDS = 30
 
 
 def _as_utc_naive(dt):
@@ -176,7 +178,7 @@ def _process_productivity_background(tenant_id, server_id, logged_in_user,
                 idle_time_seconds=idle_time_seconds,
                 timestamp=timestamp,
             )
-            logger.info("ProductivityEngine background processed successfully")
+            logger.debug("ProductivityEngine background processed successfully")
     except Exception as e:
         logger.error(f"Background ProductivityEngine failed: {e}", exc_info=True)
 
@@ -1006,11 +1008,11 @@ def agent_metrics():
     from web.models import db, Server, Metric, Screenshot, EmployeeActivity, EmployeeDeviceAssignment
     import traceback
 
-    logger.info("📥 Metrics endpoint called")
+    logger.debug("Metrics endpoint called")
     
     try:
         data = request.get_json(silent=True) or {}
-        logger.info(f"Received payload keys: {list(data.keys())}")
+        logger.debug(f"Received payload keys: {list(data.keys())}")
         
         api_key  = data.get('api_key') or data.get('agent_key', '')
         hostname = (data.get('hostname') or '').strip()
@@ -1023,7 +1025,7 @@ def agent_metrics():
         window_title = (activity_payload.get('window_title') or data.get('window_title') or '').strip()
         browser_url = (activity_payload.get('browser_url') or activity_payload.get('url') or data.get('browser_url') or '').strip()
 
-        logger.info(f"Parsed: user={logged_in_user}, app={active_app}, idle={idle_time_seconds}")
+        logger.debug(f"Parsed: user={logged_in_user}, app={active_app}, idle={idle_time_seconds}")
         
         # ── Resolve the Server record ──────────────────────────────────────────
         server = None
@@ -1147,7 +1149,7 @@ def agent_metrics():
         
         metric.details = json.dumps(details_obj)
         db.session.add(metric)
-        logger.info("Metric row created, added to session")
+        logger.debug("Metric row created, added to session")
 
         # ── Employee activity (logged_in_user) ────────────────────────────────
         if logged_in_user:
@@ -1179,28 +1181,37 @@ def agent_metrics():
                 logger.debug(f"Could not link activity to employee: {e}")
             
             db.session.add(activity)
-            logger.info(f"Employee activity added: user={logged_in_user}, tenant_id={server.tenant_id}")
+            logger.debug(f"Employee activity added: user={logged_in_user}, tenant_id={server.tenant_id}")
 
             # Commit activity before calling ProductivityEngine to avoid database locks
             try:
                 _retry_db_commit(db)
-                logger.info("Activity committed")
+                logger.debug("Activity committed")
             except Exception as commit_err:
                 logger.warning(f"Failed to commit employee activity: {commit_err}")
 
             try:
-                from web.app import socketio as socketio_instance
-                socketio_instance.start_background_task(
-                    _process_productivity_background,
-                    server.tenant_id,
-                    server.id,
-                    logged_in_user,
-                    active_app,
-                    window_title,
-                    browser_url,
-                    int(max(0, idle_time_seconds)),
-                    now
+                productivity_key = (server.id, (logged_in_user or '').strip().lower())
+                last_task_at = _PRODUCTIVITY_TASK_LAST.get(productivity_key)
+                should_schedule = (
+                    last_task_at is None
+                    or (now - last_task_at).total_seconds() >= _PRODUCTIVITY_TASK_MIN_INTERVAL_SECONDS
                 )
+
+                if should_schedule:
+                    _PRODUCTIVITY_TASK_LAST[productivity_key] = now
+                    from web.app import socketio as socketio_instance
+                    socketio_instance.start_background_task(
+                        _process_productivity_background,
+                        server.tenant_id,
+                        server.id,
+                        logged_in_user,
+                        active_app,
+                        window_title,
+                        browser_url,
+                        int(max(0, idle_time_seconds)),
+                        now
+                    )
             except Exception as e:
                 logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
 
@@ -1284,10 +1295,10 @@ def agent_metrics():
             except Exception as e:
                 logger.warning(f"SocketIO is unavailable for screenshot emit: {e}")
 
-        logger.info("About to commit final transaction")
+        logger.debug("About to commit final transaction")
         try:
             _retry_db_commit(db)
-            logger.info("Final commit successful")
+            logger.debug("Final commit successful")
         except OperationalError as exc:
             logger.error(f"Agent metrics failed due to locked database during commit: {exc}")
             return jsonify({'success': False, 'error': 'Database is busy. Try again shortly.'}), 503
@@ -1331,7 +1342,7 @@ def agent_metrics():
         except Exception as e:
             logger.warning(f"SocketIO background task skipped: {e}")
 
-        logger.info("Metrics endpoint returning success")
+        logger.debug("Metrics endpoint returning success")
         return jsonify({
             'success':                    True,
             'server_id':                  server_id,
