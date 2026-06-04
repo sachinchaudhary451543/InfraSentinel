@@ -365,16 +365,21 @@ def _build_productivity_rows(tenant_id, target_date):
     # Convert IST day bounds to UTC-naive for correct DB comparison.
     # The DB stores timestamps in UTC, so "target_date 00:00 IST" must become
     # "target_date-1 18:30 UTC" for IST (UTC+5:30).
+    # Use IST‑naïve timestamps for day bounds to match the format stored in the DB.
     local_start = ist.localize(datetime.combine(target_date, datetime.min.time()))
     local_end = ist.localize(datetime.combine(target_date, datetime.max.time()))
-    day_start = local_start.astimezone(pytz.UTC).replace(tzinfo=None)
-    day_end = local_end.astimezone(pytz.UTC).replace(tzinfo=None)
+    # Strip timezone info to obtain naive IST timestamps.
+    day_start = local_start.replace(tzinfo=None)
+    day_end = local_end.replace(tzinfo=None)
+    # Debug logging for verification
+    logger.debug(f"Productivity query bounds for {target_date}: start={day_start}, end={day_end}")
 
     sessions = ActivitySession.query.filter(
         ActivitySession.tenant_id == tenant_id,
         ActivitySession.start_time >= day_start,
         ActivitySession.start_time <= day_end
     ).all()
+    logger.debug(f"Fetched {len(sessions)} activity sessions for tenant {tenant_id} on {target_date}")
 
     device_maps = _build_employee_device_maps(tenant_id, day_start, day_end)
     emp_rows = []
