@@ -35,10 +35,10 @@ def _today_local():
 
 
 def _local_day_bounds_utc_naive(target_date):
-    start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=LOCAL_TZ)
-    end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
-    utc = ZoneInfo('UTC')
-    return start.astimezone(utc).replace(tzinfo=None), end.astimezone(utc).replace(tzinfo=None)
+    # The DB stores timestamps as local naive (IST).
+    start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
+    end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, 999999)
+    return start, end
 
 
 def _seconds_to_hms(value):

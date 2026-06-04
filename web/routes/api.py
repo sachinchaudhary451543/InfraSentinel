@@ -46,9 +46,9 @@ def _as_local(dt):
 
 
 def _local_day_bounds_utc_naive(day):
-    start_local = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=LOCAL_TZ)
-    end_local = datetime(day.year, day.month, day.day, 23, 59, 59, 999999, tzinfo=LOCAL_TZ)
-    return _as_utc_naive(start_local), _as_utc_naive(end_local)
+    start_local = datetime(day.year, day.month, day.day, 0, 0, 0)
+    end_local = datetime(day.year, day.month, day.day, 23, 59, 59, 999999)
+    return start_local, end_local
 
 
 def _queue_remote_command(db, RemoteCommand, server_id, command, *, parameters=None, timeout_seconds=120, created_by=None):
