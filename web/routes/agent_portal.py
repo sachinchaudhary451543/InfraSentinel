@@ -158,7 +158,7 @@ $ServerId = {server.id}
 $ApiUrl = "{server_url}/api/metrics"
 $RegisterUrl = "{server_url}/api/register_agent"
 $SerialNumber = "{server.serial_number or ''}"
-$IntervalSeconds = 15
+$IntervalSeconds = 30
 
 Write-Host "Initializing ServerMonitor Bot for {server.hostname}..." -ForegroundColor Cyan
 

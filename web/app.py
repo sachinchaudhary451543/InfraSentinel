@@ -265,8 +265,15 @@ socketio_kwargs = {
     "ping_interval": 25,
 }
 if redis_url:
-    socketio_kwargs["message_queue"] = redis_url
-    logging.info("Socket.IO initialized with Redis Message Queue adapter (gevent async_mode)")
+    try:
+        import redis
+        # Test connection with a short timeout to prevent startup hangs
+        client = redis.Redis.from_url(redis_url, socket_timeout=2.0)
+        client.ping()
+        socketio_kwargs["message_queue"] = redis_url
+        logging.info("Socket.IO initialized with Redis Message Queue adapter (gevent async_mode)")
+    except Exception as e:
+        logging.error(f"Redis connection failed ({e}). Socket.IO falling back to in-memory mode – WebSocket sessions will NOT be shared across workers.")
 else:
     logging.warning("Socket.IO running without Redis – WebSocket sessions are NOT shared across workers.")
 

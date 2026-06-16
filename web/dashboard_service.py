@@ -12,7 +12,7 @@ from sqlalchemy import and_, func
 
 from web.models import (
     db, Server, Metric, AzureDevice, AzureUser, AzureDeviceOwner,
-    EmployeeAssetLog, SystemAlert, SystemDiscovery, VM, Screenshot, EmployeeActivity
+    EmployeeAssetLog, SystemAlert, SystemDiscovery, VM, EmployeeActivity
 )
 
 logger = logging.getLogger("[DASHBOARD_SERVICE]")
@@ -65,25 +65,9 @@ class OptimizedDashboardService:
                 for m in metrics_list:
                     latest_metrics[m.server_id] = m
                     
-            # ─── STEP 2b: Fetch latest screenshots and productivity (batch query) ───
-            latest_screenshots = {}
+            # ─── STEP 2b: Fetch latest productivity (batch query) ───
             productivity_stats = {}
             if server_ids:
-                # Screenshots
-                subq_ss = db.session.query(
-                    Screenshot.server_id,
-                    func.max(Screenshot.id).label('max_id')
-                ).filter(Screenshot.server_id.in_(server_ids)).group_by(Screenshot.server_id).subquery()
-                
-                ss_list = db.session.query(Screenshot).join(
-                    subq_ss, and_(
-                        Screenshot.server_id == subq_ss.c.server_id,
-                        Screenshot.id == subq_ss.c.max_id
-                    )
-                ).all()
-                for ss in ss_list:
-                    latest_screenshots[ss.server_id] = ss
-                    
                 # Productivity (Active vs Total counts today)
                 today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
                 activities = db.session.query(
@@ -264,16 +248,7 @@ class OptimizedDashboardService:
                 # Add VM count from relationship
                 setattr(s, 'vms_list', s.vms.all())
                 
-                # Add screenshot and productivity
-                ss = latest_screenshots.get(s.id)
-                latest_screenshot_url = None
-                if ss:
-                    try:
-                        latest_screenshot_url = url_for('api.api_screenshot_view', screenshot_id=ss.id)
-                    except RuntimeError:
-                        latest_screenshot_url = f"/api/screenshot/{ss.id}"
-                setattr(s, 'latest_screenshot_url', latest_screenshot_url)
-                
+                # Add productivity and resolved assigned user
                 prod = productivity_stats.get(s.id)
                 if prod:
                     setattr(s, 'productivity_str', prod['active_time_str'])
@@ -281,6 +256,15 @@ class OptimizedDashboardService:
                 else:
                     setattr(s, 'productivity_str', "—")
                     setattr(s, 'productivity_percent', 0)
+
+                # Resolve assigned user
+                assigned_user = owner_by_server_id.get(s.id)
+                if not assigned_user and s.azure_device_id:
+                    for adev in azure_devices:
+                        if adev.device_id == s.azure_device_id:
+                            assigned_user = owner_by_device_id.get(adev.id)
+                            break
+                setattr(s, 'assigned_user', assigned_user or 'Unassigned')
             
             servers_sorted = sorted(servers, key=lambda x: x.is_online, reverse=True)
             

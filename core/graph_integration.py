@@ -14,7 +14,7 @@ Functions:
 
 import logging
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import requests
 from sqlalchemy.exc import OperationalError
 
@@ -25,7 +25,7 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 def _make_graph_request(
     endpoint: str,
-    access_token: str,
+    access_token: Any,
     method: str = "GET",
     data: Optional[Dict] = None
 ) -> Optional[Dict]:
@@ -34,15 +34,20 @@ def _make_graph_request(
     
     Args:
         endpoint: Graph API endpoint (e.g., "/devices")
-        access_token: Bearer token for authentication
+        access_token: Bearer token for authentication (string or callable)
         method: HTTP method (GET, POST, etc.)
         data: Request body data
     
     Returns:
         Response JSON or None if failed
     """
+    token = access_token() if callable(access_token) else access_token
+    if not token:
+        logger.error("No access token available for Graph request")
+        return None
+
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
     
@@ -55,6 +60,18 @@ def _make_graph_request(
             response = requests.post(url, headers=headers, json=data, timeout=30)
         else:
             return None
+        
+        # If response is 401 Unauthorized and access_token is callable, force refresh and retry once.
+        if response.status_code == 401 and callable(access_token):
+            logger.warning("Graph API 401: Token expired. Retrying with a refreshed token...")
+            token = access_token(force_refresh=True)
+            if token:
+                headers = headers.copy()
+                headers["Authorization"] = f"Bearer {token}"
+                if method == "GET":
+                    response = requests.get(url, headers=headers, timeout=30)
+                elif method == "POST":
+                    response = requests.post(url, headers=headers, json=data, timeout=30)
         
         if response.status_code in [200, 201]:
             return response.json()

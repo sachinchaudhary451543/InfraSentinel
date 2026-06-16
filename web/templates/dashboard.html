@@ -1579,14 +1579,19 @@
         <!-- Telemetry Header -->
         <div class="telemetry-header">
             <div>
-                <div class="noc-title" style="font-size:0.9rem;">
+                <div class="noc-title" style="font-size:0.9rem; margin-bottom:8px;">
                     <i class="fa-solid fa-radar" style="color:var(--noc-cyan);"></i>
-                    Global Telemetry Matrix
+                    Live Monitor Console
                 </div>
-                <div class="noc-subtitle" style="margin-top:6px;">Real-time resource streams &amp; predictive AI
-                    analysis</div>
+                <div class="noc-subtitle">Real-time resource streams &amp; predictive AI analysis</div>
             </div>
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <select id="liveServerSelect" class="noc-select" onchange="onLiveServerChange(this.value)" style="min-width:280px;">
+                    <option value="">-- Select System / Employee --</option>
+                    {% for server in servers %}
+                    <option value="{{ server.id }}">{{ server.hostname }} ({% if server.assigned_user %}{{ server.assigned_user }}{% else %}Unassigned{% endif %})</option>
+                    {% endfor %}
+                </select>
                 <select id="historyRange" class="noc-select">
                     <option value="1h">Last 1 hour</option>
                     <option value="6h">Last 6 hours</option>
@@ -1599,270 +1604,133 @@
             </div>
         </div>
 
-        <!-- Selected Server Detail Panel -->
-        <div id="selected-server-panel"
-            style="display:none; margin-bottom:24px; padding:20px; background:var(--noc-surface); border:1px solid var(--noc-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-                <div style="flex:1;">
-                    <h3 style="margin:0; font-size:1.1rem; font-weight:600; color:var(--noc-text-primary);"><span
-                            id="selected-server-host">—</span></h3>
-                    <p style="margin:4px 0 0 0; font-size:0.75rem; color:var(--noc-text-secondary);">IP: <span
-                            id="selected-server-ip">—</span></p>
-                </div>
-                <button onclick="clearSelectedServer()"
-                    style="background:transparent; border:1px solid var(--noc-border); color:var(--noc-text-secondary); padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600;">
-                    <i class="fa-solid fa-xmark"></i> Close
-                </button>
-            </div>
-
-            <!-- Quick Metrics Row -->
-            <div
-                style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:16px;">
-                <div
-                    style="background:rgba(129,140,248,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-indigo);">
-                    <div
-                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
-                        CPU</div>
-                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-indigo);" id="sel-cpu">—</div>
-                </div>
-                <div
-                    style="background:rgba(16,185,129,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-emerald);">
-                    <div
-                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
-                        RAM</div>
-                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-emerald);" id="sel-ram">—</div>
-                </div>
-                <div
-                    style="background:rgba(241,165,22,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-amber);">
-                    <div
-                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
-                        Disk</div>
-                    <div style="font-size:1.3rem; font-weight:700; color:var(--noc-amber);" id="sel-disk">—</div>
-                </div>
-                <div
-                    style="background:rgba(100,116,139,0.05); padding:12px; border-radius:4px; border-left:3px solid var(--noc-text-secondary);">
-                    <div
-                        style="font-size:0.65rem; color:var(--noc-text-secondary); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;">
-                        Last Update</div>
-                    <div style="font-size:0.85rem; font-weight:600; color:var(--noc-text-secondary);" id="sel-last">—
-                    </div>
-                </div>
-            </div>
-
-            <!-- Detail Chart -->
-            <div style="background:var(--noc-bg); padding:12px; border-radius:4px; border:1px solid var(--noc-border);">
-                <canvas id="selected-chart-canvas" style="max-height:420px; min-height:250px;"></canvas>
+        <!-- No Server Selected Placeholder -->
+        <div id="no-server-selected" class="noc-panel">
+            <div class="noc-empty">
+                <div class="noc-empty-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+                <h3>No System Selected</h3>
+                <p>Please select an active endpoint/employee system from the dropdown above to view real-time CPU, memory, storage streams, and AI-predicted forecasts.</p>
             </div>
         </div>
 
-        <!-- Server Cards Grid -->
-        <div style="display:grid; grid-template-columns:1fr; gap:16px;">
-            {% for server in servers %}
-            <div class="server-card" data-server-id="{{ server.id }}" data-remote-url="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
-                onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href=this.dataset.remoteUrl">
-
-                <div class="corner-accent"></div>
-                <div class="corner-accent-v"></div>
-
-                <div style="padding:20px 22px;">
-
-                    <!-- Card Header -->
-                    <div
-                        style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
-                        <div style="display:flex; align-items:center; gap:14px;">
-                            <!-- Server Icon with status ring -->
-                            <div style="position:relative;">
-                                    <div class="server-icon {% if server.server_type == 'Host' %}server-icon--host{% elif server.monitoring_mode == 'light' %}server-icon--light{% else %}server-icon--default{% endif %}">
-                                        <i
-                                            class="fa-solid {% if server.server_type == 'Host' %}fa-cubes{% elif server.monitoring_mode == 'light' %}fa-laptop{% else %}fa-microchip{% endif %}"></i>
-                                    </div>
-                                    {% set slabel = server.status_label %}
-                                    <div class="server-status-dot {% if slabel == 'ONLINE' %}server-status-dot--online{% elif slabel == 'IDLE' %}server-status-dot--idle{% else %}server-status-dot--offline{% endif %}">
-                                        {% if slabel == 'ONLINE' %}<div
-                                            style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);animation:noc-pulse 2s infinite;">
-                                        </div>{% endif %}
-                                    </div>
-                                </div>
+        <!-- Selected Server Consolidated Detail Panel -->
+        <div id="live-server-details" class="hidden animate-fade-up" style="display:flex; flex-direction:column; gap:16px;">
+            <!-- System Metadata / Header card -->
+            <div class="noc-panel" style="padding:20px 22px;">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:14px;">
+                        <div style="position:relative;">
+                            <div id="details-server-icon" class="server-icon server-icon--default">
+                                <i class="fa-solid fa-server"></i>
                             </div>
-
-                            <div>
-                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                    <span
-                                        style="font-size:1rem; font-weight:700; color:var(--noc-text-primary); letter-spacing:0.02em;">{{
-                                        server.hostname }}</span>
-                                    {% if server.server_type == 'Host' %}
-                                    <span class="noc-badge badge-hyperv">Hyper-V</span>
-                                    {% elif server.monitoring_mode == 'light' %}
-                                    <span class="noc-badge badge-light">Light</span>
-                                    {% endif %}
-                                </div>
-                                <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
-                                    <i class="fa-solid fa-network-wired"
-                                        style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
-                                    <span
-                                        style="font-size:0.65rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">{{
-                                        server.ip }}</span>
-                                </div>
-                            </div>
+                            <div id="details-status-dot" class="server-status-dot server-status-dot--offline"></div>
                         </div>
-
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
-                                class="noc-btn-console" title="Remote Control">
-                                <i class="fa-solid fa-terminal"></i> Remote Control
-                            </a>
+                        <div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span id="details-hostname" style="font-size:1.1rem; font-weight:700; color:var(--noc-text-primary); letter-spacing:0.02em;">—</span>
+                                <span id="details-type-badge" class="noc-badge badge-agent">Endpoint</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; margin-top:6px; flex-wrap:wrap;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-network-wired" style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
+                                    <span id="details-ip" style="font-size:0.65rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">—</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-laptop-code" style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
+                                    <span id="details-os" style="font-size:0.65rem; color:var(--noc-text-secondary);">—</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-user" style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
+                                    <span id="details-user" style="font-size:0.65rem; color:var(--noc-text-secondary);">—</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- Latest Screenshot -->
-                    <div class="screenshot-panel" style="margin-bottom:14px;">
-                        <div class="screenshot-header">
-                            <div class="chart-label">
-                                <i class="fa-solid fa-camera" style="color:var(--noc-cyan);"></i>
-                                Latest Screen
-                            </div>
-                            <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
-                                class="noc-btn-console" onclick="event.stopPropagation();" style="font-size:0.62rem; padding:5px 8px;">
-                                Gallery
-                            </a>
-                        </div>
-                        {% if server.latest_screenshot_url %}
-                        <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
-                            onclick="event.stopPropagation();" style="display:block; text-decoration:none;">
-                            <div style="position:relative; width:100%; aspect-ratio:16/5; background:#0f172a; border:1px solid var(--noc-border); border-radius:6px; overflow:hidden;">
-                                <img src="{{ server.latest_screenshot_url }}?size=thumb"
-                                    alt="Latest screenshot for {{ server.hostname }}"
-                                    loading="lazy"
-                                    style="width:100%; height:100%; object-fit:cover; display:block;">
-                            </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <a id="details-remote-btn" href="#" class="noc-btn-console" title="Remote Control">
+                            <i class="fa-solid fa-terminal"></i> Remote Control
                         </a>
-                        {% else %}
-                        <div style="display:flex; align-items:center; justify-content:center; min-height:72px; background:rgba(15,23,42,0.04); border:1px dashed var(--noc-border); border-radius:6px; color:var(--noc-text-muted); font-size:0.68rem; font-weight:600;">
-                            No screenshot captured yet
-                        </div>
-                        {% endif %}
                     </div>
-
-                    <!-- Combined Charts Row: CPU + RAM -->
-                    <div style="margin-bottom:14px;">
-                        <div class="chart-panel">
-                            <div class="chart-header">
-                                <div class="chart-label">
-                                    <i class="fa-solid fa-chart-line" style="color:var(--noc-cyan);"></i>
-                                    System Performance
-                                </div>
-                                <div style="display:flex; gap:16px;">
-                                    <span class="chart-value" id="live-cpu-val-{{ server.id }}"
-                                        style="color:var(--noc-indigo);">
-                                        <i class="fa-solid fa-microchip"
-                                            style="font-size:0.8rem; margin-right:4px;"></i>{% if server.cpu_percent
-                                        %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
-                                    </span>
-                                    <span class="chart-value" id="live-ram-val-{{ server.id }}"
-                                        style="color:var(--noc-emerald);">
-                                        <i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>{%
-                                        if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
-                                        endif %}
-                                    </span>
-                                </div>
-                            </div>
-                            <div style="height:320px; position:relative;">
-                                <canvas id="chart-combined-{{ server.id }}"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Bottom Row: Disk + KPIs -->
-                    <div class="noc-grid-12" style="margin-bottom:14px; grid-template-columns: 5fr 7fr;">
-                        <!-- Disk -->
-                        <div class="disk-panel">
-                            <div class="disk-donut-wrap">
-                                <canvas id="chart-disk-{{ server.id }}"></canvas>
-                                <div class="disk-donut-label" id="live-disk-val-{{ server.id }}">
-                                    {% if server.disk_percent %}{{ server.disk_percent|round(0) }}%{% else %}—{% endif
-                                    %}
-                                </div>
-                            </div>
-                            <div>
-                                <div
-                                    style="font-size:0.55rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-text-secondary); margin-bottom:4px;">
-                                    Storage</div>
-                                <div style="font-size:0.72rem; font-weight:600; color:var(--noc-text-primary);">Disk
-                                    Utilization</div>
-                                <div style="font-size:0.58rem; color:var(--noc-text-secondary); margin-top:3px;">C:\
-                                    Primary Volume</div>
-                            </div>
-                        </div>
-
-                        <!-- KPIs -->
-                        <div class="kpi-strip">
-                            <div class="kpi-item">
-                                <span class="kpi-value" id="live-vm-count-{{ server.id }}"
-                                    style="color:var(--noc-violet);">{{ server.vms_count }}</span>
-                                <span class="kpi-name">Guests</span>
-                            </div>
-                            <div class="kpi-item">
-                                <span class="kpi-value" id="live-alerts-{{ server.id }}"
-                                    style="color:var(--noc-amber);">0</span>
-                                <span class="kpi-name">Alerts</span>
-                            </div>
-                            <div class="kpi-item" id="productivity-{{ server.id }}">
-                                <span class="kpi-value" id="live-prod-score-{{ server.id }}"
-                                    style="color:var(--noc-cyan);">{{ server.productivity_percent | default(0)
-                                    }}%</span>
-                                <span class="kpi-name">{{ server.productivity_str | default('—') }} Active</span>
-                            </div>
-                        </div>
-                    </div>
-
-
-
-                    <!-- AI Forecast -->
-                    <div class="forecast-panel{% if server.vms_count > 0 %} forecast-panel--with-vms{% endif %}">
-                        <div class="forecast-row">
-                            <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
-                                <div class="forecast-icon-wrap"><i class="fa-solid fa-robot"></i></div>
-                                <div style="flex:1;">
-                                    <div
-                                        style="font-size:0.58rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-indigo); margin-bottom:5px;">
-                                        Predictive AI Analysis</div>
-                                    <p id="forecast-recommendation-{{ server.id }}"
-                                        style="font-size:0.68rem; color:var(--noc-text-secondary); line-height:1.6; margin:0; font-weight:500;">
-                                        Synthesizing metrics...</p>
-                                </div>
-                            </div>
-                            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                                <span id="forecast-status-{{ server.id }}"
-                                    class="noc-badge badge-agent">Analyzing...</span>
-                                <span style="font-size:0.58rem; color:var(--noc-text-muted); font-weight:500;">Updated:
-                                    <span id="live-last-update-{{ server.id }}"
-                                        style="color:var(--noc-text-secondary);"></span></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- VM Pulse -->
-                    {% if server.vms_count > 0 %}
-                    <div style="border-top:1px solid var(--noc-border); padding-top:14px;">
-                        <div
-                            style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary); display:flex; align-items:center; gap:6px; margin-bottom:10px;">
-                            <i class="fa-solid fa-server" style="color:var(--noc-violet);"></i> Active Guests
-                        </div>
-                        <div id="vmpulse-{{ server.id }}" style="display:flex; flex-wrap:wrap; gap:6px;">
-                            {% for vm in server.vms %}
-                            <div class="vm-chip">
-                                <span
-                                    class="pulse-dot {% if vm.state|lower == 'running' %}pulse-online{% else %}pulse-offline{% endif %}"></span>
-                                <span>{{ vm.vm_name }}</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                </div><!-- /card padding -->
+                </div>
             </div>
-            {% endfor %}
+
+            <!-- Combined Performance Chart -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <div class="chart-label">
+                        <i class="fa-solid fa-chart-line" style="color:var(--noc-cyan);"></i>
+                        System Performance
+                    </div>
+                    <div style="display:flex; gap:16px;">
+                        <span class="chart-value" id="live-cpu-val-single" style="color:var(--noc-indigo);">
+                            <i class="fa-solid fa-microchip" style="font-size:0.8rem; margin-right:4px;"></i>--
+                        </span>
+                        <span class="chart-value" id="live-ram-val-single" style="color:var(--noc-emerald);">
+                            <i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>--
+                        </span>
+                    </div>
+                </div>
+                <div style="height:320px; position:relative;">
+                    <canvas id="chart-combined-single"></canvas>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Disk + KPIs -->
+            <div class="noc-grid-12" style="grid-template-columns: 5fr 7fr; margin-bottom: 0px;">
+                <!-- Disk -->
+                <div class="disk-panel">
+                    <div class="disk-donut-wrap">
+                        <canvas id="chart-disk-single"></canvas>
+                        <div class="disk-donut-label" id="live-disk-val-single">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.55rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-text-secondary); margin-bottom:4px;">Storage</div>
+                        <div style="font-size:0.72rem; font-weight:600; color:var(--noc-text-primary);">Disk Utilization</div>
+                        <div style="font-size:0.58rem; color:var(--noc-text-secondary); margin-top:3px;">C:\ Primary Volume</div>
+                    </div>
+                </div>
+
+                <!-- KPIs -->
+                <div class="kpi-strip">
+                    <div class="kpi-item">
+                        <span class="kpi-value" id="live-vm-count-single" style="color:var(--noc-violet);">0</span>
+                        <span class="kpi-name">Guests</span>
+                    </div>
+                    <div class="kpi-item">
+                        <span class="kpi-value" id="live-alerts-single" style="color:var(--noc-amber);">0</span>
+                        <span class="kpi-name">Alerts</span>
+                    </div>
+                    <div class="kpi-item" id="productivity-single">
+                        <span class="kpi-value" id="live-prod-score-single" style="color:var(--noc-cyan);">0%</span>
+                        <span class="kpi-name" id="live-prod-str-single">0m Active</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Forecast -->
+            <div class="forecast-panel" id="forecast-panel-single">
+                <div class="forecast-row">
+                    <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
+                        <div class="forecast-icon-wrap"><i class="fa-solid fa-robot"></i></div>
+                        <div style="flex:1;">
+                            <div style="font-size:0.58rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--noc-indigo); margin-bottom:5px;">Predictive AI Analysis</div>
+                            <p id="forecast-recommendation-single" style="font-size:0.68rem; color:var(--noc-text-secondary); line-height:1.6; margin:0; font-weight:500;">Select a system to analyze trends...</p>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+                        <span id="forecast-status-single" class="noc-badge badge-agent">Ready</span>
+                        <span style="font-size:0.58rem; color:var(--noc-text-muted); font-weight:500;">Updated: <span id="live-last-update-single" style="color:var(--noc-text-secondary);">—</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VM Pulse -->
+            <div id="vms-panel-single" class="hidden" style="border-top:1px solid var(--noc-border); padding-top:14px;">
+                <div style="font-size:0.55rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--noc-text-secondary); display:flex; align-items:center; gap:6px; margin-bottom:10px;">
+                    <i class="fa-solid fa-server" style="color:var(--noc-violet);"></i> Active Guests
+                </div>
+                <div id="vmpulse-single" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+            </div>
         </div>
 
         {% else %}
@@ -1871,8 +1739,7 @@
             <div class="noc-empty">
                 <div class="noc-empty-icon"><i class="fa-solid fa-satellite-dish"></i></div>
                 <h3>No Telemetry Streams</h3>
-                <p>Deploy the monitoring agent to establish a connection. Visit Inventory to enable monitoring on
-                    discovered endpoints.</p>
+                <p>Deploy the monitoring agent to establish a connection. Visit Inventory to enable monitoring on discovered endpoints.</p>
                 <button onclick="switchTab('inventory')" class="noc-btn-primary" style="margin-top:24px;">
                     <i class="fa-solid fa-warehouse"></i> Open Inventory
                 </button>
@@ -1937,6 +1804,25 @@
         {% for server in servers %}
         {
             "id": {{ server.id|tojson }},
+            "hostname": {{ server.hostname|tojson }},
+            "ip": {{ server.ip|tojson }},
+            "os_info": {{ server.os_info|tojson }},
+            "server_type": {{ server.server_type|tojson }},
+            "agent_installed": {{ server.agent_installed|tojson }},
+            "agent_version": {{ server.agent_version|tojson }},
+            "assigned_user": {{ server.assigned_user|tojson }},
+            "status_label": {{ server.status_label|tojson }},
+            "vms_count": {{ server.vms_count|tojson }},
+            "vms": [
+                {% for vm in server.vms %}
+                {
+                    "name": {{ vm.name|tojson }},
+                    "state": {{ vm.state|tojson }}
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ],
+            "productivity_percent": {{ server.productivity_percent|default(0)|tojson }},
+            "productivity_str": {{ server.productivity_str|default('—')|tojson }},
             "cpu": {{ server.cpu_percent|float }},
             "ram": {{ server.memory_percent|float }},
             "disk": {{ server.disk_percent|float }},
@@ -1960,6 +1846,8 @@
         }
         window.serverData = serverData;
         let selectedHistoryRange = '24h';
+        let selectedServerId = null;
+        let livePollingInterval = null;
 
         // Ensure fetch sends session cookies for Flask auth (same-origin)
         (function () {
@@ -1996,20 +1884,35 @@
             }
         }
 
-        function filterInventory() {
+        let filterTimeout = null;
+        let cachedRows = null;
+
+        function applyFilterImmediate() {
             const agentFilter = document.getElementById('invFilterAgent');
             const searchInput = document.getElementById('invSearch');
             const agentValue = agentFilter ? agentFilter.value : '';
             const search = searchInput ? (searchInput.value || '').toLowerCase() : '';
-            const rows = document.querySelectorAll('.inv-row');
+            
+            if (!cachedRows) {
+                cachedRows = Array.from(document.querySelectorAll('.inv-row'));
+            }
 
-            rows.forEach(row => {
+            cachedRows.forEach(row => {
                 const hostname = row.dataset.hostname || '';
                 const agent = row.dataset.agent || '';
                 const matchSearch = !search || hostname.includes(search);
                 const matchAgent = !agentValue || agent === agentValue;
                 row.style.display = (matchSearch && matchAgent) ? '' : 'none';
             });
+        }
+
+        function filterInventory() {
+            if (filterTimeout) {
+                clearTimeout(filterTimeout);
+            }
+            filterTimeout = setTimeout(() => {
+                applyFilterImmediate();
+            }, 300);
         }
 
         function syncAzureInventory() {
@@ -2038,8 +1941,9 @@
         }
 
         const formatDateTime = (ts) => {
+            if (!ts) return 'N/A';
             const d = new Date(ts);
-            if (Number.isNaN(d.getTime())) return '';
+            if (Number.isNaN(d.getTime())) return 'N/A';
             return d.toLocaleString('en-IN', {
                 timeZone: 'Asia/Kolkata',
                 day: '2-digit',
@@ -2053,6 +1957,7 @@
         };
 
         const formatShortTime = (ts) => {
+            if (!ts) return '';
             const d = new Date(ts);
             if (Number.isNaN(d.getTime())) return '';
             return d.toLocaleString('en-IN', {
@@ -2065,10 +1970,6 @@
             });
         };
 
-        // ─── Global Variables for Selection ───
-        let selectedServerId = null;
-        let selectedChart = null;
-
         // ─── Inventory Selection Functions (Global Scope) ───
         function selectInventoryRow(evt, serverId) {
             evt.stopPropagation();
@@ -2076,137 +1977,17 @@
             const row = evt.currentTarget || evt.target.closest('tr');
             if (row) row.classList.add('selected-row');
 
-            selectedServerId = serverId;
-
-            const server = window.serverData.find(s => String(s.id) === String(serverId));
-            if (!server) return;
-
-            const panel = document.getElementById('selected-server-panel');
-            if (panel) panel.style.display = '';
-
-            const hostEl = document.getElementById('selected-server-host');
-            if (hostEl) hostEl.innerText = server.hostname || server.host || (`Server ${serverId}`);
-
-            const ipEl = document.getElementById('selected-server-ip');
-            if (ipEl) ipEl.innerText = 'IP: ' + (server.ip || '—');
-
-            const cpuEl = document.getElementById('sel-cpu');
-            if (cpuEl) cpuEl.innerText = (server.cpu || 0).toFixed(1) + '%';
-
-            const ramEl = document.getElementById('sel-ram');
-            if (ramEl) ramEl.innerText = (server.ram || 0).toFixed(1) + '%';
-
-            const diskEl = document.getElementById('sel-disk');
-            if (diskEl) diskEl.innerText = (server.disk || 0).toFixed(1) + '%';
-
-            const lastEl = document.getElementById('sel-last');
-            if (lastEl) lastEl.innerText = formatDateTime(server.last_seen || new Date().toISOString());
-
-            historyBuffers[serverId] = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
-
-            // Initialize selected chart
-            const canvasEl = document.getElementById('selected-chart-canvas');
-            if (canvasEl && !selectedChart) {
-                selectedChart = new Chart(canvasEl, {
-                    type: 'line',
-                    data: {
-                        labels: historyBuffers[serverId].labels,
-                        datasets: [
-                            {
-                                label: 'CPU %',
-                                data: historyBuffers[serverId].liveCpu,
-                                borderColor: '#6366f1',
-                                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                                borderWidth: 2,
-                                tension: 0.3,
-                                fill: true,
-                                pointRadius: 0,
-                                pointHoverRadius: 4,
-                                pointHoverBackgroundColor: '#6366f1',
-                                pointHoverBorderColor: '#0d1422',
-                                pointHoverBorderWidth: 2
-                            },
-                            {
-                                label: 'RAM %',
-                                data: historyBuffers[serverId].liveRam,
-                                borderColor: '#10b981',
-                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                borderWidth: 2,
-                                tension: 0.3,
-                                fill: true,
-                                pointRadius: 0,
-                                pointHoverRadius: 4,
-                                pointHoverBackgroundColor: '#10b981',
-                                pointHoverBorderColor: '#0d1422',
-                                pointHoverBorderWidth: 2
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        animation: { duration: 400, easing: 'easeOutQuart' },
-                        interaction: { intersect: false, mode: 'index' },
-                        plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#e2e8f0', font: { size: 12, weight: '700' }, boxWidth: 15, padding: 15 } },
-                            tooltip: {
-                                backgroundColor: '#0d1422',
-                                borderColor: 'rgba(34,211,238,0.2)',
-                                borderWidth: 1,
-                                titleFont: { size: 11, weight: '700' },
-                                bodyFont: { size: 11 },
-                                titleColor: '#64748b',
-                                bodyColor: '#e2e8f0',
-                                padding: 10,
-                                cornerRadius: 3,
-                                displayColors: true,
-                                callbacks: {
-                                    label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                                }
-                            }
-                        },
-                        scales: {
-                            y: {
-                                min: 0,
-                                max: 100,
-                                display: true,
-                                grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
-                                ticks: {
-                                    font: { size: 11, weight: '700' },
-                                    color: '#334155',
-                                    stepSize: 25,
-                                    callback: v => v + '%',
-                                    padding: 8
-                                },
-                                border: { display: false }
-                            },
-                            x: {
-                                display: true,
-                                grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
-                                ticks: {
-                                    color: '#334155',
-                                    font: { size: 10, weight: '700' },
-                                    autoSkip: true,
-                                    maxTicksLimit: 8,
-                                    maxRotation: 0
-                                }
-                            }
-                        }
-                    }
-                });
-                // Register selected chart with responsivity manager
-                if (typeof window.ChartResponsivityManager !== 'undefined' && selectedChart) {
-                    window.ChartResponsivityManager.register(selectedChart);
-                }
+            // Select in Live Monitor select dropdown
+            const selectEl = document.getElementById('liveServerSelect');
+            if (selectEl) {
+                selectEl.value = serverId;
             }
-        }
-
-        function clearSelectedServer() {
-            selectedServerId = null;
-            const panel = document.getElementById('selected-server-panel');
-            if (panel) panel.style.display = 'none';
-            document.querySelectorAll('.inv-row').forEach(r => r.classList.remove('selected-row'));
-            document.querySelectorAll('.server-card').forEach(c => c.removeAttribute('data-selected'));
+            
+            // Trigger Change
+            onLiveServerChange(serverId);
+            
+            // Switch Tab
+            switchTab('live');
         }
 
         function showFilteredLive() {
@@ -2217,18 +1998,216 @@
                 return;
             }
 
-            if (typeof switchTab !== 'undefined') switchTab('live');
-
-            document.querySelectorAll('.server-card').forEach(c => {
-                c.style.display = ids.includes(c.dataset.serverId) ? '' : 'none';
-                if (ids.includes(c.dataset.serverId)) c.setAttribute('data-selected', 'true');
-                else c.removeAttribute('data-selected');
-            });
-
-            if (typeof startLivePolling !== 'undefined') startLivePolling();
+            // Select first matched system in selector
+            const selectEl = document.getElementById('liveServerSelect');
+            if (selectEl) {
+                selectEl.value = ids[0];
+                onLiveServerChange(ids[0]);
+            }
+            
+            switchTab('live');
         }
 
-        let livePollingInterval = null;
+        async function onLiveServerChange(serverId) {
+            if (livePollingInterval) {
+                clearInterval(livePollingInterval);
+                livePollingInterval = null;
+            }
+
+            if (!serverId) {
+                selectedServerId = null;
+                document.getElementById('no-server-selected').classList.remove('hidden');
+                document.getElementById('live-server-details').classList.add('hidden');
+                return;
+            }
+
+            selectedServerId = serverId;
+            document.getElementById('no-server-selected').add = function() {}; // Safe placeholder in case referenced
+            document.getElementById('no-server-selected').classList.add('hidden');
+            document.getElementById('live-server-details').classList.remove('hidden');
+
+            const server = window.serverData.find(s => String(s.id) === String(serverId));
+            if (!server) return;
+
+            // Update details
+            document.getElementById('details-hostname').innerText = server.hostname || server.name || '—';
+            document.getElementById('details-ip').innerText = server.ip || '—';
+            document.getElementById('details-os').innerText = server.os_info || '—';
+            document.getElementById('details-user').innerText = server.assigned_user || 'Unassigned';
+            document.getElementById('details-remote-btn').href = `/assets/remote-control/${server.id}`;
+
+            // Update badge type
+            const typeBadge = document.getElementById('details-type-badge');
+            if (typeBadge) {
+                if (server.server_type === 'Host') {
+                    typeBadge.innerText = 'Hyper-V Host';
+                    typeBadge.className = 'noc-badge badge-hyperv';
+                } else {
+                    typeBadge.innerText = 'Agent';
+                    typeBadge.className = 'noc-badge badge-agent';
+                }
+            }
+
+            // Update icon
+            const iconEl = document.getElementById('details-server-icon');
+            if (iconEl) {
+                iconEl.className = `server-icon ${server.server_type === 'Host' ? 'server-icon--host' : 'server-icon--default'}`;
+                const innerIcon = iconEl.querySelector('i');
+                if (innerIcon) {
+                    innerIcon.className = `fa-solid ${server.server_type === 'Host' ? 'fa-cubes' : 'fa-server'}`;
+                }
+            }
+
+            // Status dot
+            const statusDot = document.getElementById('details-status-dot');
+            if (statusDot) {
+                const slabel = server.status_label || 'OFFLINE';
+                statusDot.className = `server-status-dot ${slabel === 'ONLINE' ? 'server-status-dot--online' : slabel === 'IDLE' ? 'server-status-dot--idle' : 'server-status-dot--offline'}`;
+            }
+
+            // VMs List
+            const vmsPanel = document.getElementById('vms-panel-single');
+            const vmpulse = document.getElementById('vmpulse-single');
+            if (vmsPanel && vmpulse) {
+                if (server.vms && server.vms.length > 0) {
+                    vmsPanel.classList.remove('hidden');
+                    vmpulse.innerHTML = server.vms.map(vm => {
+                        const isRunning = (vm.state || '').toLowerCase() === 'running';
+                        return `<div class="vm-chip">
+                            <span class="pulse-dot ${isRunning ? 'pulse-online' : 'pulse-offline'}"></span>
+                            <span>${vm.name}</span>
+                        </div>`;
+                    }).join('');
+                } else {
+                    vmsPanel.classList.add('hidden');
+                    vmpulse.innerHTML = '';
+                }
+            }
+
+            // Initial Metric texts
+            document.getElementById('live-cpu-val-single').innerHTML = `<i class="fa-solid fa-microchip" style="font-size:0.8rem; margin-right:4px;"></i>` + (server.cpu || 0).toFixed(1) + '%';
+            document.getElementById('live-ram-val-single').innerHTML = `<i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>` + (server.ram || 0).toFixed(1) + '%';
+            document.getElementById('live-disk-val-single').innerText = (server.disk || 0).toFixed(0) + '%';
+            document.getElementById('live-vm-count-single').innerText = server.vms_count || 0;
+            document.getElementById('live-prod-score-single').innerText = (server.productivity_percent || 0) + '%';
+            document.getElementById('live-prod-str-single').innerText = (server.productivity_str || '—') + ' Active';
+            document.getElementById('live-last-update-single').innerText = formatDateTime(server.last_seen);
+
+            // Re-initialize Combined Chart
+            if (charts['combined-single']) {
+                charts['combined-single'].destroy();
+            }
+            historyBuffers[serverId] = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [] };
+            charts['combined-single'] = createCombinedLineChart('chart-combined-single', historyBuffers[serverId].labels, historyBuffers[serverId].liveCpu, historyBuffers[serverId].liveRam);
+            if (typeof window.ChartResponsivityManager !== 'undefined') {
+                window.ChartResponsivityManager.register(charts['combined-single']);
+            }
+
+            // Re-initialize Disk Doughnut
+            if (charts['disk-single']) {
+                charts['disk-single'].destroy();
+            }
+            charts['disk-single'] = createDiskDoughnut('chart-disk-single', server.disk || 0);
+            if (typeof window.ChartResponsivityManager !== 'undefined') {
+                window.ChartResponsivityManager.register(charts['disk-single']);
+            }
+
+            // Lazy load metrics history and forecast
+            await loadHistoricalData(serverId, selectedHistoryRange).catch(err => console.error(err));
+            await loadForecast(serverId).catch(err => console.error(err));
+
+            // Start live polling just for this server
+            startLivePolling();
+        }
+
+        async function loadHistoricalData(serverId, rangeVal) {
+            let limit = 240;
+            if (rangeVal === '1h') limit = 360;
+            else if (rangeVal === '6h') limit = 2160;
+            else if (rangeVal === '24h') limit = 8640;
+            else if (rangeVal === '7d') limit = 60480;
+
+            const endpoint = `/api/v2/metrics/history?server_id=${serverId}&range=${encodeURIComponent(rangeVal)}&limit=${limit}`;
+            const res = await fetch(endpoint);
+            if (!res.ok) throw new Error(`history_${serverId}_${res.status}`);
+            const rows = await res.json();
+            if (!Array.isArray(rows) || rows.length === 0) return;
+
+            const targetPoints = 300;
+            const step = Math.ceil(rows.length / targetPoints) || 1;
+            const sampledRows = rows.filter((_, i) => i % step === 0);
+
+            const labels = [];
+            const cpu = [];
+            const ram = [];
+            for (const row of sampledRows) {
+                labels.push(formatDateTime(row.timestamp));
+                cpu.push(Number(row.cpu_util_percent || 0));
+                ram.push(Number(row.ram_util_percent || 0));
+            }
+
+            historyBuffers[serverId] = {
+                labels,
+                liveCpu: [...cpu],
+                liveRam: [...ram]
+            };
+
+            const combinedChart = charts['combined-single'];
+            if (combinedChart && String(selectedServerId) === String(serverId)) {
+                combinedChart.data.labels = labels;
+                combinedChart.data.datasets[0].data = [...cpu];
+                combinedChart.data.datasets[1].data = [...ram];
+                combinedChart.update('none');
+            }
+        }
+
+        async function loadHistoricalDataForAll() {
+            if (selectedServerId) {
+                loadHistoricalData(selectedServerId, selectedHistoryRange).catch(() => null);
+            }
+        }
+
+        async function loadForecast(serverId) {
+            const statusEl = document.getElementById('forecast-status-single');
+            const recommendationEl = document.getElementById('forecast-recommendation-single');
+            if (!statusEl || !recommendationEl) return;
+
+            statusEl.textContent = 'Analyzing...';
+            statusEl.className = 'noc-badge badge-agent';
+            recommendationEl.textContent = 'Calculating linear trend from historical metrics...';
+
+            try {
+                const res = await fetch(`/api/v2/server/${serverId}/forecast`);
+                if (!res.ok) throw new Error(`forecast_${res.status}`);
+                const data = await res.json();
+                
+                // Confirm we are still on the same server
+                if (String(selectedServerId) !== String(serverId)) return;
+
+                if (!data.success) {
+                    statusEl.textContent = 'Need More Data';
+                    statusEl.className = 'noc-badge badge-idle';
+                    recommendationEl.textContent = data.message || 'Insufficient historical data for forecasting.';
+                    return;
+                }
+
+                const cpuTrend = ((data.cpu && data.cpu.trend) || 'unknown').toUpperCase();
+                const ramTrend = ((data.ram && data.ram.trend) || 'unknown').toUpperCase();
+                statusEl.textContent = `CPU ${cpuTrend} / RAM ${ramTrend}`;
+                statusEl.className = 'noc-badge badge-agent';
+                recommendationEl.textContent = data.recommendation || 'Trend available.';
+            } catch (err) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.className = 'noc-badge badge-offline';
+                recommendationEl.textContent = 'Forecast API unavailable right now.';
+            }
+        }
+
+        async function refreshForecasts() {
+            if (selectedServerId) {
+                loadForecast(selectedServerId).catch(() => null);
+            }
+        }
 
         function startLivePolling() {
             if (livePollingInterval) clearInterval(livePollingInterval);
@@ -2237,139 +2216,75 @@
         }
 
         async function pollLiveMetrics() {
-            const visibleCards = document.querySelectorAll('.server-card:not([style*="display: none"])');
+            if (!selectedServerId) return;
+            const serverId = selectedServerId;
 
-            for (const card of visibleCards) {
-                const serverId = card.dataset.serverId;
-                if (!serverId) continue;
+            try {
+                const res = await fetch(`/api/v2/server/${serverId}/metrics/latest`);
+                if (!res.ok) return;
 
-                try {
-                    const res = await fetch(`/api/v2/server/${serverId}/metrics/latest`);
-                    if (!res.ok) continue;
+                const contentType = res.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) return;
 
-                    const contentType = res.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) continue;
+                const data = await res.json();
+                
+                // Confirm we are still on the same server
+                if (String(selectedServerId) !== String(serverId)) return;
 
-                    const data = await res.json();
+                // Update history buffer
+                const buf = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [] };
+                buf.labels.push(new Date().toLocaleTimeString());
+                buf.liveCpu.push(data.cpu || 0);
+                buf.liveRam.push(data.ram || 0);
 
-                    // Update history buffer
-                    const buf = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
-                    buf.labels.push(new Date().toLocaleTimeString());
-                    buf.liveCpu.push(data.cpu || 0);
-                    buf.liveRam.push(data.ram || 0);
-
-                    // Keep rolling window (max 240 points)
-                    if (buf.labels.length > 240) {
-                        buf.labels.shift();
-                        buf.liveCpu.shift();
-                        buf.liveRam.shift();
-                    }
-
-                    historyBuffers[serverId] = buf;
-
-                    // Update selected chart if this is the selected server
-                    if (selectedServerId === serverId && selectedChart) {
-                        selectedChart.data.labels = buf.labels;
-                        selectedChart.data.datasets[0].data = buf.liveCpu;
-                        selectedChart.data.datasets[1].data = buf.liveRam;
-                        selectedChart.update('none');
-
-                        // Update display elements
-                        const cpuEl = document.getElementById('sel-cpu');
-                        if (cpuEl) cpuEl.innerText = (data.cpu || 0).toFixed(1) + '%';
-
-                        const ramEl = document.getElementById('sel-ram');
-                        if (ramEl) ramEl.innerText = (data.ram || 0).toFixed(1) + '%';
-
-                        const diskEl = document.getElementById('sel-disk');
-                        if (diskEl) diskEl.innerText = (data.disk || 0).toFixed(1) + '%';
-
-                        const lastEl = document.getElementById('sel-last');
-                        if (lastEl) lastEl.innerText = new Date().toLocaleTimeString();
-                    }
-                } catch (err) {
-                    console.error(`Error polling server ${serverId}:`, err);
+                // Keep rolling window
+                if (buf.labels.length > MAX_HISTORY) {
+                    buf.labels.shift();
+                    buf.liveCpu.shift();
+                    buf.liveRam.shift();
                 }
-            }
-        }
 
+                historyBuffers[serverId] = buf;
 
-        serverData.forEach(s => {
-            let now = new Date();
-            if (s.last_seen) {
-                now = new Date(s.last_seen + (s.last_seen.includes('+') || s.last_seen.endsWith('Z') ? '' : 'Z'));
-            }
-
-            const lastUpdateEl = document.getElementById('live-last-update-' + s.id);
-            if (lastUpdateEl) {
-                lastUpdateEl.innerText = formatDateTime(now) || 'N/A';
-            }
-
-            historyBuffers[s.id] = {
-                labels: [formatDateTime(now)],
-                liveCpu: [Number(s.cpu || 0)],
-                liveRam: [Number(s.ram || 0)]
-            };
-        });
-
-        function switchTab(tab) {
-            document.getElementById('view-inventory').classList.add('hidden');
-            document.getElementById('view-live').classList.add('hidden');
-
-            // Reset all tab buttons
-            ['inventory', 'live'].forEach(t => {
-                const btn = document.getElementById('tab-btn-' + t);
-                if (btn) {
-                    btn.className = 'noc-tab';
+                // Update single combined chart
+                if (charts['combined-single']) {
+                    charts['combined-single'].data.labels = buf.labels;
+                    charts['combined-single'].data.datasets[0].data = buf.liveCpu;
+                    charts['combined-single'].data.datasets[1].data = buf.liveRam;
+                    charts['combined-single'].update('none');
                 }
-            });
 
-            document.getElementById('view-' + tab).classList.remove('hidden');
-            const activeBtn = document.getElementById('tab-btn-' + tab);
-            if (activeBtn) activeBtn.className = 'noc-tab active';
+                // Update display elements
+                const cpuEl = document.getElementById('live-cpu-val-single');
+                if (cpuEl) cpuEl.innerHTML = `<i class="fa-solid fa-microchip" style="font-size:0.8rem; margin-right:4px;"></i>` + (data.cpu || 0).toFixed(1) + '%';
 
-            if (tab === 'live') {
-                refreshCharts();
+                const ramEl = document.getElementById('live-ram-val-single');
+                if (ramEl) ramEl.innerHTML = `<i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>` + (data.ram || 0).toFixed(1) + '%';
+
+                const diskEl = document.getElementById('live-disk-val-single');
+                if (diskEl) diskEl.innerText = (data.disk || 0).toFixed(0) + '%';
+
+                // Update disk doughnut
+                if (charts['disk-single']) {
+                    const diskColor = data.disk > 90 ? '#fb7185' : data.disk > 70 ? '#fbbf24' : '#22d3ee';
+                    charts['disk-single'].data.datasets[0].data = [data.disk || 0, 100 - (data.disk || 0)];
+                    charts['disk-single'].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
+                    charts['disk-single'].update('none');
+                }
+
+                const lastEl = document.getElementById('live-last-update-single');
+                if (lastEl) lastEl.innerText = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error(`Error polling server ${serverId}:`, err);
             }
         }
 
-        function filterInventory() {
-            const agentFilter = document.getElementById('invFilterAgent').value;
-            const search = (document.getElementById('invSearch').value || '').toLowerCase();
-            const rows = document.querySelectorAll('.inv-row');
-
-            rows.forEach(row => {
-                const hostname = row.dataset.hostname || '';
-                const agent = row.dataset.agent || '';
-
-                const matchSearch = !search || hostname.includes(search);
-                const matchAgent = !agentFilter || agent === agentFilter;
-
-                row.style.display = (matchSearch && matchAgent) ? '' : 'none';
-            });
-        }
-
-        function syncAzureInventory() {
-            const btn = document.getElementById('syncBtn');
-            const icon = document.getElementById('syncIcon');
-            btn.disabled = true;
-            icon.classList.add('fa-spin');
-
-            fetch('/api/v2/inventory/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`Synced ${data.synced} devices from Azure AD. Refreshing...`);
-                        window.location.reload();
-                    } else {
-                        alert('Sync failed: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(err => alert('Sync error: ' + err.message))
-                .finally(() => {
-                    btn.disabled = false;
-                    icon.classList.remove('fa-spin');
-                });
+        function clearSelectedServer() {
+            const selectEl = document.getElementById('liveServerSelect');
+            if (selectEl) {
+                selectEl.value = '';
+                onLiveServerChange('');
+            }
         }
 
         function deleteDevice(serverId, hostname) {
@@ -2426,112 +2341,6 @@
             });
         }
 
-        // ── Real-Time Line Chart Factory ── (NOC dark theme)
-        function createLineChart(canvasId, liveColor, liveDataArray, labelsArray, liveLabel) {
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js not loaded; cannot render line chart');
-                return null;
-            }
-            const el = document.getElementById(canvasId);
-            if (!el) return null;
-            const ctx = el.getContext('2d');
-
-            const gradient = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 130);
-            gradient.addColorStop(0, liveColor + '30');
-            gradient.addColorStop(1, liveColor + '03');
-
-            return new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labelsArray,
-                    datasets: [
-                        {
-                            label: liveLabel,
-                            data: liveDataArray,
-                            borderColor: liveColor,
-                            backgroundColor: gradient,
-                            borderWidth: 1.5,
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 4,
-                            pointHoverBackgroundColor: liveColor,
-                            pointHoverBorderColor: '#0d1422',
-                            pointHoverBorderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: 400, easing: 'easeOutQuart' },
-                    interaction: { intersect: false, mode: 'index' },
-                    scales: {
-                        y: {
-                            min: 0,
-                            max: 100,
-                            display: true,
-                            grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
-                            ticks: {
-                                font: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
-                                color: '#334155',
-                                stepSize: 25,
-                                callback: v => v + '%',
-                                padding: 6
-                            },
-                            border: { display: false }
-                        },
-                        x: {
-                            display: true,
-                            grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
-                            ticks: {
-                                color: '#334155',
-                                font: { size: 8, weight: '700', family: "'JetBrains Mono', monospace" },
-                                autoSkip: true,
-                                maxTicksLimit: 8,
-                                maxRotation: 0,
-                                callback: function (value, index) {
-                                    const raw = this.getLabelForValue(value) || '';
-                                    if (!raw) return '';
-                                    const parts = raw.split(', ');
-                                    if (parts.length >= 2) {
-                                        const datePart = parts[0].substring(0, 5);
-                                        const timePart = parts[1].replace(/:00 /, ' ');
-                                        return datePart + ' ' + timePart;
-                                    }
-                                    return raw;
-                                }
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: '#0d1422',
-                            borderColor: 'rgba(34,211,238,0.2)',
-                            borderWidth: 1,
-                            titleFont: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
-                            bodyFont: { size: 10, family: "'JetBrains Mono', monospace" },
-                            titleColor: '#64748b',
-                            bodyColor: '#e2e8f0',
-                            padding: 10,
-                            cornerRadius: 3,
-                            displayColors: false,
-                            callbacks: {
-                                title: items => {
-                                    const lbl = (items && items[0] && items[0].label) ? items[0].label : '';
-                                    return lbl ? lbl + ' IST' : '';
-                                },
-                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // ── Disk Doughnut (NOC dark) ──
-        // ── Real-Time COMBINED Line Chart Factory ──
         function createCombinedLineChart(canvasId, labelsArray, cpuData, ramData) {
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js not loaded; cannot render combined chart');
@@ -2614,18 +2423,7 @@
                                 font: { size: 8, weight: '700', family: "'JetBrains Mono', monospace" },
                                 autoSkip: true,
                                 maxTicksLimit: 8,
-                                maxRotation: 0,
-                                callback: function (value, index) {
-                                    const raw = this.getLabelForValue(value) || '';
-                                    if (!raw) return '';
-                                    const parts = raw.split(', ');
-                                    if (parts.length >= 2) {
-                                        const datePart = parts[0].substring(0, 5);
-                                        const timePart = parts[1].replace(/:00 /, ' ');
-                                        return datePart + ' ' + timePart;
-                                    }
-                                    return raw;
-                                }
+                                maxRotation: 0
                             }
                         }
                     },
@@ -2643,10 +2441,6 @@
                             cornerRadius: 3,
                             displayColors: true,
                             callbacks: {
-                                title: items => {
-                                    const lbl = (items && items[0] && items[0].label) ? items[0].label : '';
-                                    return lbl ? lbl + ' IST' : '';
-                                },
                                 label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
                             }
                         }
@@ -2657,7 +2451,6 @@
 
         function createDiskDoughnut(canvasId, val) {
             if (typeof Chart === 'undefined') {
-                console.error('Chart.js not loaded; cannot render doughnut chart');
                 return null;
             }
             const el = document.getElementById(canvasId);
@@ -2691,164 +2484,183 @@
             });
         }
 
-        function initChartsForServer(serverId) {
-            const server = serverData.find(s => String(s.id) === String(serverId));
-            if (!server) return;
-
-            let buf = historyBuffers[serverId];
-            if (!buf) {
-                buf = { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
-                historyBuffers[serverId] = buf;
-            }
-
-            if (!charts['combined-' + serverId]) {
-                const combinedChart = createCombinedLineChart('chart-combined-' + serverId, buf.labels, buf.liveCpu, buf.liveRam);
-                charts['combined-' + serverId] = combinedChart;
-                // Register with responsivity manager for auto-resizing
-                if (typeof window.ChartResponsivityManager !== 'undefined' && combinedChart) {
-                    window.ChartResponsivityManager.register(combinedChart);
-                }
-            }
-            if (!charts['disk-' + serverId]) {
-                const diskChart = createDiskDoughnut('chart-disk-' + serverId, server.disk);
-                charts['disk-' + serverId] = diskChart;
-                // Register with responsivity manager for auto-resizing
-                if (typeof window.ChartResponsivityManager !== 'undefined' && diskChart) {
-                    window.ChartResponsivityManager.register(diskChart);
-                }
-            }
-        }
-
-        async function deleteSystem(serverId, hostname) {
-            if (!serverId) return;
-            const confirmed = confirm(`Delete ${hostname} and all linked agent data? This cannot be undone.`);
-            if (!confirmed) return;
+        function handleMetricsUpdate(data) {
             try {
-                const res = await fetch(`/api/v2/server/${serverId}`, { method: 'DELETE' });
-                const data = await res.json();
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Delete failed');
+                if (!data || !data.server_id) return;
+                const sid = data.server_id;
+                const now = formatDateTime(data.timestamp || new Date().toISOString());
+
+                // Update local window.serverData cache
+                const sCached = window.serverData.find(s => String(s.id) === String(sid));
+                if (sCached) {
+                    sCached.cpu = parseFloat(((data.metrics && data.metrics.cpu) || 0));
+                    sCached.ram = parseFloat(((data.metrics && data.metrics.ram) || 0));
+                    sCached.disk = parseFloat(((data.metrics && data.metrics.disk) || 0));
+                    sCached.last_seen = data.timestamp;
+                    if (data.alert_count !== undefined) sCached.alerts_count = data.alert_count;
+                    if (data.vms) sCached.vms = data.vms;
                 }
-                window.location.reload();
-            } catch (e) {
-                alert(`Delete failed: ${e.message || e}`);
-            }
-        }
 
-        function handleDeleteSystemClick(btn) {
-            if (!btn) return;
-            const serverId = Number(btn.dataset.serverId || 0);
-            const hostname = btn.dataset.hostname || 'system';
-            deleteSystem(serverId, hostname);
-        }
+                // Update UI in Inventory Table
+                const row = document.querySelector(`.inv-row[data-server-id="${sid}"]`);
+                if (row) {
+                    const statusBadge = row.querySelector('.inv-status-badge');
+                    const statusDot = row.querySelector('.pulse-dot');
+                    if (statusBadge) {
+                        statusBadge.textContent = data.status || 'ONLINE';
+                        statusBadge.className = `noc-badge ${data.status === 'IDLE' ? 'badge-idle' : 'badge-online'} inv-status-badge`;
+                    }
+                    if (statusDot) {
+                        statusDot.className = `pulse-dot ${data.status === 'IDLE' ? 'pulse-idle' : 'pulse-online'}`;
+                    }
+                    
+                    const cpuFill = row.querySelector('.mini-bar-fill--cpu');
+                    const ramFill = row.querySelector('.mini-bar-fill--ram');
+                    const vals = row.querySelectorAll('.mini-bar-val');
+                    if (cpuFill && data.metrics) {
+                        cpuFill.style.width = data.metrics.cpu + '%';
+                        if (vals[0]) vals[0].innerText = data.metrics.cpu.toFixed(1) + '%';
+                    }
+                    if (ramFill && data.metrics) {
+                        ramFill.style.width = data.metrics.ram + '%';
+                        if (vals[1]) vals[1].innerText = data.metrics.ram.toFixed(1) + '%';
+                    }
+                }
 
-        function handleEnableMonitoringClick(btn) {
-            if (!btn) return;
-            const serverId = Number(btn.dataset.serverId || 0);
-            const hostname = btn.dataset.hostname || 'system';
-            enableMonitoring(serverId, hostname);
-        }
-
-        async function loadHistoricalData(serverId, rangeVal) {
-            let limit = 240;
-            if (rangeVal === '1h') limit = 360;
-            else if (rangeVal === '6h') limit = 2160;
-            else if (rangeVal === '24h') limit = 8640;
-            else if (rangeVal === '7d') limit = 60480;
-
-            const endpoint = `/api/v2/metrics/history?server_id=${serverId}&range=${encodeURIComponent(rangeVal)}&limit=${limit}`;
-            const res = await fetch(endpoint);
-            if (!res.ok) throw new Error(`history_${serverId}_${res.status}`);
-            const rows = await res.json();
-            if (!Array.isArray(rows) || rows.length === 0) return;
-
-            const targetPoints = 300;
-            const step = Math.ceil(rows.length / targetPoints);
-            const sampledRows = rows.filter((_, i) => i % step === 0);
-
-            const labels = [];
-            const cpu = [];
-            const ram = [];
-            for (const row of sampledRows) {
-                labels.push(formatDateTime(row.timestamp));
-                cpu.push(Number(row.cpu_util_percent || 0));
-                ram.push(Number(row.ram_util_percent || 0));
-            }
-
-            historyBuffers[serverId] = {
-                labels,
-                liveCpu: [...cpu],
-                liveRam: [...ram]
-            };
-
-            const combinedChart = charts['combined-' + serverId];
-            if (combinedChart) {
-                combinedChart.data.labels = labels;
-                combinedChart.data.datasets[0].data = [...cpu];
-                combinedChart.data.datasets[1].data = [...ram];
-                combinedChart.update('none');
-            }
-        }
-
-        async function loadHistoricalDataForAll() {
-            const initializedCards = document.querySelectorAll('.server-card[data-initialized="true"]');
-            for (let card of initializedCards) {
-                const serverId = Number(card.dataset.serverId);
-                loadHistoricalData(serverId, selectedHistoryRange).catch(() => null);
-            }
-        }
-
-        async function loadForecast(serverId) {
-            const statusEl = document.getElementById('forecast-status-' + serverId);
-            const recommendationEl = document.getElementById('forecast-recommendation-' + serverId);
-            if (!statusEl || !recommendationEl) return;
-
-            statusEl.textContent = 'Analyzing...';
-            statusEl.className = 'noc-badge badge-agent';
-            recommendationEl.textContent = 'Calculating linear trend from historical metrics...';
-
-            try {
-                const res = await fetch(`/api/v2/server/${serverId}/forecast`);
-                if (!res.ok) throw new Error(`forecast_${res.status}`);
-                const data = await res.json();
-                if (!data.success) {
-                    statusEl.textContent = 'Need More Data';
-                    statusEl.className = 'noc-badge badge-idle';
-                    recommendationEl.textContent = data.message || 'Insufficient historical data for forecasting.';
+                // Only update Live details if this is the selected server
+                if (String(selectedServerId) !== String(sid)) {
                     return;
                 }
 
-                const cpuTrend = ((data.cpu && data.cpu.trend) || 'unknown').toUpperCase();
-                const ramTrend = ((data.ram && data.ram.trend) || 'unknown').toUpperCase();
-                statusEl.textContent = `CPU ${cpuTrend} / RAM ${ramTrend}`;
-                statusEl.className = 'noc-badge badge-agent';
-                recommendationEl.textContent = data.recommendation || 'Trend available.';
+                // Update Live view elements
+                const cpuEl = document.getElementById('live-cpu-val-single');
+                const ramEl = document.getElementById('live-ram-val-single');
+                const diskEl = document.getElementById('live-disk-val-single');
+                const lastUpdateEl = document.getElementById('live-last-update-single');
+
+                if (cpuEl) {
+                    const cpuVal = parseFloat(((data.metrics && data.metrics.cpu) || 0)).toFixed(1) + '%';
+                    if (cpuEl.innerText !== cpuVal) {
+                        cpuEl.innerHTML = `<i class="fa-solid fa-microchip" style="font-size:0.8rem; margin-right:4px;"></i>` + cpuVal;
+                    }
+                }
+                if (ramEl) {
+                    const ramVal = parseFloat(((data.metrics && data.metrics.ram) || 0)).toFixed(1) + '%';
+                    if (ramEl.innerText !== ramVal) {
+                        ramEl.innerHTML = `<i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>` + ramVal;
+                    }
+                }
+                if (diskEl) diskEl.innerText = parseFloat(((data.metrics && data.metrics.disk) || 0)).toFixed(0) + '%';
+                if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
+                
+                const alertsEl = document.getElementById('live-alerts-single');
+                if (alertsEl && data.alert_count !== undefined && data.alert_count !== null) {
+                    alertsEl.innerText = data.alert_count || 0;
+                }
+
+                let buf = historyBuffers[sid] || {};
+                buf.labels = Array.isArray(buf.labels) ? buf.labels : [];
+                buf.liveCpu = Array.isArray(buf.liveCpu) ? buf.liveCpu : [];
+                buf.liveRam = Array.isArray(buf.liveRam) ? buf.liveRam : [];
+
+                buf.labels.push(now);
+                buf.liveCpu.push(parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0);
+                buf.liveRam.push(parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0);
+
+                if (buf.labels.length > MAX_HISTORY) {
+                    buf.labels.shift();
+                    buf.liveCpu.shift();
+                    buf.liveRam.shift();
+                }
+
+                historyBuffers[sid] = buf;
+
+                if (charts['combined-single']) {
+                    charts['combined-single'].data.labels = buf.labels;
+                    charts['combined-single'].data.datasets[0].data = buf.liveCpu;
+                    charts['combined-single'].data.datasets[1].data = buf.liveRam;
+                    
+                    const selectedChart = charts['combined-single'];
+                    if (selectedChart) {
+                        requestAnimationFrame(() => {
+                            selectedChart.update('none');
+                        });
+                    }
+                }
+
+                if (charts['disk-single']) {
+                    const diskVal = parseFloat(((data.metrics && data.metrics.disk) || 0)) || 0;
+                    const diskColor = diskVal > 90 ? '#fb7185' : diskVal > 70 ? '#fbbf24' : '#22d3ee';
+                    charts['disk-single'].data.datasets[0].data = [diskVal, 100 - diskVal];
+                    charts['disk-single'].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
+                    charts['disk-single'].update('none');
+                }
+
+                if (data.vms && data.vms.length > 0) {
+                    const vmCountEl = document.getElementById('live-vm-count-single');
+                    if (vmCountEl) vmCountEl.innerText = data.vms.length;
+
+                    const pulseEl = document.getElementById('vmpulse-single');
+                    if (pulseEl) {
+                        pulseEl.innerHTML = data.vms.map(vm => {
+                            const isRunning = (vm.state || '').toLowerCase() === 'running';
+                            return `<div class="vm-chip">
+                            <span class="pulse-dot ${isRunning ? 'pulse-online' : 'pulse-offline'}"></span>
+                            <span>${vm.name}</span>
+                        </div>`;
+                        }).join('');
+                    }
+                }
+
+                if (data.activity) {
+                    const prodEl = document.getElementById('live-prod-score-single');
+                    const prodStrEl = document.getElementById('live-prod-str-single');
+                    if (prodEl && prodStrEl) {
+                        const idle = parseInt(data.activity.idle || 0);
+                        const app = data.activity.app || '';
+                        if (idle > 300) {
+                            prodEl.innerText = 'IDLE';
+                            prodEl.style.color = 'var(--noc-amber)';
+                            prodStrEl.innerText = 'System Idle';
+                        } else if (app) {
+                            const appLower = app.toLowerCase();
+                            const productive = ['excel', 'word', 'outlook', 'teams', 'slack', 'vscode', 'powershell', 'chrome', 'edge', 'terminal', 'code'];
+                            const unproductive = ['netflix', 'youtube', 'facebook', 'instagram', 'spotify', 'theme', 'game', 'tiktok', 'twitter'];
+                            let cat = 'neutral';
+                            if (productive.some(p => appLower.includes(p))) cat = 'productive';
+                            else if (unproductive.some(u => appLower.includes(u))) cat = 'unproductive';
+
+                            if (cat === 'productive') {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-emerald)';
+                                prodStrEl.innerText = app + ' (Active)';
+                            } else if (cat === 'unproductive') {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-rose)';
+                                prodStrEl.innerText = app + ' (Distracted)';
+                            } else {
+                                prodEl.innerText = '●';
+                                prodEl.style.color = 'var(--noc-text-secondary)';
+                                prodStrEl.innerText = app;
+                            }
+                        }
+                    }
+                }
+
             } catch (err) {
-                statusEl.textContent = 'Unavailable';
-                statusEl.className = 'noc-badge badge-offline';
-                recommendationEl.textContent = 'Forecast API unavailable right now.';
+                console.error('Metrics update handler failed:', err);
             }
         }
 
-        async function refreshForecasts() {
-            const initializedCards = document.querySelectorAll('.server-card[data-initialized="true"]');
-            for (let card of initializedCards) {
-                const serverId = Number(card.dataset.serverId);
-                loadForecast(serverId).catch(() => null);
-            }
-        }
+        window.handleMetricsUpdate = handleMetricsUpdate;
+        window.refreshCharts = refreshCharts;
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Attach event listeners for filter controls
             const filterAgentEl = document.getElementById('invFilterAgent');
             const filterSearchEl = document.getElementById('invSearch');
 
-            if (filterAgentEl) {
-                filterAgentEl.addEventListener('change', filterInventory);
-            }
-            if (filterSearchEl) {
-                filterSearchEl.addEventListener('input', filterInventory);
-            }
+            if (filterAgentEl) filterAgentEl.addEventListener('change', applyFilterImmediate);
+            if (filterSearchEl) filterSearchEl.addEventListener('input', filterInventory);
 
             const historyRangeEl = document.getElementById('historyRange');
             const applyHistoryBtn = document.getElementById('applyHistoryBtn');
@@ -2874,135 +2686,21 @@
                 }
             });
 
+            // Initialize local historyBuffers from serverData
+            serverData.forEach(s => {
+                let nowStr = new Date().toISOString();
+                if (s.last_seen) {
+                    nowStr = s.last_seen.includes('+') || s.last_seen.endsWith('Z') ? s.last_seen : s.last_seen + 'Z';
+                }
+                historyBuffers[s.id] = {
+                    labels: [formatDateTime(nowStr)],
+                    liveCpu: [Number(s.cpu || 0)],
+                    liveRam: [Number(s.ram || 0)]
+                };
+            });
+
+            // Socket connection setup
             let dashboardSocket = null;
-
-            function handleMetricsUpdate(data) {
-                try {
-                    if (!data || !data.server_id) return;
-                    const sid = data.server_id;
-                    const now = formatDateTime(data.timestamp || new Date().toISOString());
-
-                    const cpuEl = document.getElementById('live-cpu-val-' + sid);
-                    const ramEl = document.getElementById('live-ram-val-' + sid);
-                    const diskEl = document.getElementById('live-disk-val-' + sid);
-                    const lastUpdateEl = document.getElementById('live-last-update-' + sid);
-
-                    if (cpuEl) cpuEl.innerText = parseFloat(((data.metrics && data.metrics.cpu) || 0)).toFixed(1) + '%';
-                    if (ramEl) ramEl.innerText = parseFloat(((data.metrics && data.metrics.ram) || 0)).toFixed(1) + '%';
-                    if (diskEl) diskEl.innerText = parseFloat(((data.metrics && data.metrics.disk) || 0)).toFixed(1) + '%';
-                    if (lastUpdateEl) lastUpdateEl.innerText = now || 'N/A';
-                    const alertsEl = document.getElementById('live-alerts-' + sid);
-                    if (alertsEl && data.alert_count !== undefined && data.alert_count !== null) {
-                        alertsEl.innerText = data.alert_count || 0;
-                    }
-
-                    if (!historyBuffers) {
-                        console.warn('historyBuffers not initialized yet');
-                        return;
-                    }
-
-                    let buf = historyBuffers[sid] || {};
-                    buf.labels = Array.isArray(buf.labels) ? buf.labels : [];
-                    buf.liveCpu = Array.isArray(buf.liveCpu) ? buf.liveCpu : [];
-                    buf.liveRam = Array.isArray(buf.liveRam) ? buf.liveRam : [];
-                    buf.baselineCpu = Array.isArray(buf.baselineCpu) ? buf.baselineCpu : [];
-                    buf.baselineRam = Array.isArray(buf.baselineRam) ? buf.baselineRam : [];
-                    buf.baselinePatternCpu = Array.isArray(buf.baselinePatternCpu) ? buf.baselinePatternCpu : [];
-                    buf.baselinePatternRam = Array.isArray(buf.baselinePatternRam) ? buf.baselinePatternRam : [];
-
-                    buf.labels.push(now);
-                    buf.liveCpu.push(parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0);
-                    buf.liveRam.push(parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0);
-                const cpuPattern = (buf.baselinePatternCpu.length) ? buf.baselinePatternCpu : [parseFloat(((data.metrics && data.metrics.cpu) || 0)) || 0];
-                const ramPattern = (buf.baselinePatternRam.length) ? buf.baselinePatternRam : [parseFloat(((data.metrics && data.metrics.ram) || 0)) || 0];
-                buf.baselineCpu.push(cpuPattern[(buf.liveCpu.length - 1) % cpuPattern.length]);
-                buf.baselineRam.push(ramPattern[(buf.liveRam.length - 1) % ramPattern.length]);
-
-                if (buf.labels.length > MAX_HISTORY) {
-                    buf.labels.shift();
-                    buf.liveCpu.shift();
-                    buf.liveRam.shift();
-                    buf.baselineCpu.shift();
-                    buf.baselineRam.shift();
-                }
-
-                historyBuffers[sid] = buf;
-
-                if (charts['combined-' + sid]) {
-                    charts['combined-' + sid].data.labels = buf.labels;
-                    charts['combined-' + sid].data.datasets[0].data = buf.liveCpu;
-                    charts['combined-' + sid].data.datasets[1].data = buf.liveRam;
-                    charts['combined-' + sid].update('none');
-                }
-
-                if (charts['disk-' + sid]) {
-                    const diskVal = parseFloat(((data.metrics && data.metrics.disk) || 0)) || 0;
-                    const diskColor = diskVal > 90 ? '#fb7185' : diskVal > 70 ? '#fbbf24' : '#22d3ee';
-                    charts['disk-' + sid].data.datasets[0].data = [diskVal, 100 - diskVal];
-                    charts['disk-' + sid].data.datasets[0].backgroundColor = [diskColor, 'rgba(51,65,85,0.3)'];
-                    charts['disk-' + sid].update('none');
-                }
-
-                if (data.vms && data.vms.length > 0) {
-                    const vmCountEl = document.getElementById('live-vm-count-' + sid);
-                    if (vmCountEl) vmCountEl.innerText = data.vms.length;
-
-                    const pulseEl = document.getElementById('vmpulse-' + sid);
-                    if (pulseEl) {
-                        pulseEl.innerHTML = data.vms.map(vm => {
-                            const isRunning = (vm.state || '').toLowerCase() === 'running';
-                            return `<div class="vm-chip">
-                            <span class="pulse-dot ${isRunning ? 'pulse-online' : 'pulse-offline'}"></span>
-                            <span>${vm.name}</span>
-                        </div>`;
-                        }).join('');
-                    }
-                }
-
-                if (data.activity) {
-                    const prodEl = document.getElementById('live-prod-score-' + sid);
-                    if (prodEl) {
-                        const idle = parseInt(data.activity.idle || 0);
-                        const app = data.activity.app || '';
-                        if (idle > 300) {
-                            prodEl.innerText = 'IDLE';
-                            prodEl.style.color = 'var(--noc-amber)';
-                        } else if (app) {
-                            const appLower = app.toLowerCase();
-                            const productive = ['excel', 'word', 'outlook', 'teams', 'slack', 'vscode', 'powershell', 'chrome', 'edge', 'terminal', 'code'];
-                            const unproductive = ['netflix', 'youtube', 'facebook', 'instagram', 'spotify', 'steam', 'game', 'tiktok', 'twitter'];
-                            let cat = 'neutral';
-                            if (productive.some(p => appLower.includes(p))) cat = 'productive';
-                            else if (unproductive.some(u => appLower.includes(u))) cat = 'unproductive';
-
-                            if (cat === 'productive') {
-                                prodEl.innerText = '●';
-                                prodEl.style.color = 'var(--noc-emerald)';
-                            } else if (cat === 'unproductive') {
-                                prodEl.innerText = '●';
-                                prodEl.style.color = 'var(--noc-rose)';
-                            } else {
-                                prodEl.innerText = '●';
-                                prodEl.style.color = 'var(--noc-text-secondary)';
-                            }
-                        }
-                    }
-                }
-
-                if (data.status) {
-                    const invRows = document.querySelectorAll(`.inv-row[data-hostname]`);
-                    invRows.forEach(row => {
-                        const link = row.querySelector(`a[href*="/${sid}"]`);
-                        if (!link) return;
-                        const statusSpan = row.querySelector('.inv-status-badge');
-                        if (statusSpan) statusSpan.textContent = data.status;
-                    });
-                }
-            } catch (err) {
-                console.error('Metrics update handler failed:', err);
-            }
-            }
-
             function initializeSocketConnection(retries = 0) {
                 if (typeof io === 'undefined') {
                     if (retries < 50) {
@@ -3044,40 +2742,14 @@
                 dashboardSocket.on('disconnect', (reason) => {
                     console.warn('Socket.IO disconnected:', reason);
                 });
-                dashboardSocket.on('metrics_update', handleMetricsUpdate);
+                dashboardSocket.on('metrics_update', (data) => {
+                    requestAnimationFrame(() => {
+                        handleMetricsUpdate(data);
+                    });
+                });
             }
 
             initializeSocketConnection();
-
-            // ── Wait for Chart.js (loaded with defer) before initializing charts ──
-            // Chart.js uses `defer` in base.html so it may not be ready when
-            // DOMContentLoaded fires. Poll every 100ms until it appears (max 4s).
-            function initChartsWhenReady(serverId, retries) {
-                retries = retries === undefined ? 0 : retries;
-                if (typeof Chart !== 'undefined') {
-                    initChartsForServer(serverId);
-                } else if (retries < 40) {
-                    setTimeout(function () { initChartsWhenReady(serverId, retries + 1); }, 100);
-                } else {
-                    console.warn('Chart.js did not load in time for server', serverId);
-                }
-            }
-
-            // ── Lazy Loading Intersection Observer ──
-            const cardObserver = new IntersectionObserver((entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const card = entry.target;
-                        const serverId = Number(card.dataset.serverId);
-                        if (!card.dataset.initialized && serverId) {
-                            card.dataset.initialized = 'true';
-                            initChartsWhenReady(serverId);
-                        }
-                    }
-                });
-            }, { rootMargin: '400px' });
-
-            document.querySelectorAll('.server-card').forEach(card => cardObserver.observe(card));
         });
     </script>
 

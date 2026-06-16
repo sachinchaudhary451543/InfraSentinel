@@ -260,6 +260,7 @@ class EmployeeActivity(db.Model):
         db.Index('idx_employee_activity_tenant_server_user', 'tenant_id', 'server_id', 'user'),
         db.Index('idx_employee_activity_tenant_timestamp', 'tenant_id', 'timestamp'),
         db.Index('idx_employee_activity_employee_timestamp', 'employee_id', 'timestamp'),
+         db.Index('idx_employee_activity_server_timestamp', 'server_id', 'timestamp'),
     )
 
 
@@ -851,11 +852,18 @@ class ActivitySession(db.Model):
     start_time = db.Column(db.DateTime, nullable=False, index=True)
     end_time = db.Column(db.DateTime, nullable=True)
     
-    # Computed aggregates for the session block
+
+    # Computed aggregates for the session block (storing seconds for precision)
     active_minutes = db.Column(db.Integer, default=0)
     idle_minutes = db.Column(db.Integer, default=0)
     productive_minutes = db.Column(db.Integer, default=0)
     non_productive_minutes = db.Column(db.Integer, default=0)
+
+    # New canonical fields
+    active_seconds = db.Column(db.Integer, default=0)
+    idle_seconds = db.Column(db.Integer, default=0)
+    productive_seconds = db.Column(db.Integer, default=0)
+    non_productive_seconds = db.Column(db.Integer, default=0)
     
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
@@ -900,8 +908,13 @@ class AttendanceRecord(db.Model):
     date = db.Column(db.Date, nullable=False)
     first_activity = db.Column(db.DateTime)
     last_activity = db.Column(db.DateTime)
+        # Backward compatibility
     total_active_minutes = db.Column(db.Integer, default=0)
     total_idle_minutes = db.Column(db.Integer, default=0)
+
+        # New canonical fields
+    total_active_seconds = db.Column(db.Integer, default=0)
+    total_idle_seconds = db.Column(db.Integer, default=0)
     
     status = db.Column(db.String(50)) # present, absent, half_day
     

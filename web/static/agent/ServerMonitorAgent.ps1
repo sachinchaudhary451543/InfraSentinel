@@ -1,6 +1,6 @@
 # ServerMonitorAgent.ps1 - Production Multi-Tenant Agent v3.1
 # Collects: CPU, RAM, Disk, active app, window title, idle time, running apps, Hyper-V VMs
-# Sends: JSON payload every 10s to /api/metrics
+# Sends: JSON payload every 30s to /api/metrics
 # Screenshots: every 10 minutes via /api/screenshot
 
 param(
@@ -184,7 +184,7 @@ $ProductiveApps = @(
     'python','pythonw','node','java'
 )
 $IdleThresholdSeconds = 120   # 2 min without input = idle
-$TickSeconds          = 10    # loop sleep interval
+$TickSeconds          = 30    # loop sleep interval
 
 # ── Session time accumulators (reset on each boot / agent start) ──
 $sessionActiveSec     = 0
@@ -296,5 +296,5 @@ while ($true) {
         Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Connection error: $_" -ForegroundColor Red
     }
 
-    Start-Sleep -Seconds 10
+    Start-Sleep -Seconds 30
 }

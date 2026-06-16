@@ -20,7 +20,7 @@ import logging
 import time
 from datetime import datetime
 from threading import Thread, Event
-from typing import Optional
+from typing import Optional, Any
 
 from auth.entra_auth import get_token_silently, get_msal_app
 from core.graph_integration import (
@@ -33,6 +33,46 @@ from sqlalchemy.exc import OperationalError
 from web.models import db, Tenant, AzureDevice, AzureUser, AzureDeviceOwner
 
 logger = logging.getLogger("[AZURE-SYNC]")
+
+
+class TokenProvider:
+    """Manages acquisition, caching, and refresh of Microsoft Graph App access tokens."""
+    
+    def __init__(self, client_id: str, client_secret: str, tenant_id: str):
+        self.client_id = client_id.strip()
+        self.client_secret = client_secret.strip()
+        self.tenant_id = tenant_id.strip()
+        self._token: Optional[str] = None
+        self._expires_at: float = 0.0
+
+    def __call__(self, force_refresh: bool = False) -> Optional[str]:
+        now = time.time()
+        if force_refresh or not self._token or now >= self._expires_at - 300:
+            logger.info("Acquiring/refreshing Microsoft Graph App token...")
+            url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+            data = {
+                'grant_type': 'client_credentials',
+                'client_id': self.client_id,
+                'client_secret': self.client_secret,
+                'scope': 'https://graph.microsoft.com/.default'
+            }
+            try:
+                import requests
+                response = requests.post(url, data=data, timeout=15)
+                response.raise_for_status()
+                token_data = response.json()
+                self._token = token_data.get('access_token')
+                expires_in = token_data.get('expires_in', 3600)
+                self._expires_at = now + expires_in
+                logger.info(f"Successfully obtained app token, expires in {expires_in} seconds.")
+            except Exception as e:
+                logger.error(f"Failed to obtain Microsoft Graph App token: {e}")
+                if not force_refresh and self._token:
+                    logger.warning("Using cached/expired Graph App token as fallback.")
+                    return self._token
+                self._token = None
+                self._expires_at = 0.0
+        return self._token
 
 
 class AzureSyncService:
@@ -133,13 +173,13 @@ class AzureSyncService:
             return
         
         try:
-            from core.azure_graph import _get_app_token
-            token = _get_app_token(cid, csecret, tid)
+            token_provider = TokenProvider(cid, csecret, tid)
+            token = token_provider()
             if not token:
                 logger.error(f"Failed to acquire token for tenant {tenant.name}")
                 return
             
-            self.sync_tenant_with_token(tenant, token)
+            self.sync_tenant_with_token(tenant, token_provider)
         except Exception as e:
             logger.error(f"Failed to sync tenant {tenant.id}: {e}", exc_info=True)
         finally:
@@ -148,7 +188,7 @@ class AzureSyncService:
             except Exception:
                 pass
     
-    def sync_tenant_with_token(self, tenant, access_token: str):
+    def sync_tenant_with_token(self, tenant, access_token: Any):
         """
         Sync tenant using provided access token.
         

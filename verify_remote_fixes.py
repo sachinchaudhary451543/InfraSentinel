@@ -39,7 +39,7 @@ def verify_fixes():
     checks_total += 1
     if check_file_contains(
         "web/routes/api.py",
-        "socketio.emit('command_result'",
+        "emit('command_result'",
         "WebSocket emit() call present"
     ):
         checks_passed += 1

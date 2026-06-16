@@ -215,13 +215,13 @@
                     {% if sessions %}
                     <div class="relative border-l-2 border-slate-100 ml-3 space-y-6 pb-4">
                         {% for session in sessions %}
-                        <div class="relative pl-6">
+                        <div class="relative pl-8">
                             <div
-                                class="absolute -left-[10px] top-2 w-4 h-4 rounded-full border-2 border-white 
+                                class="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm
                               {% if session.idle_minutes > session.active_minutes %}bg-amber-400{% else %}bg-emerald-500{% endif %}">
                             </div>
 
-                            <div class="text-xs font-bold text-slate-400 mb-1">
+                            <div class="text-xs font-bold text-slate-400 mb-1 relative z-10">
                                 {{ session.start_time_display.strftime('%I:%M %p') if session.start_time_display else
                                 session.start_time.strftime('%I:%M %p') }}
                                 {% if session.end_time_display %}

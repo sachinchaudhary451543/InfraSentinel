@@ -2,7 +2,7 @@
 Database Optimization Module - Add missing indexes and optimize queries
 =======================================================================
 Implements performance optimizations for dashboard and forecast endpoints.
-Run this on startup to ensure all critical indexes exist.
+Runs on startup to ensure all critical indexes exist for SQLite & PostgreSQL.
 """
 
 import logging
@@ -13,12 +13,7 @@ logger = logging.getLogger("[DB_OPTIMIZATION]")
 
 
 def create_critical_indexes(db: SQLAlchemy):
-    """Create missing indexes for query performance"""
-
-    if db.engine.dialect.name != 'postgresql':
-        logger.info('Skipping create_critical_indexes: not a PostgreSQL database')
-        return
-
+    """Create missing indexes for query performance on any database dialect"""
     connection = db.engine.connect()
 
     indexes = [
@@ -108,6 +103,34 @@ def create_critical_indexes(db: SQLAlchemy):
             "table": "azure_device_owner",
             "columns": ["tenant_id"],
             "unique": False
+        },
+
+        # EmployeeActivity table
+        {
+            "name": "idx_employee_activity_server_timestamp",
+            "table": "employee_activity",
+            "columns": ["server_id", "timestamp"],
+            "unique": False
+        },
+        {
+            "name": "idx_employee_activity_tenant_timestamp",
+            "table": "employee_activity",
+            "columns": ["tenant_id", "timestamp"],
+            "unique": False
+        },
+
+        # ActivitySession table
+        {
+            "name": "idx_activity_session_tenant_start_time",
+            "table": "activity_session",
+            "columns": ["tenant_id", "start_time"],
+            "unique": False
+        },
+        {
+            "name": "idx_activity_session_employee_start_time",
+            "table": "activity_session",
+            "columns": ["employee_id", "start_time"],
+            "unique": False
         }
     ]
 
@@ -116,103 +139,42 @@ def create_critical_indexes(db: SQLAlchemy):
     try:
         for idx_spec in indexes:
             try:
-                # PostgreSQL index existence check
-                check_sql = f"""
-                SELECT indexname
-                FROM pg_indexes
-                WHERE indexname = '{idx_spec["name"]}'
-                """
-
-                result = connection.execute(
-                    text(check_sql)
-                ).fetchone()
-
-                if not result:
-                    columns_str = ", ".join(idx_spec["columns"])
-                    unique_str = (
-                        "UNIQUE"
-                        if idx_spec.get("unique", False)
-                        else ""
-                    )
-
-                    create_sql = f"""
-                    CREATE {unique_str} INDEX {idx_spec['name']}
-                    ON {idx_spec['table']} ({columns_str})
-                    """
-
-                    connection.execute(text(create_sql))
-                    connection.commit()
-
-                    logger.info(
-                        f"✓ Created index: {idx_spec['name']}"
-                    )
-
-                    created_count += 1
-
-                else:
-                    logger.debug(
-                        f"Index already exists: {idx_spec['name']}"
-                    )
-
+                columns_str = ", ".join(idx_spec["columns"])
+                unique_str = "UNIQUE" if idx_spec.get("unique", False) else ""
+                
+                # Standard SQL statement supported natively by both PostgreSQL and SQLite
+                create_sql = f"CREATE {unique_str} INDEX IF NOT EXISTS {idx_spec['name']} ON {idx_spec['table']} ({columns_str})"
+                connection.execute(text(create_sql))
+                connection.commit()
+                logger.info(f"✓ Ensured index exists: {idx_spec['name']}")
+                created_count += 1
             except Exception as e:
                 connection.rollback()
-
-                logger.warning(
-                    f"Failed to create index {idx_spec['name']}: {e}"
-                )
-
+                logger.warning(f"Failed to create index {idx_spec['name']}: {e}")
     finally:
         connection.close()
 
-    logger.info(
-        f"Database optimization complete. "
-        f"Created {created_count} new indexes."
-    )
+    logger.info(f"Database optimization complete. Ensured {created_count} indexes exist.")
 
 
 def analyze_database(db: SQLAlchemy):
-    """Analyze PostgreSQL database"""
-
-    if db.engine.dialect.name != 'postgresql':
-        logger.info('Skipping analyze_database: not a PostgreSQL database')
-        return
-
+    """Analyze database for query optimization (PostgreSQL / SQLite)"""
     try:
         connection = db.engine.connect()
-
-        connection.execute(
-            text("ANALYZE")
-        )
-
+        connection.execute(text("ANALYZE"))
         connection.commit()
         connection.close()
-
-        logger.info(
-            "✓ Database ANALYZE completed"
-        )
-
+        logger.info("✓ Database ANALYZE completed")
     except Exception as e:
-        logger.warning(
-            f"Failed to analyze database: {e}"
-        )
+        logger.warning(f"Failed to analyze database: {e}")
 
 
 def enable_query_logging(app):
     """Enable SQL query logging"""
-
     if app.config.get('SQLALCHEMY_ECHO'):
         return
 
     import logging as py_logging
-
     py_logging.basicConfig()
-
-    py_logging.getLogger(
-        'sqlalchemy.engine'
-    ).setLevel(
-        py_logging.INFO
-    )
-
-    logger.info(
-        "SQL query logging enabled"
-    )
+    py_logging.getLogger('sqlalchemy.engine').setLevel(py_logging.INFO)
+    logger.info("SQL query logging enabled")

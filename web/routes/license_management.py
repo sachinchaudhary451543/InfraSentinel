@@ -253,7 +253,7 @@ def get_license_breakdown(license_id):
                 'email': email,
                 'name': display_name,
                 'department': user.department or (employee.department if employee else None),
-                'job_title': user.job_title or (employee.job_title if employee else None),
+                'job_title': user.job_title or (employee.designation if employee else None),
                 'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else (assignment.created_at.isoformat() if getattr(assignment, 'created_at', None) else None),
                 'state': 'active'
             })
@@ -277,7 +277,7 @@ def get_license_breakdown(license_id):
                 employee = Employee.query.filter_by(tenant_id=tenant_id, email=email).first() if email else None
                 name = azure_u.display_name if azure_u else (employee.name if employee else email.split('@')[0].replace('.', ' ').title())
                 dept = azure_u.department if azure_u else (employee.department if employee else None)
-                job_title = azure_u.job_title if azure_u else (employee.job_title if employee else None)
+                job_title = azure_u.job_title if azure_u else (employee.designation if employee else None)
                 
                 assigned_users.append({
                     'user_id': a.user_id,

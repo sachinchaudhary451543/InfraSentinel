@@ -163,24 +163,23 @@ def _resolve_screenshot_local_path(shot, update_db=False):
 def _process_productivity_background(tenant_id, server_id, logged_in_user,
                                      active_app, window_title, browser_url,
                                      idle_time_seconds, timestamp):
-    """Process productivity data in a background task outside the main request."""
+    """Process productivity data synchronously inside the request thread."""
     try:
-        from web.app import app as flask_app
-        with flask_app.app_context():
-            from core.productivity_engine import ProductivityEngine
-            ProductivityEngine.process_agent_activity(
-                tenant_id=tenant_id,
-                server_id=server_id,
-                logged_in_user=logged_in_user,
-                active_app=active_app,
-                window_title=window_title,
-                browser_url=browser_url,
-                idle_time_seconds=idle_time_seconds,
-                timestamp=timestamp,
-            )
-            logger.debug("ProductivityEngine background processed successfully")
+        from core.productivity_engine import ProductivityEngine
+        ProductivityEngine.process_agent_activity(
+            tenant_id=tenant_id,
+            server_id=server_id,
+            logged_in_user=logged_in_user,
+            active_app=active_app,
+            window_title=window_title,
+            browser_url=browser_url,
+            idle_time_seconds=idle_time_seconds,
+            timestamp=timestamp,
+        )
+        logger.debug("ProductivityEngine processed successfully")
     except Exception as e:
-        logger.error(f"Background ProductivityEngine failed: {e}", exc_info=True)
+        logger.error(f"ProductivityEngine failed: {e}", exc_info=True)
+
 
 #
 # Legacy agent compatibility endpoints
@@ -1200,9 +1199,7 @@ def agent_metrics():
 
                 if should_schedule:
                     _PRODUCTIVITY_TASK_LAST[productivity_key] = now
-                    from web.app import socketio as socketio_instance
-                    socketio_instance.start_background_task(
-                        _process_productivity_background,
+                    _process_productivity_background(
                         server.tenant_id,
                         server.id,
                         logged_in_user,
@@ -1213,7 +1210,8 @@ def agent_metrics():
                         now
                     )
             except Exception as e:
-                logger.error(f"Failed to schedule background productivity processing: {e}", exc_info=True)
+                logger.error(f"Failed to process productivity: {e}", exc_info=True)
+
 
         # ── Screenshot (base64 inline, save to disk) ───────────────────────────
         ss_data = data.get('screenshot')

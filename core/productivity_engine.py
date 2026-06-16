@@ -167,15 +167,24 @@ class ProductivityEngine:
                 
         # Update session aggregates (storing SECONDS in the minutes columns)
         if idle_time_seconds < 60:
-            session.active_minutes = (session.active_minutes or 0) + duration_seconds
-            attendance.total_active_minutes = (attendance.total_active_minutes or 0) + duration_seconds
+            session.active_seconds = (session.active_seconds or 0) + duration_seconds
+            attendance.total_active_seconds = (attendance.total_active_seconds or 0) + duration_seconds
+
+            # Backward compatibility
+            session.active_minutes = session.active_seconds
+            attendance.total_active_minutes = attendance.total_active_seconds
+
             if classification == 'productive':
                 session.productive_minutes = (session.productive_minutes or 0) + duration_seconds
+                session.productive_seconds = (session.productive_seconds or 0) + duration_seconds
             elif classification == 'non_productive':
                 session.non_productive_minutes = (session.non_productive_minutes or 0) + duration_seconds
+                session.non_productive_seconds = (session.non_productive_seconds or 0) + duration_seconds
         else:
             session.idle_minutes = (session.idle_minutes or 0) + duration_seconds
+            session.idle_seconds = (session.idle_seconds or 0) + duration_seconds
             attendance.total_idle_minutes = (attendance.total_idle_minutes or 0) + duration_seconds
+            attendance.total_idle_seconds = (attendance.total_idle_seconds or 0) + duration_seconds
             
         # 4. Record AppUsage
         if active_app:

@@ -6,6 +6,7 @@ Employees, Devices, Login/Logout tracking, Software Deployment, and Remote Acces
 import logging
 import os
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from typing import Any
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, abort, flash, make_response
@@ -76,6 +77,39 @@ class SimplePagination:
 
 def _compact_identity(value):
     return (value or '').lower().replace('.', '').replace('_', '').replace('-', '')
+
+
+def _activity_identity_keys(employee):
+    keys = set()
+    for value in (
+        getattr(employee, 'local_username', None),
+        getattr(employee, 'email', None),
+        getattr(employee, 'name', None),
+        getattr(employee, 'display_name', None),
+    ):
+        value = (value or '').strip().lower()
+        if not value:
+            continue
+        keys.add(value)
+        if '@' in value:
+            keys.add(value.split('@', 1)[0])
+        compact = _compact_identity(value.split('@', 1)[0] if '@' in value else value)
+        if compact:
+            keys.add(compact)
+    return keys
+
+
+def _activity_user_keys(value):
+    user = (value or '').strip().lower()
+    if '\\' in user:
+        user = user.split('\\')[-1]
+    keys = {user} if user else set()
+    if '@' in user:
+        keys.add(user.split('@', 1)[0])
+    compact = _compact_identity(user.split('@', 1)[0] if '@' in user else user)
+    if compact:
+        keys.add(compact)
+    return keys
 
 
 def _resolve_asset_log_employee_key(
@@ -560,20 +594,75 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
         EmployeeActivity.app.ilike('%ssh%'),
         EmployeeActivity.app.ilike('%postman%'),
     )
-    activity_rows = db.session.query(
-        EmployeeActivity.employee_id,
-        db.func.sum(db.case((EmployeeActivity.idle_time < 60, 30), else_=0)).label('active_sec'),
-        db.func.sum(db.case((EmployeeActivity.idle_time >= 60, 30), else_=0)).label('idle_sec'),
-        db.func.sum(db.case((db.and_(EmployeeActivity.idle_time < 60, productive_app_filter), 30), else_=0)).label('prod_sec'),
-        db.func.min(EmployeeActivity.timestamp).label('first_activity'),
-        db.func.max(EmployeeActivity.timestamp).label('last_activity'),
-    ).filter(
+    key_to_employee_id = {}
+    for emp in employees:
+        for key in _activity_identity_keys(emp):
+            key_to_employee_id.setdefault(key, emp.id)
+    all_identity_keys = list(key_to_employee_id.keys())
+
+    activity_filter = [
         EmployeeActivity.tenant_id == tenant_id,
-        EmployeeActivity.employee_id.in_(employee_ids),
         EmployeeActivity.timestamp >= day_start,
         EmployeeActivity.timestamp <= day_end,
-    ).group_by(EmployeeActivity.employee_id).all() if employee_ids else []
-    activity_by_employee = {row.employee_id: row for row in activity_rows if row.employee_id}
+    ]
+    if employee_ids and all_identity_keys:
+        activity_filter.append(db.or_(
+            EmployeeActivity.employee_id.in_(employee_ids),
+            db.func.lower(EmployeeActivity.user).in_(all_identity_keys),
+        ))
+    elif employee_ids:
+        activity_filter.append(EmployeeActivity.employee_id.in_(employee_ids))
+    elif all_identity_keys:
+        activity_filter.append(db.func.lower(EmployeeActivity.user).in_(all_identity_keys))
+
+    raw_activity_rows = EmployeeActivity.query.filter(*activity_filter).all() if (employee_ids or all_identity_keys) else []
+    activity_accumulators = {}
+    for activity in raw_activity_rows:
+        matched_employee_id = activity.employee_id if activity.employee_id in employee_ids else None
+        if matched_employee_id is None:
+            for key in _activity_user_keys(activity.user):
+                matched_employee_id = key_to_employee_id.get(key)
+                if matched_employee_id:
+                    break
+        if not matched_employee_id:
+            continue
+
+        acc = activity_accumulators.setdefault(matched_employee_id, {
+            'employee_id': matched_employee_id,
+            'active_sec': 0,
+            'idle_sec': 0,
+            'prod_sec': 0,
+            'first_activity': None,
+            'last_activity': None,
+        })
+        idle_time = int(activity.idle_time or 0)
+        if idle_time < 60:
+            acc['active_sec'] += 30
+            app_lower = (activity.app or '').lower()
+            if any(token in app_lower for token in (
+                'excel', 'word', 'outlook', 'teams', 'slack', 'chrome', 'edge',
+                'code', 'studio', 'powershell', 'terminal', 'cmd', 'ssh', 'postman'
+            )):
+                acc['prod_sec'] += 30
+        else:
+            acc['idle_sec'] += 30
+
+        if activity.timestamp:
+            if acc['first_activity'] is None or activity.timestamp < acc['first_activity']:
+                acc['first_activity'] = activity.timestamp
+            if acc['last_activity'] is None or activity.timestamp > acc['last_activity']:
+                acc['last_activity'] = activity.timestamp
+
+    activity_by_employee = {}
+    for employee_id, acc in activity_accumulators.items():
+        activity_by_employee[employee_id] = SimpleNamespace(
+            employee_id=employee_id,
+            active_sec=acc['active_sec'],
+            idle_sec=acc['idle_sec'],
+            prod_sec=acc['prod_sec'],
+            first_activity=acc['first_activity'],
+            last_activity=acc['last_activity'],
+        )
 
     device_maps = _build_employee_device_maps(tenant_id, day_start, day_end)
     emp_rows = []
@@ -595,11 +684,7 @@ def _build_productivity_rows(tenant_id, target_date, search_query=''):
         ):
             continue
 
-        if not device_info.get('server_id'):
-            continue
-
-        if not session_summary and not activity_summary and not att and not device_info.get('name'):
-            continue
+        # Keep all active employees to display in the productivity list (do not filter out based on server or activity existence)
 
         metric_summary = session_summary or activity_summary
         active_sec = metric_summary.active_sec if metric_summary else 0
@@ -1498,7 +1583,6 @@ def productivity_screenshots():
 @login_required
 def employee_productivity_detail(employee_id):
     """HR View: Deep dive into a specific employee's productivity."""
-    from types import SimpleNamespace
     from web.models import ActivitySession, AttendanceRecord, AppUsage, EmployeeActivity
     try:
         tenant_id = current_user.tenant_id
@@ -1543,12 +1627,28 @@ def employee_productivity_detail(employee_id):
             ActivitySession.start_time <= day_end
         ).order_by(ActivitySession.start_time.asc()).all()
 
-        activity_rows = EmployeeActivity.query.filter(
+        identity_keys = list(_activity_identity_keys(emp))
+        activity_conditions = [
             EmployeeActivity.tenant_id == tenant_id,
-            EmployeeActivity.employee_id == emp.id,
             EmployeeActivity.timestamp >= day_start,
-            EmployeeActivity.timestamp <= day_end
-        ).order_by(EmployeeActivity.timestamp.asc()).all()
+            EmployeeActivity.timestamp <= day_end,
+        ]
+        if identity_keys:
+            activity_conditions.append(db.or_(
+                EmployeeActivity.employee_id == emp.id,
+                db.func.lower(EmployeeActivity.user).in_(identity_keys),
+            ))
+        else:
+            activity_conditions.append(EmployeeActivity.employee_id == emp.id)
+
+        activity_candidates = EmployeeActivity.query.filter(*activity_conditions).order_by(EmployeeActivity.timestamp.asc()).all()
+        activity_rows = []
+        for activity in activity_candidates:
+            if activity.employee_id == emp.id:
+                activity_rows.append(activity)
+                continue
+            if _activity_user_keys(activity.user).intersection(identity_keys):
+                activity_rows.append(activity)
 
         productive_keywords = [
             'excel', 'word', 'outlook', 'teams', 'slack', 'zoom', 'chrome', 'edge',

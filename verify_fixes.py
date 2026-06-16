@@ -15,7 +15,6 @@ def check_files():
     files_to_check = [
         ('web/models.py', 'Model definitions'),
         ('web/routes/api.py', 'API endpoints'),
-        ('fix_employee_activity_schema.py', 'Database migration'),
     ]
     
     for filepath, description in files_to_check:
