@@ -164,7 +164,9 @@ class Server(db.Model):
         now = datetime.utcnow()
         diff = (now - self.last_seen).total_seconds()
         
-        if diff > 60:
+        # Keep the status window aligned with the agent portal and allow for
+        # one delayed heartbeat before showing an otherwise active agent offline.
+        if diff > 90:
             return "OFFLINE"
             
         # Check latest activity for idle status
@@ -185,6 +187,36 @@ class Server(db.Model):
     @property
     def vms_count(self):
         return self.vms.count() if hasattr(self.vms, 'count') else len(self.vms)
+
+
+class AgentFeaturePolicy(db.Model):
+    """Per-employee agent collection policy for a specific endpoint."""
+    __tablename__ = 'agent_feature_policy'
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False, index=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False, index=True)
+    employee_key = db.Column(db.String(255), nullable=False, index=True)
+    system_metrics = db.Column(db.Boolean, nullable=False, default=True)
+    productivity = db.Column(db.Boolean, nullable=False, default=True)
+    screenshots = db.Column(db.Boolean, nullable=False, default=True)
+    process_inventory = db.Column(db.Boolean, nullable=False, default=True)
+    installed_software = db.Column(db.Boolean, nullable=False, default=True)
+    hyperv_inventory = db.Column(db.Boolean, nullable=False, default=True)
+    browser_activity = db.Column(db.Boolean, nullable=False, default=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.String(255))
+
+    __table_args__ = (
+        db.UniqueConstraint('server_id', 'employee_key', name='uq_agent_feature_policy_server_employee'),
+    )
+
+    FEATURE_FIELDS = (
+        'system_metrics', 'productivity', 'screenshots', 'process_inventory',
+        'installed_software', 'hyperv_inventory', 'browser_activity',
+    )
+
+    def as_dict(self):
+        return {field: bool(getattr(self, field)) for field in self.FEATURE_FIELDS}
 
 class VM(db.Model):
     """Virtual machine inventory"""

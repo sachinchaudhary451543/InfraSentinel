@@ -59,7 +59,8 @@ function Get-ActiveApp {
             $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
             if ($proc) { return $proc.Name }
         }
-    } catch {}
+    }
+    catch {}
     return "Unknown"
 }
 
@@ -67,11 +68,12 @@ function Get-RunningApps {
     # Top 20 apps by CPU, excluding system processes
     try {
         $apps = Get-Process | Where-Object { $_.MainWindowTitle -ne "" } |
-            Sort-Object CPU -Descending |
-            Select-Object -First 20 |
-            ForEach-Object { $_.Name }
+        Sort-Object CPU -Descending |
+        Select-Object -First 20 |
+        ForEach-Object { $_.Name }
         return ($apps -join ", ")
-    } catch {}
+    }
+    catch {}
     return ""
 }
 
@@ -79,7 +81,8 @@ function Get-Metrics {
     $cpu = 0
     try {
         $cpu = (Get-Counter '\Processor(_Total)\% Processor Time' -ErrorAction SilentlyContinue).CounterSamples.CookedValue
-    } catch {}
+    }
+    catch {}
 
     $mem = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
     $ram = if ($mem) { (($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / $mem.TotalVisibleMemorySize) * 100 } else { 0 }
@@ -98,15 +101,16 @@ function Get-VMs {
     try {
         if (Get-Command Get-VM -ErrorAction SilentlyContinue) {
             return @(Get-VM | ForEach-Object {
-                @{
-                    name  = $_.Name
-                    state = $_.State.ToString()
-                    cpu   = $_.CPUUsage
-                    ram   = [math]::Round($_.MemoryAssigned / 1MB, 0)
-                }
-            })
+                    @{
+                        name  = $_.Name
+                        state = $_.State.ToString()
+                        cpu   = $_.CPUUsage
+                        ram   = [math]::Round($_.MemoryAssigned / 1MB, 0)
+                    }
+                })
         }
-    } catch {}
+    }
+    catch {}
     return @()
 }
 
@@ -115,11 +119,11 @@ function Send-Screenshot {
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
 
-        $screen  = [System.Windows.Forms.Screen]::PrimaryScreen
-        $width   = $screen.Bounds.Width
-        $height  = $screen.Bounds.Height
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+        $width = $screen.Bounds.Width
+        $height = $screen.Bounds.Height
 
-        $bitmap   = New-Object System.Drawing.Bitmap $width, $height
+        $bitmap = New-Object System.Drawing.Bitmap $width, $height
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         $graphics.CopyFromScreen($screen.Bounds.Left, $screen.Bounds.Top, 0, 0, $bitmap.Size)
 
@@ -132,15 +136,6 @@ function Send-Screenshot {
         $uri = "$ServerUrl/api/screenshot?api_key=$ApiKey"
         $boundary = [System.Guid]::NewGuid().ToString()
         $LF = "`r`n"
-        
-        $bodyLines = (
-            "--$boundary",
-            "Content-Disposition: form-data; name=`"file`"; filename=`"screenshot.jpg`"",
-            "Content-Type: image/jpeg",
-            "",
-            ([System.IO.File]::ReadAllBytes($tempPath) -join ","), # Place holder, will build properly
-            ""
-        )
         
         # Proper multipart binary generation
         $fileBytes = [System.IO.File]::ReadAllBytes($tempPath)
@@ -169,7 +164,8 @@ function Send-Screenshot {
         
         Remove-Item $tempPath -ErrorAction SilentlyContinue
         Write-Host "  Screenshot captured and uploaded." -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Host "  Screenshot failed: $_" -ForegroundColor Yellow
     }
 }
@@ -183,6 +179,15 @@ Write-Host "============================================" -ForegroundColor Cyan
 
 $lastScreenshot = (Get-Date).AddMinutes(-11)  # Force first screenshot on start
 $loopCount = 0
+$featurePolicy = @{
+    system_metrics = $true; productivity = $true; screenshots = $true
+    process_inventory = $true; installed_software = $true
+    hyperv_inventory = $true; browser_activity = $true
+}
+
+function Feature-Enabled([string]$name) {
+    return $featurePolicy[$name] -ne $false
+}
 
 while ($true) {
     $loopCount++
@@ -191,13 +196,15 @@ while ($true) {
         api_key        = $ApiKey
         hostname       = $env:COMPUTERNAME
         logged_in_user = $env:USERNAME
-        metrics        = Get-Metrics
-        active_app     = Get-ActiveApp
-        window_title   = Get-ActiveWindowTitle
         idle_time      = Get-IdleTime
-        running_apps   = Get-RunningApps
-        vms            = Get-VMs
     }
+    if (Feature-Enabled 'system_metrics') { $payload.metrics = Get-Metrics }
+    if (Feature-Enabled 'productivity') {
+        $payload.active_app = Get-ActiveApp
+        $payload.window_title = Get-ActiveWindowTitle
+    }
+    if (Feature-Enabled 'process_inventory') { $payload.running_apps = Get-RunningApps }
+    if (Feature-Enabled 'hyperv_inventory') { $payload.vms = Get-VMs }
 
     try {
         # 1. Push metrics
@@ -207,13 +214,21 @@ while ($true) {
             -ContentType "application/json" `
             -TimeoutSec 5
 
+        if ($resp.features) {
+            foreach ($feature in $resp.features.PSObject.Properties) {
+                $featurePolicy[$feature.Name] = [bool]$feature.Value
+            }
+        }
+
         if ($loopCount % 6 -eq 1) {
             # Log every ~60s
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Metrics sent. CPU=$([math]::Round($payload.metrics.cpu,1))% RAM=$([math]::Round($payload.metrics.ram,1))% Idle=$($payload.idle_time)s" -ForegroundColor Gray
+            $cpuLog = if ($payload.metrics) { "$([math]::Round($payload.metrics.cpu,1))%" } else { 'disabled' }
+            $ramLog = if ($payload.metrics) { "$([math]::Round($payload.metrics.ram,1))%" } else { 'disabled' }
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Heartbeat sent. CPU=$cpuLog RAM=$ramLog Idle=$($payload.idle_time)s" -ForegroundColor Gray
         }
 
         # 2. Screenshot (every 10 minutes)
-        if ((Get-Date) -gt $lastScreenshot.AddMinutes(10)) {
+        if ((Feature-Enabled 'screenshots') -and (Get-Date) -gt $lastScreenshot.AddMinutes(10)) {
             Send-Screenshot
             $lastScreenshot = Get-Date
         }
@@ -230,19 +245,21 @@ while ($true) {
                 Write-Host "  >> Executing: $($cmd.command)" -ForegroundColor Yellow
                 try {
                     switch -Regex ($cmd.command) {
-                        "^screenshot$"       { Send-Screenshot }
-                        "^restart$"          { Restart-Computer -Force }
-                        "^shutdown$"         { Stop-Computer -Force }
-                        "^RESTART_AGENT$"    { Write-Host "Agent restart requested"; exit 0 }
-                        "install"            { Start-Process msiexec.exe -ArgumentList "/i $($cmd.params) /qn" -Wait }
-                        default              { Invoke-Expression $cmd.command }
+                        "^screenshot$" { Send-Screenshot }
+                        "^restart$" { Restart-Computer -Force }
+                        "^shutdown$" { Stop-Computer -Force }
+                        "^RESTART_AGENT$" { Write-Host "Agent restart requested"; exit 0 }
+                        "install" { Start-Process msiexec.exe -ArgumentList "/i $($cmd.params) /qn" -Wait }
+                        default { Invoke-Expression $cmd.command }
                     }
-                } catch {
+                }
+                catch {
                     Write-Host "  Command failed: $_" -ForegroundColor Red
                 }
             }
         }
-    } catch {
+    }
+    catch {
         Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Connection error: $_" -ForegroundColor Red
     }
 

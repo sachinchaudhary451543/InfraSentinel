@@ -53,6 +53,34 @@ def _retry_db_flush(db, attempts=3, delay=0.25):
             raise
     return False
 
+
+AGENT_FEATURE_LABELS = {
+    'system_metrics': 'System CPU/RAM/Disk metrics',
+    'productivity': 'Productivity and active application tracking',
+    'screenshots': 'Periodic screenshots',
+    'process_inventory': 'Running process inventory',
+    'installed_software': 'Installed software inventory',
+    'hyperv_inventory': 'Hyper-V / virtual machine inventory',
+    'browser_activity': 'Browser URL activity',
+}
+
+
+def _normalise_agent_employee(value):
+    """Use one stable key for local usernames, emails and Entra identities."""
+    return str(value or '').strip().lower()[:255]
+
+
+def _get_agent_policy(server, employee_key):
+    from web.models import AgentFeaturePolicy
+
+    key = _normalise_agent_employee(employee_key)
+    if not key:
+        return {field: True for field in AgentFeaturePolicy.FEATURE_FIELDS}
+    policy = AgentFeaturePolicy.query.filter_by(
+        server_id=server.id, employee_key=key
+    ).first()
+    return policy.as_dict() if policy else {field: True for field in AgentFeaturePolicy.FEATURE_FIELDS}
+
 #
 # Legacy agent compatibility endpoints
 # - PowerShell agent in `web/static/agent/ServerMonitorAgent.ps1` posts to:
@@ -67,6 +95,71 @@ def _retry_db_flush(db, attempts=3, delay=0.25):
 def legacy_api_metrics():
     """Back-compat wrapper for older agents. Delegates to /api/v2/agent/metrics."""
     return agent_metrics()
+
+
+@api_bp.route('/api/v2/server/<int:server_id>/agent-features', methods=['GET', 'PUT'])
+@login_required
+def api_agent_features(server_id):
+    """Read or update employee-specific agent collection features."""
+    from web.models import db, Server, EmployeeActivity, EmployeeDeviceAssignment, Employee, AgentFeaturePolicy
+
+    server = db.session.get(Server, server_id)
+    if not server or (not current_user.is_superadmin and server.tenant_id != current_user.tenant_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    if request.method == 'GET':
+        keys = set()
+        assignments = EmployeeDeviceAssignment.query.filter_by(
+            server_id=server_id, is_active=True
+        ).all()
+        employee_ids = [item.employee_id for item in assignments]
+        employees = Employee.query.filter_by(
+            tenant_id=server.tenant_id, is_active=True
+        ).all()
+        if employee_ids:
+            assigned_employees = Employee.query.filter(Employee.id.in_(employee_ids)).all()
+            employees = list({employee.id: employee for employee in [*employees, *assigned_employees]}.values())
+        keys.update(_normalise_agent_employee(value) for employee in employees for value in (
+            employee.email, employee.local_username, employee.name
+        ) if value)
+        rows = db.session.query(EmployeeActivity.user).filter_by(server_id=server_id).distinct().all()
+        keys.update(_normalise_agent_employee(row[0]) for row in rows if row[0])
+        policies = AgentFeaturePolicy.query.filter_by(server_id=server_id).all()
+        by_key = {policy.employee_key: policy.as_dict() for policy in policies}
+        return jsonify({
+            'success': True,
+            'features': AGENT_FEATURE_LABELS,
+            'employees': [
+                {'key': key, 'label': key, 'features': by_key.get(
+                    key, {field: True for field in AgentFeaturePolicy.FEATURE_FIELDS}
+                )} for key in sorted(keys)
+            ],
+        })
+
+    payload = request.get_json(silent=True) or {}
+    employee_key = _normalise_agent_employee(payload.get('employee_key'))
+    features = payload.get('features') or {}
+    if not employee_key:
+        return jsonify({'success': False, 'error': 'employee_key is required'}), 400
+    if not isinstance(features, dict):
+        return jsonify({'success': False, 'error': 'features must be an object'}), 400
+
+    policy = AgentFeaturePolicy.query.filter_by(
+        server_id=server_id, employee_key=employee_key
+    ).first()
+    if policy is None:
+        policy = AgentFeaturePolicy()
+        policy.tenant_id = server.tenant_id
+        policy.server_id = server_id
+        policy.employee_key = employee_key
+        db.session.add(policy)
+    for field in AgentFeaturePolicy.FEATURE_FIELDS:
+        if field in features:
+            setattr(policy, field, bool(features[field]))
+    policy.updated_by = current_user.username
+    policy.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'success': True, 'employee_key': employee_key, 'features': policy.as_dict()})
 
 
 @api_bp.route('/api/command', methods=['POST'])
@@ -873,6 +966,9 @@ def agent_metrics():
         if tenant_status != 'active':
             return jsonify({'success': False, 'error': f'Tenant subscription is {tenant_status}. Telemetry rejected.'}), 403
 
+        # Policies are keyed by the active OS/Entra identity on this endpoint.
+        feature_policy = _get_agent_policy(server, identity_user)
+
         # ── Update server heartbeat & metadata ────────────────────────────
         now = datetime.utcnow()
         prev_status = getattr(server, 'status', None)
@@ -905,48 +1001,52 @@ def agent_metrics():
         except Exception as e:
             logger.error(f"Identity correlation failed: {str(e)}")
 
-        # ── Store Metric row ──────────────────────────────────────────────
+        # ── Store Metric row (always keep heartbeat, but honor employee policy) ──
         metrics_raw = data.get('metrics') or {}
 
         cpu  = float(metrics_raw.get('cpu_percent')    or metrics_raw.get('cpu_util_percent')  or metrics_raw.get('cpu')  or 0)
         ram  = float(metrics_raw.get('ram_percent')    or metrics_raw.get('ram_util_percent')  or metrics_raw.get('ram')  or 0)
         disk = float(metrics_raw.get('disk_percent')   or metrics_raw.get('disk_util_percent') or metrics_raw.get('disk') or 0)
 
-        metric = Metric()
-        metric.server_id         = server.id
-        metric.timestamp         = now
-        metric.cpu               = cpu
-        metric.ram               = ram
-        metric.disk              = disk
-        metric.cpu_util_percent  = cpu
-        metric.ram_util_percent  = ram
-        metric.ssd_util_percent  = disk
-        metric.total_ram_gb      = float(metrics_raw.get('total_ram_gb', 0) or 0)
-        metric.used_ram_gb       = float(metrics_raw.get('used_ram_gb',  0) or 0)
-        metric.available_ram_gb  = float(metrics_raw.get('ram_available_gb', 0) or 0)
-        metric.total_ssd_gb      = float(metrics_raw.get('total_disk_gb', 0) or 0)
-        metric.used_ssd_gb       = float(metrics_raw.get('used_disk_gb',  0) or 0)
-        
-        # Store activity and other details as JSON
-        details_obj = {
-            'active_app': active_app,
-            'window_title': window_title,
-            'browser_url': browser_url,
-            'idle_time_seconds': int(max(0, idle_time_seconds)),
-            'logged_in_user': logged_in_user,
-            'office_user_id': office_user_id,
-            'local_username': local_username,
-        }
-        # Include installed_software if provided
-        if 'installed_software' in (data.get('details') or {}):
-            details_obj['installed_software'] = data['details']['installed_software']
-        
-        metric.details = json.dumps(details_obj)
-        db.session.add(metric)
-        logger.info("Metric row created, added to session")
+        metric = None
+        if feature_policy['system_metrics']:
+            metric = Metric()
+            metric.server_id         = server.id
+            metric.timestamp         = now
+            metric.cpu               = cpu
+            metric.ram               = ram
+            metric.disk              = disk
+            metric.cpu_util_percent  = cpu
+            metric.ram_util_percent  = ram
+            metric.ssd_util_percent  = disk
+            metric.total_ram_gb      = float(metrics_raw.get('total_ram_gb', 0) or 0)
+            metric.used_ram_gb       = float(metrics_raw.get('used_ram_gb',  0) or 0)
+            metric.available_ram_gb  = float(metrics_raw.get('ram_available_gb', 0) or 0)
+            metric.total_ssd_gb      = float(metrics_raw.get('total_disk_gb', 0) or 0)
+            metric.used_ssd_gb       = float(metrics_raw.get('used_disk_gb',  0) or 0)
+
+            details_obj = {
+                'idle_time_seconds': int(max(0, idle_time_seconds)),
+                'logged_in_user': logged_in_user,
+                'office_user_id': office_user_id,
+                'local_username': local_username,
+            }
+            if feature_policy['productivity']:
+                details_obj.update({'active_app': active_app, 'window_title': window_title})
+            if feature_policy['browser_activity']:
+                details_obj['browser_url'] = browser_url
+            if feature_policy['installed_software'] and 'installed_software' in (data.get('details') or {}):
+                details_obj['installed_software'] = data['details']['installed_software']
+            if feature_policy['process_inventory']:
+                details_obj['running_apps'] = data.get('running_apps') or data.get('processes') or []
+            if feature_policy['hyperv_inventory']:
+                details_obj['vms'] = data.get('vms') or []
+            metric.details = json.dumps(details_obj)
+            db.session.add(metric)
+            logger.info("Metric row created, added to session")
 
         # ── Employee activity (logged_in_user) ────────────────────────────────
-        if identity_user:
+        if identity_user and feature_policy['productivity']:
             activity = EmployeeActivity()
             activity.server_id = server.id
             activity.user      = identity_user
@@ -988,7 +1088,7 @@ def agent_metrics():
                 logger.error(traceback.format_exc())
 
         # ── Screenshot (base64 inline, save to disk) ───────────────────────────
-        ss_data = data.get('screenshot')
+        ss_data = data.get('screenshot') if feature_policy['screenshots'] else None
         screenshot_enabled = server.screenshot_enabled
         screenshot_interval_minutes = server.screenshot_interval_minutes or 10
 
@@ -1044,7 +1144,8 @@ def agent_metrics():
         # keeps the live dashboard alert count and notification feed in sync.
         try:
             from web.alert_engine import evaluate_metric_for_alerts
-            evaluate_metric_for_alerts(metric)
+            if metric is not None:
+                evaluate_metric_for_alerts(metric)
         except Exception as exc:
             logger.error(f"Alert evaluation failed for server {server.id}: {exc}")
 
@@ -1070,6 +1171,7 @@ def agent_metrics():
                 sio.emit('metrics_update', {
                     'server_id': server_id,
                     'timestamp': now.isoformat() + 'Z',
+                    'status': 'ONLINE',
                     'metrics':   {'cpu': cpu, 'ram': ram, 'disk': disk},
                 }, room=str(tenant_id))
             except Exception as e:
@@ -1086,6 +1188,7 @@ def agent_metrics():
             'server_id':                  server_id,
             'screenshot_enabled':         screenshot_enabled,
             'screenshot_interval_minutes': screenshot_interval_minutes,
+            'features':                   feature_policy,
         })
 
     except Exception as e:

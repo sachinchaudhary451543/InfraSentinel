@@ -1558,6 +1558,11 @@
                                     <i class="fa-solid fa-terminal"></i> Remote Control
                                 </a>
                                 <button
+                                    onclick="event.stopPropagation(); openAgentFeatures('{{ item.id }}', '{{ item.hostname|e }}')"
+                                    class="noc-btn-secondary" title="Configure agent features">
+                                    <i class="fa-solid fa-sliders"></i> Agent Features
+                                </button>
+                                <button
                                     onclick="event.stopPropagation(); deleteDevice('{{ item.id }}', '{{ item.hostname }}')"
                                     class="noc-btn-danger">
                                     <i class="fa-solid fa-trash"></i>
@@ -1978,6 +1983,39 @@
                     <strong>Auto-Detection Enabled:</strong> Once started, the system will automatically register and
                     show this device online. If using the ZIP, extract all files and run
                     <strong>RunMeAsAdmin.bat</strong>.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- AGENT FEATURE POLICY MODAL                              -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div id="agentFeaturesModal" class="noc-modal-backdrop">
+        <div class="noc-modal" style="max-width:560px;">
+            <div class="noc-modal-header">
+                <div>
+                    <div class="noc-modal-title">Agent Features</div>
+                    <div id="agentFeaturesSubtitle"
+                        style="font-size:0.6rem;color:var(--noc-text-secondary);margin-top:3px;letter-spacing:0.06em;text-transform:uppercase;">
+                        Employee-specific data collection</div>
+                </div>
+                <button onclick="closeAgentFeatures()" class="noc-close-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="noc-modal-body">
+                <label
+                    style="display:block;font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--noc-text-secondary);margin-bottom:7px;">Employee
+                    / signed-in identity</label>
+                <select id="agentFeatureEmployee" class="noc-select" style="width:100%;margin-bottom:16px;"></select>
+                <div id="agentFeatureList" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+                <div class="noc-notice" style="margin-top:18px;font-size:0.68rem;line-height:1.6;">
+                    <i class="fa-solid fa-shield-halved" style="margin-right:6px;"></i>
+                    Disabled data is rejected by the server and the agent receives the policy on its next heartbeat.
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;">
+                    <button onclick="closeAgentFeatures()" class="noc-btn-secondary">Cancel</button>
+                    <button onclick="saveAgentFeatures()" class="noc-btn-primary"><i class="fa-solid fa-check"></i> Save
+                        Feature Policy</button>
                 </div>
             </div>
         </div>
@@ -2532,6 +2570,70 @@
 
         function closeInstallModal() {
             document.getElementById('installModal').classList.remove('active');
+        }
+
+        let agentFeatureServerId = null;
+        let agentFeatureEmployees = [];
+        let agentFeatureDefinitions = {};
+
+        async function openAgentFeatures(serverId, hostname) {
+            agentFeatureServerId = serverId;
+            document.getElementById('agentFeaturesSubtitle').textContent = `${hostname} — employee-specific data collection`;
+            const employeeSelect = document.getElementById('agentFeatureEmployee');
+            employeeSelect.innerHTML = '<option>Loading identities...</option>';
+            document.getElementById('agentFeaturesModal').classList.add('active');
+            try {
+                const response = await fetch(`/api/v2/server/${serverId}/agent-features`);
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Could not load feature policy');
+                agentFeatureEmployees = data.employees || [];
+                agentFeatureDefinitions = data.features || {};
+                employeeSelect.innerHTML = agentFeatureEmployees.length
+                    ? agentFeatureEmployees.map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.label)}</option>`).join('')
+                    : '<option value="">No identity seen yet — agent must send one heartbeat first</option>';
+                employeeSelect.onchange = renderAgentFeatureChecks;
+                renderAgentFeatureChecks();
+            } catch (error) {
+                employeeSelect.innerHTML = `<option value="">${escapeHtml(error.message)}</option>`;
+                document.getElementById('agentFeatureList').innerHTML = '';
+            }
+        }
+
+        function renderAgentFeatureChecks() {
+            const selected = agentFeatureEmployees.find(e => e.key === document.getElementById('agentFeatureEmployee').value);
+            const features = selected?.features || Object.fromEntries(Object.keys(agentFeatureDefinitions).map(k => [k, true]));
+            document.getElementById('agentFeatureList').innerHTML = Object.entries(agentFeatureDefinitions).map(([key, label]) => `
+                <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--noc-border);border-radius:6px;background:var(--noc-surface);font-size:0.68rem;color:var(--noc-text-primary);cursor:pointer;">
+                    <input type="checkbox" data-agent-feature="${key}" ${features[key] !== false ? 'checked' : ''} style="margin-top:2px;accent-color:var(--noc-indigo);">
+                    <span>${escapeHtml(label)}</span>
+                </label>`).join('');
+        }
+
+        async function saveAgentFeatures() {
+            const employeeKey = document.getElementById('agentFeatureEmployee').value;
+            if (!employeeKey) return alert('No employee identity is available yet.');
+            const features = {};
+            document.querySelectorAll('[data-agent-feature]').forEach(input => { features[input.dataset.agentFeature] = input.checked; });
+            const disabled = Object.entries(features).filter(([, enabled]) => !enabled).map(([key]) => agentFeatureDefinitions[key]);
+            const summary = disabled.length ? `Disable:\n• ${disabled.join('\n• ')}` : 'Enable all agent features';
+            if (!confirm(`Apply this policy for ${employeeKey}?\n\n${summary}`)) return;
+            try {
+                const response = await fetch(`/api/v2/server/${agentFeatureServerId}/agent-features`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employee_key: employeeKey, features })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Save failed');
+                const selected = agentFeatureEmployees.find(e => e.key === employeeKey);
+                if (selected) selected.features = data.features;
+                alert('Agent feature policy saved. It will apply on the next heartbeat.');
+                closeAgentFeatures();
+            } catch (error) { alert(`Could not save policy: ${error.message}`); }
+        }
+
+        function closeAgentFeatures() {
+            document.getElementById('agentFeaturesModal').classList.remove('active');
+            agentFeatureServerId = null;
         }
 
         function copyScript() {
@@ -3128,7 +3230,17 @@
                         const link = row.querySelector(`a[href*="/${sid}"]`);
                         if (!link) return;
                         const statusSpan = row.querySelector('.inv-status-badge');
-                        if (statusSpan) statusSpan.textContent = data.status;
+                        if (statusSpan) {
+                            const status = String(data.status).toUpperCase();
+                            statusSpan.textContent = status;
+                            statusSpan.classList.remove('badge-online', 'badge-idle', 'badge-offline');
+                            statusSpan.classList.add(status === 'ONLINE' ? 'badge-online' : status === 'IDLE' ? 'badge-idle' : 'badge-offline');
+                            const pulse = row.querySelector('.pulse-dot');
+                            if (pulse) {
+                                pulse.classList.remove('pulse-online', 'pulse-idle', 'pulse-offline');
+                                pulse.classList.add(status === 'ONLINE' ? 'pulse-online' : status === 'IDLE' ? 'pulse-idle' : 'pulse-offline');
+                            }
+                        }
                     });
                 }
             });
