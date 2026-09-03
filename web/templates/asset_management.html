@@ -394,6 +394,257 @@
         color: var(--ms-primary-hover);
         border-color: var(--ms-primary-hover);
     }
+
+    @media (max-width: 767px) {
+        .am-container {
+            padding: 1rem 0.75rem 2rem;
+        }
+
+        .am-header {
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .am-title {
+            font-size: 1.4rem;
+        }
+
+        .am-subtitle {
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
+
+        .stat-grids {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .stat-card {
+            min-width: 0;
+            padding: 12px;
+        }
+
+        .stat-icon {
+            width: 36px;
+            height: 36px;
+            flex: 0 0 36px;
+            margin-right: 9px;
+            font-size: 1rem;
+        }
+
+        .stat-content {
+            min-width: 0;
+        }
+
+        .stat-content h4 {
+            font-size: 1.05rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stat-content p {
+            font-size: 0.62rem;
+            letter-spacing: 0.25px;
+        }
+
+        .am-tabs {
+            gap: 0 !important;
+            margin-bottom: 16px !important;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .am-tab-btn {
+            flex: 0 0 auto;
+            min-height: 54px;
+            padding: 10px 13px !important;
+            font-size: 0.8rem !important;
+            white-space: nowrap;
+        }
+
+        .am-toolbar {
+            position: static;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+            padding: 10px;
+            margin-bottom: 14px;
+        }
+
+        .search-input-wrapper {
+            width: 100%;
+            max-width: none;
+        }
+
+        .status-filter {
+            width: 100%;
+            min-width: 0;
+        }
+
+        #toolbar-spinner {
+            align-self: flex-end;
+            margin-left: 0 !important;
+        }
+
+        .employee-row {
+            padding: 12px;
+            gap: 10px;
+        }
+
+        .employee-header {
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .emp-info {
+            min-width: 0;
+            gap: 9px;
+        }
+
+        .emp-avatar {
+            width: 36px;
+            height: 36px;
+            flex: 0 0 36px;
+            font-size: 0.95rem;
+        }
+
+        .emp-details,
+        .emp-name,
+        .emp-email {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .emp-name,
+        .emp-email {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .emp-name {
+            font-size: 0.95rem;
+        }
+
+        .emp-email {
+            font-size: 0.72rem;
+        }
+
+        .emp-meta {
+            flex: 0 0 auto;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+            font-size: 0.72rem;
+        }
+
+        .devices-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 8px;
+        }
+
+        .device-card {
+            min-width: 0;
+            align-items: flex-start;
+            padding: 10px;
+        }
+
+        .device-info {
+            min-width: 0;
+        }
+
+        .device-specs {
+            flex-wrap: wrap;
+            gap: 4px 7px;
+            font-size: 0.7rem;
+        }
+
+        .activity-row {
+            flex-direction: column;
+            align-items: stretch !important;
+            gap: 12px;
+        }
+
+        .activity-row>div {
+            width: 100% !important;
+            min-width: 0 !important;
+            text-align: left !important;
+        }
+
+        #assignmentsTab .employee-row .employee-header {
+            flex-wrap: wrap;
+        }
+
+        #assignmentsTab .employee-row .employee-header>div:first-child {
+            width: 100%;
+            min-width: 0;
+        }
+
+        #assignmentsTab .employee-row .emp-meta {
+            width: 100%;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--ms-border);
+        }
+
+        #assignmentsTab .employee-row .emp-meta>span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            line-height: 1.35;
+        }
+
+        #assignmentsTab .employee-row .emp-meta .view-btn {
+            flex: 0 0 auto;
+        }
+
+        #registerEmpModal,
+        #assignmentModal,
+        #historyModal {
+            align-items: flex-start !important;
+            overflow-y: auto;
+            padding: 12px !important;
+        }
+
+        #registerEmpModal .modal-content,
+        #assignmentModal>div,
+        #historyModal>div {
+            width: 100% !important;
+            max-width: none !important;
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+        }
+
+        #registerEmpModal form>div[style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+        }
+    }
+
+    @media (min-width: 768px) and (max-width: 1100px) {
+        .am-container {
+            padding: 1.5rem;
+        }
+
+        .am-toolbar {
+            flex-wrap: wrap;
+        }
+
+        .search-input-wrapper {
+            flex: 1 1 100%;
+            max-width: none;
+        }
+
+        .status-filter {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+    }
 </style>
 
 <div class="am-container">
@@ -476,7 +727,7 @@
                     <label
                         style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Local
                         System Username (for mapping)</label>
-                    <input type="text" name="local_username" placeholder="e.g. SachinKumar (from agent reports)"
+                    <input type="text" name="local_username" placeholder="e.g. j.smith (from agent reports)"
                         style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
                     <p style="font-size: 0.65rem; color: var(--ms-text-secondary); margin-top: 4px;">This maps the agent
                         telemetry to this company email ID.</p>
@@ -495,6 +746,18 @@
                             style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
                     </div>
                 </div>
+                <div class="form-group">
+                    <label
+                        style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--ms-text-secondary); margin-bottom: 6px;">Reporting
+                        Manager</label>
+                    <select name="manager_id"
+                        style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--ms-border); background: var(--ms-background); color: var(--ms-text);">
+                        <option value="">None (Top Level)</option>
+                        {% for mgr in employees %}
+                        <option value="{{ mgr.id }}">{{ mgr.name }} ({{ mgr.email }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 12px;">
                     <button type="button" onclick="document.getElementById('registerEmpModal').style.display='none'"
                         class="view-btn"
@@ -511,7 +774,20 @@
     <div class="am-tabs"
         style="display: flex; gap: 20px; border-bottom: 1px solid var(--ms-border); margin-bottom: 24px;">
         <button class="am-tab-btn active" data-target="devicesTab">Device Management</button>
+        <button class="am-tab-btn" data-target="assignmentsTab">Assignments &amp; History</button>
         <button class="am-tab-btn" data-target="activityTab">Live User Activity</button>
+    </div>
+
+    <div id="assignmentsTab" class="am-tab-content" style="display: none;">
+        <div class="am-toolbar" style="justify-content:space-between; flex-wrap:wrap;">
+            <div><strong>Employee Device Assignments</strong>
+                <div style="font-size:.8rem;color:var(--ms-text-secondary);margin-top:3px;">Reassign devices while
+                    preserving employee and asset history.</div>
+            </div>
+            <button class="view-btn" onclick="openAssignmentModal()"><i class="fas fa-right-left"></i> Assign
+                Device</button>
+        </div>
+        <div id="assignmentList" class="employee-list"></div>
     </div>
 
     <!-- Tab Content: Devices -->
@@ -596,6 +872,8 @@
 
                 if (btn.dataset.target === 'activityTab') {
                     fetchLiveActivity();
+                } else if (btn.dataset.target === 'assignmentsTab') {
+                    loadAssignments();
                 }
             });
         });
@@ -668,6 +946,33 @@
                 .replace(/'/g, "&#039;");
         };
 
+        let assignmentData = { employees: [], devices: [] };
+        window.loadAssignments = async function () {
+            const data = await fetch('/api/v2/assets/assignments').then(r => r.json());
+            if (!data.success) return;
+            assignmentData = data;
+            document.getElementById('assignmentList').innerHTML = data.assignments.map(item => `<div class="employee-row"><div class="employee-header"><div><div class="emp-name">${escapeHtml(item.employee_name)} <span class="device-source-badge">${item.is_active ? 'Active' : 'Previous'}</span></div><div class="emp-email">${escapeHtml(item.employee_email)} · ${escapeHtml(item.hostname)} · ${escapeHtml(item.ip || 'No IP')}</div></div><div class="emp-meta"><span>${item.assigned_at ? new Date(item.assigned_at).toLocaleString() : '—'} ${item.unassigned_at ? '→ ' + new Date(item.unassigned_at).toLocaleString() : '→ Current'}</span><button class="view-btn" onclick="showAssignmentHistory(${item.employee_id}, ${item.server_id})">History</button></div></div></div>`).join('') || '<div class="no-results">No assignment history found.</div>';
+        };
+        window.openAssignmentModal = async function (serverId = '') {
+            if (!assignmentData.employees.length) await loadAssignments();
+            document.getElementById('assignDevice').innerHTML = '<option value="">Select device</option>' + assignmentData.devices.map(d => `<option value="${d.id}" ${String(d.id) === String(serverId) ? 'selected' : ''}>${escapeHtml(d.hostname)} · ${escapeHtml(d.ip)}</option>`).join('');
+            document.getElementById('assignEmployee').innerHTML = '<option value="">Select employee</option>' + assignmentData.employees.map(e => `<option value="${e.id}">${escapeHtml(e.name)} · ${escapeHtml(e.email)}</option>`).join('');
+            document.getElementById('assignmentModal').style.display = 'flex';
+        };
+        window.saveAssignment = async function () {
+            const employee_id = Number(document.getElementById('assignEmployee').value), server_id = Number(document.getElementById('assignDevice').value);
+            if (!employee_id || !server_id) return alert('Select both an employee and a device.');
+            const data = await fetch('/api/v2/assets/assignments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id, server_id, replace_employee_device: document.getElementById('replaceEmployeeDevice').checked, reason: document.getElementById('assignmentReason').value }) }).then(r => r.json());
+            if (!data.success) return alert(data.error || 'Assignment failed.');
+            document.getElementById('assignmentModal').style.display = 'none'; await loadAssignments(); fetchEmployees(true); alert(data.message);
+        };
+        window.showAssignmentHistory = async function (employeeId, serverId) {
+            const p = new URLSearchParams(); if (employeeId) p.set('employee_id', employeeId); if (serverId) p.set('server_id', serverId);
+            const data = await fetch('/api/v2/assets/assignment-history?' + p).then(r => r.json());
+            document.getElementById('historyContent').innerHTML = data.history.map(i => `<div style="padding:10px 0;border-bottom:1px solid var(--ms-border)"><strong>${escapeHtml(i.employee_name)}</strong> ↔ <strong>${escapeHtml(i.hostname)}</strong><div style="font-size:.8rem;color:var(--ms-text-secondary)">${i.assigned_at ? new Date(i.assigned_at).toLocaleString() : '—'} ${i.unassigned_at ? 'to ' + new Date(i.unassigned_at).toLocaleString() : 'to current'} · ${escapeHtml(i.assignment_source)}</div></div>`).join('') || 'No history available.';
+            document.getElementById('historyModal').style.display = 'flex';
+        };
+
         const renderDeviceIcon = (type, os) => {
             const osL = (os || '').toLowerCase();
             const typeL = (type || '').toLowerCase();
@@ -697,7 +1002,11 @@
 
             let devicesHtml = '';
             if (hasDevices) {
-                const devs = emp.assets.map(d => `
+                const devs = emp.assets.map(d => {
+                    const assignedStr = d.assigned_date
+                        ? new Date(d.assigned_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : '—';
+                    return `
                     <div class="device-card">
                         <div class="device-icon">
                             ${renderDeviceIcon(d.device_type, d.os_info)}
@@ -711,12 +1020,14 @@
                                 <span>${escapeHtml(d.ip_address)}</span> &bull; 
                                 <span title="${escapeHtml(d.os_info)}">${escapeHtml(d.os_info).split(' ')[0] || 'Unknown OS'}</span>
                             </div>
-                            <div style="margin-top:4px;">
+                            <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                                 <span class="device-source-badge">${escapeHtml(d.source)}</span>
+                                <span style="font-size:0.7rem;color:var(--ms-text-secondary)" title="Assigned Date"><i class="fas fa-calendar-check" style="margin-right:3px;color:#0078d4"></i>${assignedStr}</span>
+                                ${d.server_id ? `<button class="view-btn" onclick="openAssignmentModal(${d.server_id}); return false;" style="padding:3px 7px;font-size:.7rem;">Reassign</button><button class="view-btn" onclick="showAssignmentHistory(null, ${d.server_id}); return false;" style="padding:3px 7px;font-size:.7rem;">History</button>` : ''}
                             </div>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
 
                 devicesHtml = `<div class="devices-grid">${devs}</div>`;
             }
@@ -884,11 +1195,14 @@
                     const loginDate = act.login_time ? new Date(act.login_time).toLocaleString() : '--';
                     const logoutDate = act.logout_time ? new Date(act.logout_time).toLocaleString() : '--';
 
+                    const profileLink = act.employee_id ? `/assets/employee/${encodeURIComponent(act.employee_email)}` : '#';
+                    row.style.cursor = act.employee_id ? 'pointer' : 'default';
+                    if (act.employee_id) row.onclick = () => { window.location.href = profileLink; };
                     row.innerHTML = `
                         <div style="display:flex; gap: 16px; align-items: center;">
                             <div class="emp-avatar" style="background: var(--ms-primary);"><i class="fas fa-user-circle"></i></div>
                             <div>
-                                <div style="font-weight: 600; font-size: 1.05rem;">${escapeHtml(act.session_user || 'Unknown User')}</div>
+                                <div style="font-weight: 600; font-size: 1.05rem;">${escapeHtml(act.employee_name || act.session_user || 'Unknown User')}</div>
                                 <div style="font-size: 0.85rem; color: var(--ms-text-secondary);"><i class="fas fa-desktop"></i> ${escapeHtml(act.hostname)} | <i class="fas fa-network-wired"></i> ${escapeHtml(act.session_type)}</div>
                             </div>
                         </div>
@@ -899,6 +1213,7 @@
                         <div style="text-align: right; min-width: 150px;">
                             ${statusHtml}
                             <div style="font-size: 0.8rem; color: var(--ms-text-secondary); margin-top: 4px;">Reported: ${act.reported_at ? new Date(act.reported_at).toLocaleTimeString() : '--'}</div>
+                            <div style="font-size: 0.75rem; color: var(--ms-primary); margin-top: 4px; font-weight: 600;">${act.records || 0} recent updates ${act.employee_id ? '· View profile →' : ''}</div>
                         </div>
                     `;
                     listEl.appendChild(row);
@@ -930,4 +1245,39 @@
 
     });
 </script>
+
+<div id="assignmentModal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;padding:16px;">
+    <div
+        style="width:100%;max-width:520px;background:var(--ms-surface);border-radius:12px;padding:22px;box-shadow:var(--ms-shadow-md);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0">Assign or Reassign Device</h3><button class="view-btn"
+                onclick="document.getElementById('assignmentModal').style.display='none'">×</button>
+        </div>
+        <label style="display:block;margin-bottom:6px">Employee</label><select id="assignEmployee" class="status-filter"
+            style="width:100%;margin-bottom:14px"></select>
+        <label style="display:block;margin-bottom:6px">Device</label><select id="assignDevice" class="status-filter"
+            style="width:100%;margin-bottom:14px"></select>
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:14px;font-size:.85rem"><input
+                type="checkbox" id="replaceEmployeeDevice"> Move employee from all currently assigned devices</label>
+        <label style="display:block;margin-bottom:6px">Reason (audit record)</label><textarea id="assignmentReason"
+            class="search-input" style="padding:10px;height:70px;margin-bottom:16px"
+            placeholder="Replacement, transfer, repair, or correction"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:10px"><button class="view-btn"
+                onclick="document.getElementById('assignmentModal').style.display='none'">Cancel</button><button
+                class="view-btn" style="background:var(--ms-primary);color:white" onclick="saveAssignment()">Save
+                Assignment</button></div>
+    </div>
+</div>
+<div id="historyModal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;padding:16px;">
+    <div
+        style="width:100%;max-width:620px;max-height:80vh;overflow:auto;background:var(--ms-surface);border-radius:12px;padding:22px;box-shadow:var(--ms-shadow-md);">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0">Assignment History</h3><button class="view-btn"
+                onclick="document.getElementById('historyModal').style.display='none'">Close</button>
+        </div>
+        <div id="historyContent" style="margin-top:14px"></div>
+    </div>
+</div>
 {% endblock %}

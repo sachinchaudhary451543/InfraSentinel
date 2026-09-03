@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Screenshot Viewer - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-5rem)] flex items-center justify-center p-3 sm:p-6">
+    <section class="w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 shadow-2xl">
+        <header class="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-900 px-4 py-3 sm:px-5">
+            <div class="min-w-0">
+                <p class="truncate text-sm font-bold text-white">{{ screenshot.filename or 'Captured screen' }}</p>
+                <p class="mt-0.5 text-xs text-slate-400">{{ screenshot.captured_at.strftime('%b %d, %Y %I:%M %p') if
+                    screenshot.captured_at else 'Captured screen' }}</p>
+            </div>
+            <a href="{{ back_url }}"
+                class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100">
+                <i class="fa-solid fa-xmark"></i><span>Close</span>
+            </a>
+        </header>
+        <div class="flex min-h-[50vh] items-center justify-center bg-black p-2 sm:p-5">
+            <img src="{{ image_url }}" alt="Captured screen"
+                class="max-h-[78vh] w-auto max-w-full rounded-lg object-contain">
+        </div>
+    </section>
+</div>
+{% endblock %}

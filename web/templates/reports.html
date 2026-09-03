@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - ServerMonitor{% endblock %}
+
+{% block content %}
+<div class="animate-fade-up px-2 pb-8 pt-4">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="font-display text-2xl font-bold text-slate-900">Reports</h2>
+            <p class="text-sm text-slate-500 mt-1">Export tenant-scoped assignment, asset, consumption, screen, alert,
+                and audit data.</p>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="bg-rose-50 border border-rose-100 text-rose-700 rounded-xl p-4 mb-4">{{ error }}</div>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
+        <form id="reportForm" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Start</label>
+                <input type="date" id="startDate" name="start" value="{{ default_start }}"
+                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+            </div>
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">End</label>
+                <input type="date" id="endDate" name="end" value="{{ default_end }}"
+                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+            </div>
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Employee
+                    (optional)</label>
+                <select id="userSelect" name="user"
+                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+                    <option value="">All</option>
+                    {% for u in users %}
+                    <option value="{{ u }}">{{ u }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Report</label>
+                <select id="reportType" class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+                    <option value="device_assignments">Device Assignment History</option>
+                    <option value="device_consumption">System Consumption (CPU, RAM, Disk)</option>
+                    <option value="screen_captures">Employee Screen Capture Report (Excel with previews)</option>
+                    <option value="alerts">Alerts and Resolutions</option>
+                    <option value="audit_logs">Administrative Audit Logs</option>
+                    <option value="productivity_detailed">Employee Productivity Management Report (Excel)</option>
+                </select>
+            </div>
+        </form>
+
+        <div class="mt-4 flex gap-2">
+            <button id="downloadBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold">Download
+                Report</button>
+            <button id="refreshAgg" class="px-4 py-2 rounded-xl bg-white border border-slate-200">Refresh Now</button>
+            <label class="ml-4 text-sm text-slate-600">Auto-refresh every 6 hours</label>
+            <input type="checkbox" id="autoRefreshToggle" style="margin-left:6px;margin-top:3px;">
+        </div>
+    </div>
+
+    <div id="latestStatus" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="text-lg font-bold mb-3">Latest Work Status</h3>
+        <div id="latestTable" class="text-sm text-slate-700">Loading latest status...</div>
+    </div>
+</div>
+
+<script>
+    function buildProductivityUrl(format = 'csv') {
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        const user = document.getElementById('userSelect').value;
+        const params = new URLSearchParams();
+        if (start) params.set('start', start);
+        if (end) params.set('end', end);
+        if (user) params.set('user', user);
+        params.set('format', format);
+        return `/api/v2/employee/productivity?${params.toString()}`;
+    }
+
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+        const type = document.getElementById('reportType').value;
+        const params = new URLSearchParams({ type, start: document.getElementById('startDate').value, end: document.getElementById('endDate').value });
+        window.location.href = '/assets/reports/export?' + params.toString();
+    });
+
+    async function loadLatestStatus() {
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        const user = document.getElementById('userSelect').value;
+        const params = new URLSearchParams();
+        if (start) params.set('start', start);
+        if (end) params.set('end', end);
+        if (user) params.set('user', user);
+        try {
+            const res = await fetch('/api/v2/employee/productivity?' + params.toString());
+            const data = await res.json();
+            if (data && data.rows) {
+                const rows = data.rows.slice(0, 50);
+                const html = ['<table class="w-full">', '<thead><tr><th class="text-left">Date</th><th class="text-left">User</th><th class="text-left">Top App</th><th class="text-left">Avg Idle (s)</th></tr></thead>', '<tbody>'];
+                for (const r of rows) {
+                    html.push(`<tr><td>${r.date}</td><td>${r.user}</td><td>${r.top_app}</td><td>${r.avg_idle_seconds}</td></tr>`);
+                }
+                html.push('</tbody></table>');
+                document.getElementById('latestTable').innerHTML = html.join('');
+            } else {
+                document.getElementById('latestTable').innerText = 'No data available for selected range.';
+            }
+        } catch (e) {
+            document.getElementById('latestTable').innerText = 'Failed to load latest status.';
+        }
+    }
+
+    document.getElementById('refreshAgg').addEventListener('click', loadLatestStatus);
+    document.getElementById('autoRefreshToggle').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            // set 6 hour interval
+            window._reportsAutoRefresh = setInterval(loadLatestStatus, 6 * 60 * 60 * 1000);
+            loadLatestStatus();
+            alert('Auto-refresh enabled (every 6 hours)');
+        } else {
+            clearInterval(window._reportsAutoRefresh);
+            alert('Auto-refresh disabled');
+        }
+    });
+
+    // Load initial
+    loadLatestStatus();
+</script>
+
+{% endblock %}

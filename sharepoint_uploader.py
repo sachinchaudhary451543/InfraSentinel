@@ -77,7 +77,7 @@ REQUIRED_LISTS = {
 
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 DB_PATH      = os.path.join(BASE_DIR, "data", "central.db")
-SP_SITE      = "https://bafflesol.sharepoint.com/sites/BFS_OnPrem_Server_Report"
+SP_SITE      = os.environ.get("SHAREPOINT_SITE_URL", "")
 
 
 def get_graph_headers(token):
@@ -112,7 +112,7 @@ def _get_list_id(site_id, list_name, token):
 def normalize_hostname(name):
     name = str(name).strip()
     if name.isdigit():
-        return f"BFSHOST{name}"
+        return f"SERVER{name}"
     return name.upper()
 
 

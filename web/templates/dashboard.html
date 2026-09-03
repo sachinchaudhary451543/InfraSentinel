@@ -58,18 +58,18 @@
         color: #646363 !important;
     }
 
-    /* Kill base data-table light overrides inside noc-page */
+    /* Ensure tables have clean light theme styling */
     .noc-page .data-table thead th,
     .noc-page .noc-table thead th {
-        color: #64748b !important;
-        border-bottom: 1px solid rgba(56, 189, 248, 0.06) !important;
-        background: rgba(13, 20, 34, 0.8) !important;
+        color: #475569 !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+        background: #f8fafc !important;
     }
 
     .noc-page .data-table tbody td,
     .noc-page .noc-table tbody td {
-        color: #e2e8f0 !important;
-        border-bottom: 1px solid rgba(56, 189, 248, 0.04) !important;
+        color: #0f172a !important;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
     }
 
     .noc-page .data-table tbody tr:hover,
@@ -101,7 +101,7 @@
 
     /* Kill base border-white/x overrides inside noc-page */
     .noc-page [class*="border-white/"] {
-        border-color: rgba(56, 189, 248, 0.08) !important;
+        border-color: rgba(148, 163, 184, 0.2) !important;
     }
 
     /* Main content padding — let noc-page handle its own */
@@ -111,7 +111,9 @@
 
     /* Fallback for browsers without :has() */
     .noc-page {
-        margin: -24px -32px !important;
+        margin: 0 !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* Selection highlights for inventory filtering */
@@ -131,30 +133,30 @@
 {% block content %}
 
 <style>
-    /* ── NOC Dark Theme Variables ── */
+    /* ── NOC Light Theme Variables ── */
     :root {
-        --noc-bg: #fbfcff;
-        --noc-surface: #f4f4f4;
-        --noc-surface-2: #f0f0f0;
-        --noc-border: rgba(56, 189, 248, 0.08);
-        --noc-border-bright: rgba(56, 189, 248, 0.18);
-        --noc-cyan: #22d3ee;
-        --noc-cyan-dim: rgba(34, 211, 238, 0.12);
-        --noc-indigo: #818cf8;
-        --noc-indigo-dim: rgba(129, 140, 248, 0.12);
-        --noc-emerald: #34d399;
-        --noc-emerald-dim: rgba(52, 211, 153, 0.1);
-        --noc-amber: #fbbf24;
-        --noc-amber-dim: rgba(251, 191, 36, 0.1);
-        --noc-rose: #fb7185;
-        --noc-rose-dim: rgba(251, 113, 133, 0.1);
-        --noc-violet: #a78bfa;
-        --noc-text-primary: #052145;
-        --noc-text-secondary: #2d2d2d;
-        --noc-text-muted: #07090b;
-        --noc-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.15), 0 0 40px rgba(34, 211, 238, 0.05);
-        --noc-glow-indigo: 0 0 20px rgba(129, 140, 248, 0.15);
-        --noc-glow-emerald: 0 0 20px rgba(52, 211, 153, 0.15);
+        --noc-bg: #fbfcfd;
+        --noc-surface: #ffffff;
+        --noc-surface-2: #f8fafc;
+        --noc-border: rgba(148, 163, 184, 0.2);
+        --noc-border-bright: rgba(56, 189, 248, 0.4);
+        --noc-cyan: #0284c7;
+        --noc-cyan-dim: rgba(2, 132, 199, 0.08);
+        --noc-indigo: #4f46e5;
+        --noc-indigo-dim: rgba(79, 70, 229, 0.08);
+        --noc-emerald: #059669;
+        --noc-emerald-dim: rgba(5, 150, 105, 0.08);
+        --noc-amber: #d97706;
+        --noc-amber-dim: rgba(217, 119, 6, 0.08);
+        --noc-rose: #e11d48;
+        --noc-rose-dim: rgba(225, 29, 72, 0.08);
+        --noc-violet: #7c3aed;
+        --noc-text-primary: #0f172a;
+        --noc-text-secondary: #475569;
+        --noc-text-muted: #64748b;
+        --noc-glow-cyan: 0 4px 12px rgba(2, 132, 199, 0.1);
+        --noc-glow-indigo: 0 4px 12px rgba(79, 70, 229, 0.1);
+        --noc-glow-emerald: 0 4px 12px rgba(5, 150, 105, 0.1);
     }
 
     /* ── Scoped to this page only ── */
@@ -168,7 +170,7 @@
         box-sizing: border-box;
     }
 
-    /* ── Scanline overlay ── */
+    /* ── Scanline overlay (disabled) ──
     .noc-scanlines::before {
         content: '';
         position: fixed;
@@ -176,11 +178,12 @@
         background: repeating-linear-gradient(0deg,
                 transparent,
                 transparent 2px,
-                rgba(0, 0, 0, 0.03) 2px;
+                rgba(0, 0, 0, 0.03) 2px,
                 rgba(0, 0, 0, 0.03) 4px);
         pointer-events: none;
         z-index: 9999;
     }
+    */
 
     /* ── NOC Panel ── */
     .noc-panel {
@@ -192,14 +195,7 @@
     }
 
     .noc-panel::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--noc-cyan), transparent);
-        opacity: 0.4;
+        display: none;
     }
 
     .noc-panel-bright {
@@ -317,14 +313,9 @@
         border: 1px solid rgba(251, 191, 36, 0.2);
     }
 
-    /* .badge-offline {
+    .badge-offline {
         background: rgba(51, 65, 85, 0.5);
         color: #64748b;
-        border: 1px solid rgba(51, 65, 85, 0.8);
-    } */
-    .badge-offline {
-        background: rgb(171 171 172 / 50%);
-        color: #060606;
         border: 1px solid rgba(51, 65, 85, 0.8);
     }
 
@@ -359,7 +350,7 @@
     }
 
     .noc-table thead tr {
-        background: rgba(13, 20, 34, 0.8);
+        background: #f1f5f9;
         border-bottom: 1px solid var(--noc-border);
     }
 
@@ -556,6 +547,7 @@
         font-weight: 600;
         outline: none;
         transition: border-color 0.2s;
+        appearance: none;
         -webkit-appearance: none;
     }
 
@@ -616,6 +608,59 @@
     .server-card:hover {
         border-color: rgba(34, 211, 238, 0.15);
         box-shadow: 0 0 30px rgba(34, 211, 238, 0.04);
+    }
+
+    .server-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+    .server-icon.host {
+        background: rgba(167, 139, 250, 0.1);
+        color: var(--noc-violet);
+        border: 1px solid rgba(167, 139, 250, 0.25);
+    }
+
+    .server-icon.light {
+        background: rgba(51, 65, 85, 0.5);
+        color: #64748b;
+        border: 1px solid var(--noc-border);
+    }
+
+    .server-icon.agent {
+        background: var(--noc-indigo-dim);
+        color: var(--noc-indigo);
+        border: 1px solid rgba(129, 140, 248, 0.2);
+    }
+
+    .status-dot {
+        position: absolute;
+        bottom: -3px;
+        right: -3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid var(--noc-surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .status-dot.online {
+        background: var(--noc-emerald);
+    }
+
+    .status-dot.idle {
+        background: var(--noc-amber);
+    }
+
+    .status-dot.offline {
+        background: #334155;
     }
 
     .server-card .corner-accent {
@@ -748,6 +793,10 @@
         padding: 14px 16px;
     }
 
+    .forecast-panel.has-vms {
+        margin-bottom: 14px;
+    }
+
     .forecast-row {
         display: flex;
         align-items: flex-start;
@@ -826,6 +875,74 @@
         color: var(--noc-text-primary);
         width: 32px;
         text-align: right;
+    }
+
+    .load-insight {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid rgba(245, 158, 11, 0.28);
+        border-radius: 4px;
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(239, 68, 68, 0.05));
+    }
+
+    .load-insight-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .load-action-btn {
+        border: 1px solid var(--noc-border);
+        background: var(--noc-surface);
+        color: var(--noc-text-primary);
+        border-radius: 4px;
+        padding: 7px 10px;
+        font-size: .65rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .load-action-btn:hover {
+        border-color: var(--noc-indigo);
+        color: var(--noc-indigo);
+    }
+
+    .load-action-btn.danger:hover {
+        border-color: #ef4444;
+        color: #dc2626;
+    }
+
+    #selected-server-panel {
+        padding: 14px !important;
+        margin-bottom: 14px !important;
+    }
+
+    #selected-server-panel>div:first-child {
+        margin-bottom: 10px !important;
+    }
+
+    #selected-server-panel>div:nth-child(2) {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+
+    #selected-server-panel>div:nth-child(2)>div {
+        padding: 8px !important;
+    }
+
+    #selected-server-panel>div:nth-child(3) {
+        display: none !important;
+    }
+
+    @media (max-width: 767px) {
+        #selected-server-panel>div:nth-child(2) {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+
+        .load-action-btn {
+            flex: 1 1 auto;
+        }
     }
 
     /* ── Screenshot preview ── */
@@ -989,13 +1106,13 @@
 
     /* ── Terminal-style script block ── */
     .noc-terminal {
-        background: #020509;
-        border: 1px solid rgba(34, 211, 238, 0.15);
-        border-radius: 3px;
+        background: #1e293b;
+        border: 1px solid var(--noc-border);
+        border-radius: 4px;
         padding: 16px;
         font-family: 'JetBrains Mono', 'Fira Code', monospace;
         font-size: 0.7rem;
-        color: #22d3ee;
+        color: #e2e8f0;
         overflow-x: auto;
         max-height: 240px;
         overflow-y: auto;
@@ -1080,14 +1197,7 @@
     }
 
     .telemetry-header::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--noc-cyan), var(--noc-indigo), transparent);
-        opacity: 0.5;
+        display: none;
     }
 
     /* ── Filter bar ── */
@@ -1173,27 +1283,27 @@
 
     @media (max-width: 1280px) {
         .noc-grid-4 {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, 1fr) !important;
         }
     }
 
     @media (max-width: 900px) {
         .noc-grid-4 {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, 1fr) !important;
         }
 
         .noc-grid-2 {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
         }
 
         .noc-grid-12 {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
         }
     }
 
     @media (max-width: 600px) {
         .noc-grid-4 {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr !important;
         }
 
         .noc-page-header {
@@ -1235,7 +1345,7 @@
                     <i class="fa-solid fa-warehouse" style="margin-right:5px;"></i>Inventory
                 </button>
                 <button onclick="switchTab('live')" id="tab-btn-live" class="noc-tab">
-                    <i class="fa-solid fa-wave-square" style="margin-right:5px;"></i>Live Monitor
+                    <i class="fa-solid fa-wave-square" style="margin-right:5px;"></i>Live Monitoring
                 </button>
                 <a href="{{ url_for('agent_mgmt.agent_portal') }}" class="noc-tab" style="text-decoration:none;">
                     <i class="fa-solid fa-robot" style="margin-right:5px;"></i>Agent Portal
@@ -1389,10 +1499,10 @@
                                 </div>
                                 <div>
                                     <div style="font-weight:700; font-size:0.78rem; color:var(--noc-text-primary);">{{
-                                        item.hostname }}</div>
+                                        item.display_name }}</div>
                                     <div
                                         style="font-size:0.6rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">
-                                        {{ item.ip }}</div>
+                                        {{ item.hostname }} · {{ item.ip }}</div>
                                 </div>
                             </div>
                         </td>
@@ -1420,8 +1530,8 @@
                                 <div class="mini-bar-row">
                                     <span class="mini-bar-label">CPU</span>
                                     <div class="mini-bar-track">
-                                        <div class="mini-bar-fill"
-                                            style="width:{{ (item.cpu or item.cpu_percent)|round(0) }}%; background:var(--noc-indigo);">
+                                        <div class="mini-bar-fill mini-bar-cpu"
+                                            data-bar-width="{{ (item.cpu or item.cpu_percent)|round(0) }}">
                                         </div>
                                     </div>
                                     <span class="mini-bar-val">{{ (item.cpu or item.cpu_percent)|round(1) }}%</span>
@@ -1429,8 +1539,8 @@
                                 <div class="mini-bar-row">
                                     <span class="mini-bar-label">RAM</span>
                                     <div class="mini-bar-track">
-                                        <div class="mini-bar-fill"
-                                            style="width:{{ (item.ram or item.memory_percent)|round(0) }}%; background:var(--noc-emerald);">
+                                        <div class="mini-bar-fill mini-bar-ram"
+                                            data-bar-width="{{ (item.ram or item.memory_percent)|round(0) }}">
                                         </div>
                                     </div>
                                     <span class="mini-bar-val">{{ (item.ram or item.memory_percent)|round(1) }}%</span>
@@ -1597,7 +1707,24 @@
 
             <!-- Detail Chart -->
             <div style="background:var(--noc-bg); padding:12px; border-radius:4px; border:1px solid var(--noc-border);">
-                <canvas id="selected-chart-canvas" style="max-height:320px;"></canvas>
+                <canvas id="selected-chart-canvas" style="max-height:420px; min-height:250px;"></canvas>
+            </div>
+            <div id="load-insight" class="load-insight" style="display:none;">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:var(--noc-amber);margin-top:2px;"></i>
+                    <div style="flex:1;min-width:0;">
+                        <div id="load-insight-title"
+                            style="font-size:.72rem;font-weight:800;color:var(--noc-text-primary);">High resource load
+                        </div>
+                        <div id="load-insight-detail"
+                            style="font-size:.65rem;line-height:1.55;color:var(--noc-text-secondary);margin-top:4px;">
+                        </div>
+                    </div>
+                </div>
+                <div id="load-insight-actions" class="load-insight-actions"></div>
+                <div id="load-insight-result" style="font-size:.62rem;color:var(--noc-text-secondary);margin-top:8px;">
+                </div>
+                <div id="load-processes" style="margin-top:12px;"></div>
             </div>
         </div>
 
@@ -1605,7 +1732,7 @@
         <div style="display:grid; grid-template-columns:1fr; gap:16px;">
             {% for server in servers %}
             <div class="server-card" data-server-id="{{ server.id }}"
-                onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href='{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}'">
+                data-detail-url="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}">
 
                 <div class="corner-accent"></div>
                 <div class="corner-accent-v"></div>
@@ -1619,17 +1746,13 @@
                             <!-- Server Icon with status ring -->
                             <div style="position:relative;">
                                 <div
-                                    style="width:48px; height:48px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;
-                {% if server.server_type == 'Host' %}background:rgba(167,139,250,0.1); color:var(--noc-violet); border:1px solid rgba(167,139,250,0.25);
-                {% elif server.monitoring_mode == 'light' %}background:rgba(51,65,85,0.5); color:#64748b; border:1px solid var(--noc-border);
-                {% else %}background:var(--noc-indigo-dim); color:var(--noc-indigo); border:1px solid rgba(129,140,248,0.2);{% endif %}">
+                                    class="server-icon {% if server.server_type == 'Host' %}host{% elif server.monitoring_mode == 'light' %}light{% else %}agent{% endif %}">
                                     <i
                                         class="fa-solid {% if server.server_type == 'Host' %}fa-cubes{% elif server.monitoring_mode == 'light' %}fa-laptop{% else %}fa-microchip{% endif %}"></i>
                                 </div>
                                 {% set slabel = server.status_label %}
                                 <div
-                                    style="position:absolute; bottom:-3px; right:-3px; width:14px; height:14px; border-radius:50%; border:2px solid var(--noc-surface); display:flex; align-items:center; justify-content:center;
-                {% if slabel == 'ONLINE' %}background:var(--noc-emerald);{% elif slabel == 'IDLE' %}background:var(--noc-amber);{% else %}background:#334155;{% endif %}">
+                                    class="status-dot {% if slabel == 'ONLINE' %}online{% elif slabel == 'IDLE' %}idle{% else %}offline{% endif %}">
                                     {% if slabel == 'ONLINE' %}<div
                                         style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);animation:noc-pulse 2s infinite;">
                                     </div>{% endif %}
@@ -1640,7 +1763,7 @@
                                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                     <span
                                         style="font-size:1rem; font-weight:700; color:var(--noc-text-primary); letter-spacing:0.02em;">{{
-                                        server.hostname }}</span>
+                                        server.display_name }}</span>
                                     {% if server.server_type == 'Host' %}
                                     <span class="noc-badge badge-hyperv">Hyper-V</span>
                                     {% elif server.monitoring_mode == 'light' %}
@@ -1652,7 +1775,7 @@
                                         style="font-size:0.6rem; color:var(--noc-text-secondary); opacity:0.7;"></i>
                                     <span
                                         style="font-size:0.65rem; color:var(--noc-text-secondary); font-family:'JetBrains Mono',monospace;">{{
-                                        server.ip }}</span>
+                                        server.hostname }} · {{ server.ip }}</span>
                                 </div>
                             </div>
                         </div>
@@ -1665,40 +1788,34 @@
                         </div>
                     </div>
 
-                    <!-- Charts Row: CPU + RAM -->
-                    <div class="noc-grid-2" style="margin-bottom:14px;">
-                        <!-- CPU Chart -->
+                    <!-- Combined Charts Row: CPU + RAM -->
+                    <div style="margin-bottom:14px;">
                         <div class="chart-panel">
                             <div class="chart-header">
                                 <div class="chart-label">
-                                    <i class="fa-solid fa-microchip" style="color:var(--noc-indigo);"></i>
-                                    CPU Utilization
+                                    <i class="fa-solid fa-chart-line" style="color:var(--noc-cyan);"></i>
+                                    System Performance
                                 </div>
-                                <span class="chart-value" id="live-cpu-val-{{ server.id }}"
-                                    style="color:var(--noc-indigo);">
-                                    {% if server.cpu_percent %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
-                                </span>
-                            </div>
-                            <div style="height:130px; position:relative;">
-                                <canvas id="chart-cpu-{{ server.id }}"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- RAM Chart -->
-                        <div class="chart-panel">
-                            <div class="chart-header">
-                                <div class="chart-label">
-                                    <i class="fa-solid fa-memory" style="color:var(--noc-emerald);"></i>
-                                    Memory Utilization
+                                <div style="display:flex; gap:16px;">
+                                    <span class="chart-value" id="live-cpu-val-{{ server.id }}"
+                                        style="color:var(--noc-indigo);">
+                                        <i class="fa-solid fa-microchip"
+                                            style="font-size:0.8rem; margin-right:4px;"></i>{% if server.cpu_percent
+                                        %}{{ server.cpu_percent|round(1) }}%{% else %}--{% endif %}
+                                    </span>
+                                    <span class="chart-value" id="live-ram-val-{{ server.id }}"
+                                        style="color:var(--noc-emerald);">
+                                        <i class="fa-solid fa-memory" style="font-size:0.8rem; margin-right:4px;"></i>{%
+                                        if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
+                                        endif %}
+                                    </span>
                                 </div>
-                                <span class="chart-value" id="live-ram-val-{{ server.id }}"
-                                    style="color:var(--noc-emerald);">
-                                    {% if server.memory_percent %}{{ server.memory_percent|round(1) }}%{% else %}--{%
-                                    endif %}
-                                </span>
                             </div>
-                            <div style="height:130px; position:relative;">
-                                <canvas id="chart-ram-{{ server.id }}"></canvas>
+                            <div style="height:320px; position:relative;">
+                                <canvas id="chart-combined-{{ server.id }}" data-trend-server-id="{{ server.id }}"
+                                    data-trend-cpu="{{ server.cpu_percent or 0 }}"
+                                    data-trend-ram="{{ server.memory_percent or 0 }}"
+                                    onclick="showLoadInsightFromCanvas(event);"></canvas>
                             </div>
                         </div>
                     </div>
@@ -1732,7 +1849,7 @@
                                     style="color:var(--noc-violet);">{{ server.vms_count }}</span>
                                 <span class="kpi-name">Guests</span>
                             </div>
-                            <div class="kpi-item">
+                            <div class="kpi-item" id="alert-summary-{{ server.id }}" title="No active alerts">
                                 <span class="kpi-value" id="live-alerts-{{ server.id }}"
                                     style="color:var(--noc-amber);">0</span>
                                 <span class="kpi-name">Alerts</span>
@@ -1746,24 +1863,14 @@
                         </div>
                     </div>
 
-                    <!-- Screenshot Preview -->
-                    {% if server.latest_screenshot_url %}
-                    <div class="screenshot-panel" style="margin-bottom:14px;">
-                        <div class="screenshot-header">
-                            <i class="fa-solid fa-camera"></i> Latest Screen Capture
-                        </div>
-                        <div style="height:80px; overflow:hidden;">
-                            <img src="{{ server.latest_screenshot_url }}"
-                                style="width:100%; height:100%; object-fit:cover; opacity:0.75; transition:opacity 0.2s;"
-                                onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75"
-                                alt="Latest Screenshot">
-                        </div>
+                    <div id="live-alert-list-{{ server.id }}"
+                        style="display:none; margin:-6px 0 12px; padding:8px 10px; border:1px solid rgba(245,158,11,.25); border-radius:8px; background:rgba(245,158,11,.07); color:var(--noc-text-secondary); font-size:.65rem;">
                     </div>
-                    {% endif %}
+
+
 
                     <!-- AI Forecast -->
-                    <div class="forecast-panel"
-                        style="margin-bottom:{% if server.vms_count > 0 %}14px{% else %}0{% endif %};">
+                    <div class="forecast-panel {% if server.vms_count > 0 %}has-vms{% endif %}">
                         <div class="forecast-row">
                             <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
                                 <div class="forecast-icon-wrap"><i class="fa-solid fa-robot"></i></div>
@@ -1882,6 +1989,10 @@
         {% for server in servers %}
         {
             "id": {{ server.id|tojson }},
+            "hostname": {{ (server.hostname or server.name or '')|tojson }},
+            "host": {{ (server.name or server.hostname or '')|tojson }},
+            "display_name": {{ (server.display_name or server.hostname or server.name or '')|tojson }},
+            "ip": {{ (server.ip or '')|tojson }},
             "cpu": {{ server.cpu_percent|float }},
             "ram": {{ server.memory_percent|float }},
             "disk": {{ server.disk_percent|float }},
@@ -2012,6 +2123,10 @@
             });
         };
 
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
         // ─── Global Variables for Selection ───
         let selectedServerId = null;
         let selectedChart = null;
@@ -2035,7 +2150,7 @@
             if (hostEl) hostEl.innerText = server.hostname || server.host || (`Server ${serverId}`);
 
             const ipEl = document.getElementById('selected-server-ip');
-            if (ipEl) ipEl.innerText = 'IP: ' + (server.ip || '—');
+            if (ipEl) ipEl.innerText = server.ip || '—';
 
             const cpuEl = document.getElementById('sel-cpu');
             if (cpuEl) cpuEl.innerText = (server.cpu || 0).toFixed(1) + '%';
@@ -2112,6 +2227,13 @@
                                 }
                             }
                         },
+                        onClick: function (event, elements) {
+                            if (!elements.length) return;
+                            const index = elements[0].index;
+                            const buffer = historyBuffers[selectedServerId];
+                            if (!buffer) return;
+                            showLoadInsight(selectedServerId, buffer.labels[index], Number(buffer.liveCpu[index] || 0), Number(buffer.liveRam[index] || 0));
+                        },
                         scales: {
                             y: {
                                 min: 0,
@@ -2141,6 +2263,16 @@
                         }
                     }
                 });
+                if (canvasEl.dataset.loadInsightBound !== 'true') {
+                    canvasEl.dataset.loadInsightBound = 'true';
+                    canvasEl.addEventListener('click', function (event) {
+                        if (!selectedChart || selectedServerId === null) return;
+                        const points = selectedChart.getElementsAtEventForMode(event, 'index', { intersect: false }, true);
+                        const index = points.length ? points[0].index : Math.max(0, (historyBuffers[selectedServerId]?.labels?.length || 1) - 1);
+                        const buffer = historyBuffers[selectedServerId];
+                        if (buffer) showLoadInsight(selectedServerId, buffer.labels[index], Number(buffer.liveCpu[index] || 0), Number(buffer.liveRam[index] || 0));
+                    });
+                }
             }
         }
 
@@ -2150,6 +2282,122 @@
             if (panel) panel.style.display = 'none';
             document.querySelectorAll('.inv-row').forEach(r => r.classList.remove('selected-row'));
             document.querySelectorAll('.server-card').forEach(c => c.removeAttribute('data-selected'));
+            const insight = document.getElementById('load-insight');
+            if (insight) insight.style.display = 'none';
+        }
+
+        function showLoadInsight(serverId, timestamp, cpu, ram) {
+            selectedServerId = String(serverId);
+            const selectedPanel = document.getElementById('selected-server-panel');
+            const selectedServer = serverData.find(server => String(server.id) === String(serverId));
+            if (selectedPanel) selectedPanel.style.display = 'block';
+            if (selectedServer) {
+                const host = document.getElementById('selected-server-host');
+                const ip = document.getElementById('selected-server-ip');
+                if (host) host.textContent = selectedServer.hostname || selectedServer.host || `Server ${serverId}`;
+                if (ip) ip.textContent = selectedServer.ip || '—';
+            }
+            const cpuEl = document.getElementById('sel-cpu');
+            const ramEl = document.getElementById('sel-ram');
+            const diskEl = document.getElementById('sel-disk');
+            const lastEl = document.getElementById('sel-last');
+            if (cpuEl) cpuEl.textContent = `${cpu.toFixed(1)}%`;
+            if (ramEl) ramEl.textContent = `${ram.toFixed(1)}%`;
+            if (diskEl && selectedServer) diskEl.textContent = `${Number(selectedServer.disk || 0).toFixed(1)}%`;
+            if (lastEl) lastEl.textContent = timestamp || '—';
+            const insight = document.getElementById('load-insight');
+            const detail = document.getElementById('load-insight-detail');
+            const title = document.getElementById('load-insight-title');
+            const actions = document.getElementById('load-insight-actions');
+            const result = document.getElementById('load-insight-result');
+            const processBox = document.getElementById('load-processes');
+            if (!insight || !detail || !title || !actions) return;
+            if (processBox) processBox.innerHTML = '<div style="font-size:.62rem;color:var(--noc-text-secondary);">Loading observed application/process data…</div>';
+
+            const cpuHigh = cpu >= 90;
+            const ramHigh = ram >= 90;
+            if (!cpuHigh && !ramHigh) {
+                title.textContent = 'Load is within the normal range';
+                detail.textContent = `${timestamp || 'Selected point'} · CPU ${cpu.toFixed(1)}% · RAM ${ram.toFixed(1)}%. No high-load remediation is recommended for this point.`;
+                actions.innerHTML = `<button type="button" class="load-action-btn" onclick="loadObservedProcesses(${serverId})"><i class="fa-solid fa-rotate"></i> Refresh process data</button><button type="button" class="load-action-btn" onclick="openRemoteDiagnostics(${serverId})"><i class="fa-solid fa-stethoscope"></i> Open diagnostics</button><button type="button" class="load-action-btn" onclick="restartLoadedAgent(${serverId})"><i class="fa-solid fa-power-off"></i> Restart agent</button>`;
+                if (result) result.textContent = '';
+            } else {
+                title.textContent = cpuHigh && ramHigh ? 'CPU and memory pressure detected' : `${cpuHigh ? 'CPU' : 'RAM'} pressure detected`;
+                detail.textContent = `${timestamp || 'Selected point'} · Observed CPU ${cpu.toFixed(1)}% and RAM ${ram.toFixed(1)}%. ` +
+                    (cpuHigh && ramHigh ? 'Both resources are high; this commonly indicates a workload spike, runaway process, or insufficient capacity.' : cpuHigh ? 'The CPU threshold is high; inspect the live process list before stopping anything.' : 'The memory threshold is high; inspect memory consumers and available capacity before restarting anything.') +
+                    ' Process-level attribution is not present in this metric point.';
+                actions.innerHTML = `<button type="button" class="load-action-btn" onclick="openRemoteDiagnostics(${serverId})"><i class="fa-solid fa-stethoscope"></i> Open diagnostics</button><button type="button" class="load-action-btn" onclick="queueLoadRepair(${serverId}, 'sfc')"><i class="fa-solid fa-wrench"></i> Queue health repair</button><button type="button" class="load-action-btn danger" onclick="restartLoadedAgent(${serverId})"><i class="fa-solid fa-power-off"></i> Restart agent</button>`;
+                if (result) result.textContent = 'Actions are queued for the agent; this page does not terminate user processes automatically.';
+            }
+            insight.style.display = 'block';
+            loadObservedProcesses(serverId);
+        }
+
+        async function loadObservedProcesses(serverId) {
+            const processBox = document.getElementById('load-processes');
+            if (!processBox) return;
+            try {
+                const response = await fetch(`/api/v2/server/${serverId}/load-insight`);
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Process data unavailable');
+                const app = data.active_app ? `<div style="margin-bottom:8px;font-size:.65rem;color:var(--noc-text-secondary);"><strong>Active application:</strong> ${escapeHtml(data.active_app)}${data.window_title ? ` · ${escapeHtml(data.window_title)}` : ''}</div>` : '';
+                if (!data.processes || !data.processes.length) {
+                    processBox.innerHTML = app + '<div style="font-size:.62rem;color:var(--noc-text-secondary);">No process snapshot was included in the latest heartbeat. Update/restart the agent to begin process attribution.</div>';
+                    return;
+                }
+                const rows = data.processes.map(process => `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(148,163,184,.15);font-size:.62rem;"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--noc-text-primary);" title="${escapeHtml(process.name)}">${escapeHtml(process.name)} <span style="color:var(--noc-text-secondary);">(PID ${process.pid})</span></div><span style="color:#6366f1;white-space:nowrap;">CPU ${Number(process.cpu_percent || 0).toFixed(1)}%</span><span style="color:#059669;white-space:nowrap;">RAM ${Number(process.memory_percent || 0).toFixed(1)}%</span><button type="button" class="load-action-btn danger" style="padding:4px 7px;" onclick="stopObservedProcess(${serverId}, ${Number(process.pid)}, '${escapeHtml(process.name)}')">Stop</button></div>`).join('');
+                processBox.innerHTML = app + '<div style="font-size:.62rem;font-weight:800;color:var(--noc-text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Observed top processes</div>' + rows;
+            } catch (error) {
+                processBox.innerHTML = `<div style="font-size:.62rem;color:#dc2626;">Could not load process snapshot: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function stopObservedProcess(serverId, pid, processName) {
+            if (!confirm(`Queue stop for ${processName} (PID ${pid})? Verify this is not a critical system process.`)) return;
+            const result = document.getElementById('load-insight-result');
+            result.textContent = 'Queuing process stop…';
+            try {
+                const response = await fetch(`/api/v2/server/${serverId}/remote/process/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid, process_name: processName }) });
+                const data = await response.json();
+                result.textContent = response.ok && data.success ? `${data.message} Command ID: ${data.command_id}.` : (data.error || 'Process stop could not be queued.');
+            } catch (error) { result.textContent = `Queue failed: ${error.message}`; }
+        }
+
+        function showLoadInsightFromCanvas(event) {
+            if (event) event.stopPropagation();
+            const canvas = event && event.currentTarget ? event.currentTarget : null;
+            if (!canvas || typeof showLoadInsight !== 'function') return;
+            const serverId = Number(canvas.dataset.trendServerId || canvas.id.replace('chart-combined-', ''));
+            const buffer = historyBuffers[serverId];
+            const index = buffer && buffer.labels && buffer.labels.length ? buffer.labels.length - 1 : 0;
+            const cpu = buffer && buffer.liveCpu && buffer.liveCpu.length ? buffer.liveCpu[index] : Number(canvas.dataset.trendCpu || 0);
+            const ram = buffer && buffer.liveRam && buffer.liveRam.length ? buffer.liveRam[index] : Number(canvas.dataset.trendRam || 0);
+            const timestamp = buffer && buffer.labels && buffer.labels.length ? buffer.labels[index] : 'Latest live telemetry';
+            showLoadInsight(serverId, timestamp, Number(cpu), Number(ram));
+        }
+
+        function openRemoteDiagnostics(serverId) { window.location.href = `/assets/remote-control/${encodeURIComponent(serverId)}`; }
+
+        async function queueLoadRepair(serverId, repairType) {
+            const result = document.getElementById('load-insight-result');
+            if (!confirm('Queue a Windows health repair for this server? The agent will execute it when online.')) return;
+            result.textContent = 'Queuing health repair...';
+            try {
+                const response = await fetch(`/api/v2/server/${serverId}/remote/repair`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repair_type: repairType }) });
+                const data = await response.json();
+                result.textContent = response.ok && data.success ? `Queued successfully. Command ID: ${data.command_id}.` : (data.error || 'Repair could not be queued.');
+            } catch (error) { result.textContent = `Queue failed: ${error.message}`; }
+        }
+
+        async function restartLoadedAgent(serverId) {
+            const result = document.getElementById('load-insight-result');
+            if (!confirm('Restart the monitoring agent? Live telemetry will pause briefly.')) return;
+            result.textContent = 'Queuing agent restart...';
+            try {
+                const response = await fetch(`/api/v2/server/${serverId}/agent/restart`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await response.json();
+                result.textContent = response.ok && data.success ? `Agent restart queued. Command ID: ${data.command_id}.` : (data.error || 'Agent restart could not be queued.');
+            } catch (error) { result.textContent = `Queue failed: ${error.message}`; }
         }
 
         function showFilteredLive() {
@@ -2181,141 +2429,63 @@
 
         async function pollLiveMetrics() {
             const visibleCards = document.querySelectorAll('.server-card:not([style*="display: none"])');
+            const serverIds = Array.from(visibleCards).map(card => card.dataset.serverId).filter(Boolean);
+            const cardsById = new Map(Array.from(visibleCards).map(card => [card.dataset.serverId, card]));
 
-            for (const card of visibleCards) {
-                const serverId = card.dataset.serverId;
-                if (!serverId) continue;
-
+            for (let offset = 0; offset < serverIds.length; offset += 100) {
+                const batchIds = serverIds.slice(offset, offset + 100);
                 try {
-                    const res = await fetch(`/api/v2/server/${serverId}/metrics/latest`);
-                    if (!res.ok) continue;
+                    const response = await fetch('/api/v2/metrics/latest-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ server_ids: batchIds })
+                    });
+                    if (!response.ok) continue;
+                    const payload = await response.json();
+                    for (const serverId of batchIds) {
+                        const data = (payload.metrics || {})[serverId];
+                        const card = cardsById.get(serverId);
+                        if (!data || !card) continue;
 
-                    const contentType = res.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) continue;
+                        const buffer = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
+                        buffer.labels.push(new Date().toLocaleTimeString());
+                        buffer.liveCpu.push(data.cpu || 0);
+                        buffer.liveRam.push(data.ram || 0);
+                        if (buffer.labels.length > 240) {
+                            buffer.labels.shift();
+                            buffer.liveCpu.shift();
+                            buffer.liveRam.shift();
+                        }
+                        historyBuffers[serverId] = buffer;
 
-                    const data = await res.json();
-
-                    // Update history buffer
-                    const buf = historyBuffers[serverId] || { labels: [], liveCpu: [], liveRam: [], baselineCpu: [], baselineRam: [] };
-                    buf.labels.push(new Date().toLocaleTimeString());
-                    buf.liveCpu.push(data.cpu || 0);
-                    buf.liveRam.push(data.ram || 0);
-
-                    // Keep rolling window (max 240 points)
-                    if (buf.labels.length > 240) {
-                        buf.labels.shift();
-                        buf.liveCpu.shift();
-                        buf.liveRam.shift();
-                    }
-
-                    historyBuffers[serverId] = buf;
-
-                    // Update selected chart if this is the selected server
-                    if (selectedServerId === serverId && selectedChart) {
-                        selectedChart.data.labels = buf.labels;
-                        selectedChart.data.datasets[0].data = buf.liveCpu;
-                        selectedChart.data.datasets[1].data = buf.liveRam;
-                        selectedChart.update('none');
-
-                        // Update display elements
-                        const cpuEl = document.getElementById('sel-cpu');
-                        if (cpuEl) cpuEl.innerText = (data.cpu || 0).toFixed(1) + '%';
-
-                        const ramEl = document.getElementById('sel-ram');
-                        if (ramEl) ramEl.innerText = (data.ram || 0).toFixed(1) + '%';
-
-                        const diskEl = document.getElementById('sel-disk');
-                        if (diskEl) diskEl.innerText = (data.disk || 0).toFixed(1) + '%';
-
-                        const lastEl = document.getElementById('sel-last');
-                        if (lastEl) lastEl.innerText = new Date().toLocaleTimeString();
+                        if (selectedServerId === serverId && selectedChart) {
+                            selectedChart.data.labels = buffer.labels;
+                            selectedChart.data.datasets[0].data = buffer.liveCpu;
+                            selectedChart.data.datasets[1].data = buffer.liveRam;
+                            selectedChart.update('none');
+                            const cpuEl = document.getElementById('sel-cpu');
+                            if (cpuEl) cpuEl.innerText = (data.cpu || 0).toFixed(1) + '%';
+                            const ramEl = document.getElementById('sel-ram');
+                            if (ramEl) ramEl.innerText = (data.ram || 0).toFixed(1) + '%';
+                            const diskEl = document.getElementById('sel-disk');
+                            if (diskEl) diskEl.innerText = (data.disk || 0).toFixed(1) + '%';
+                            const lastEl = document.getElementById('sel-last');
+                            if (lastEl) lastEl.innerText = new Date().toLocaleTimeString();
+                        }
                     }
                 } catch (err) {
-                    console.error(`Error polling server ${serverId}:`, err);
+                    console.warn('Live metrics batch unavailable', err);
                 }
             }
         }
-
 
         serverData.forEach(s => {
             let now = new Date();
-            if (s.last_seen) {
-                now = new Date(s.last_seen + (s.last_seen.includes('+') || s.last_seen.endsWith('Z') ? '' : 'Z'));
-            }
-
+            if (s.last_seen) now = new Date(s.last_seen + (s.last_seen.includes('+') || s.last_seen.endsWith('Z') ? '' : 'Z'));
             const lastUpdateEl = document.getElementById('live-last-update-' + s.id);
-            if (lastUpdateEl) {
-                lastUpdateEl.innerText = formatDateTime(now) || 'N/A';
-            }
-
-            historyBuffers[s.id] = {
-                labels: [formatDateTime(now)],
-                liveCpu: [Number(s.cpu || 0)],
-                liveRam: [Number(s.ram || 0)]
-            };
+            if (lastUpdateEl) lastUpdateEl.innerText = formatDateTime(now) || 'N/A';
+            historyBuffers[s.id] = { labels: [formatDateTime(now)], liveCpu: [Number(s.cpu || 0)], liveRam: [Number(s.ram || 0)] };
         });
-
-        function switchTab(tab) {
-            document.getElementById('view-inventory').classList.add('hidden');
-            document.getElementById('view-live').classList.add('hidden');
-
-            // Reset all tab buttons
-            ['inventory', 'live'].forEach(t => {
-                const btn = document.getElementById('tab-btn-' + t);
-                if (btn) {
-                    btn.className = 'noc-tab';
-                }
-            });
-
-            document.getElementById('view-' + tab).classList.remove('hidden');
-            const activeBtn = document.getElementById('tab-btn-' + tab);
-            if (activeBtn) activeBtn.className = 'noc-tab active';
-
-            if (tab === 'live') {
-                refreshCharts();
-                loadHistoricalDataForAll();
-                refreshForecasts();
-            }
-        }
-
-        function filterInventory() {
-            const agentFilter = document.getElementById('invFilterAgent').value;
-            const search = (document.getElementById('invSearch').value || '').toLowerCase();
-            const rows = document.querySelectorAll('.inv-row');
-
-            rows.forEach(row => {
-                const hostname = row.dataset.hostname || '';
-                const agent = row.dataset.agent || '';
-
-                const matchSearch = !search || hostname.includes(search);
-                const matchAgent = !agentFilter || agent === agentFilter;
-
-                row.style.display = (matchSearch && matchAgent) ? '' : 'none';
-            });
-        }
-
-        function syncAzureInventory() {
-            const btn = document.getElementById('syncBtn');
-            const icon = document.getElementById('syncIcon');
-            btn.disabled = true;
-            icon.classList.add('fa-spin');
-
-            fetch('/api/v2/inventory/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`Synced ${data.synced} devices from Azure AD. Refreshing...`);
-                        window.location.reload();
-                    } else {
-                        alert('Sync failed: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(err => alert('Sync error: ' + err.message))
-                .finally(() => {
-                    btn.disabled = false;
-                    icon.classList.remove('fa-spin');
-                });
-        }
 
         function deleteDevice(serverId, hostname) {
             if (!confirm(`Are you sure you want to delete the device ${hostname}? This will remove all associated data, metrics, and screenshots.`)) return;
@@ -2385,7 +2555,7 @@
             gradient.addColorStop(0, liveColor + '30');
             gradient.addColorStop(1, liveColor + '03');
 
-            return new Chart(ctx, {
+            const chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labelsArray,
@@ -2473,9 +2643,144 @@
                     }
                 }
             });
+
+            return chart;
         }
 
         // ── Disk Doughnut (NOC dark) ──
+        // ── Real-Time COMBINED Line Chart Factory ──
+        function createCombinedLineChart(canvasId, labelsArray, cpuData, ramData) {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded; cannot render combined chart');
+                return null;
+            }
+            const el = document.getElementById(canvasId);
+            if (!el) return null;
+            const ctx = el.getContext('2d');
+
+            const cpuColor = '#818cf8';
+            const ramColor = '#34d399';
+
+            const gradientCpu = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 300);
+            gradientCpu.addColorStop(0, cpuColor + '20');
+            gradientCpu.addColorStop(1, cpuColor + '00');
+
+            const gradientRam = ctx.createLinearGradient(0, 0, 0, el.parentElement.clientHeight || 300);
+            gradientRam.addColorStop(0, ramColor + '20');
+            gradientRam.addColorStop(1, ramColor + '00');
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsArray,
+                    datasets: [
+                        {
+                            label: 'CPU',
+                            data: cpuData,
+                            borderColor: cpuColor,
+                            backgroundColor: gradientCpu,
+                            borderWidth: 1.5,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHoverBackgroundColor: cpuColor,
+                            pointHoverBorderColor: '#0d1422',
+                            pointHoverBorderWidth: 2
+                        },
+                        {
+                            label: 'RAM',
+                            data: ramData,
+                            borderColor: ramColor,
+                            backgroundColor: gradientRam,
+                            borderWidth: 1.5,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHoverBackgroundColor: ramColor,
+                            pointHoverBorderColor: '#0d1422',
+                            pointHoverBorderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 400, easing: 'easeOutQuart' },
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.04)', drawBorder: false },
+                            ticks: {
+                                font: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                                color: '#334155',
+                                stepSize: 25,
+                                callback: v => v + '%'
+                            },
+                            border: { display: false }
+                        },
+                        x: {
+                            display: true,
+                            grid: { color: 'rgba(56,189,248,0.03)', drawBorder: false },
+                            ticks: {
+                                color: '#334155',
+                                font: { size: 8, weight: '700', family: "'JetBrains Mono', monospace" },
+                                autoSkip: true,
+                                maxTicksLimit: 8,
+                                maxRotation: 0,
+                                callback: function (value, index) {
+                                    const raw = this.getLabelForValue(value) || '';
+                                    if (!raw) return '';
+                                    const parts = raw.split(', ');
+                                    if (parts.length >= 2) {
+                                        const datePart = parts[0].substring(0, 5);
+                                        const timePart = parts[1].replace(/:00 /, ' ');
+                                        return datePart + ' ' + timePart;
+                                    }
+                                    return raw;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#64748b', font: { size: 10, family: "'JetBrains Mono', monospace" }, boxWidth: 10 } },
+                        tooltip: {
+                            backgroundColor: '#0d1422',
+                            borderColor: 'rgba(34,211,238,0.2)',
+                            borderWidth: 1,
+                            titleFont: { size: 9, weight: '700', family: "'JetBrains Mono', monospace" },
+                            bodyFont: { size: 10, family: "'JetBrains Mono', monospace" },
+                            titleColor: '#64748b',
+                            bodyColor: '#e2e8f0',
+                            padding: 10,
+                            cornerRadius: 3,
+                            displayColors: true,
+                            callbacks: {
+                                title: items => {
+                                    const lbl = items?.[0]?.label || '';
+                                    return lbl ? lbl + ' IST' : '';
+                                },
+                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
+                            }
+                        }
+                    }
+                }
+            });
+
+            el.addEventListener('click', function (event) {
+                const points = chart.getElementsAtEventForMode(event, 'index', { intersect: false }, true);
+                const index = points.length ? points[0].index : Math.max(0, (historyBuffers[serverId]?.labels?.length || 1) - 1);
+                const serverId = Number(String(canvasId).replace('chart-combined-', ''));
+                const buffer = historyBuffers[serverId];
+                if (buffer) showLoadInsight(serverId, buffer.labels[index], Number(buffer.liveCpu[index] || 0), Number(buffer.liveRam[index] || 0));
+            });
+            return chart;
+        }
+
         function createDiskDoughnut(canvasId, val) {
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js not loaded; cannot render doughnut chart');
@@ -2513,7 +2818,7 @@
         }
 
         function initChartsForServer(serverId) {
-            const server = serverData.find(s => s.id === serverId);
+            const server = serverData.find(s => String(s.id) === String(serverId));
             if (!server) return;
 
             let buf = historyBuffers[serverId];
@@ -2522,11 +2827,8 @@
                 historyBuffers[serverId] = buf;
             }
 
-            if (!charts['cpu-' + serverId]) {
-                charts['cpu-' + serverId] = createLineChart('chart-cpu-' + serverId, '#818cf8', buf.liveCpu, buf.labels, 'CPU Live');
-            }
-            if (!charts['ram-' + serverId]) {
-                charts['ram-' + serverId] = createLineChart('chart-ram-' + serverId, '#34d399', buf.liveRam, buf.labels, 'RAM Live');
+            if (!charts['combined-' + serverId]) {
+                charts['combined-' + serverId] = createCombinedLineChart('chart-combined-' + serverId, buf.labels, buf.liveCpu, buf.liveRam);
             }
             if (!charts['disk-' + serverId]) {
                 charts['disk-' + serverId] = createDiskDoughnut('chart-disk-' + serverId, server.disk);
@@ -2595,17 +2897,19 @@
                 liveRam: [...ram]
             };
 
-            const cpuChart = charts['cpu-' + serverId];
-            const ramChart = charts['ram-' + serverId];
-            if (cpuChart) {
-                cpuChart.data.labels = labels;
-                cpuChart.data.datasets[0].data = [...cpu];
-                cpuChart.update('none');
+            const combinedChart = charts['combined-' + serverId];
+            if (combinedChart) {
+                combinedChart.data.labels = labels;
+                combinedChart.data.datasets[0].data = [...cpu];
+                combinedChart.data.datasets[1].data = [...ram];
+                combinedChart.update('none');
             }
-            if (ramChart) {
-                ramChart.data.labels = labels;
-                ramChart.data.datasets[0].data = [...ram];
-                ramChart.update('none');
+
+            if (String(selectedServerId) === String(serverId) && selectedChart) {
+                selectedChart.data.labels = labels;
+                selectedChart.data.datasets[0].data = [...cpu];
+                selectedChart.data.datasets[1].data = [...ram];
+                selectedChart.update('none');
             }
         }
 
@@ -2694,6 +2998,14 @@
                     const alertsEl = document.getElementById('live-alerts-' + serverId);
                     if (alertsEl && data.success) {
                         alertsEl.innerText = data.alert_count || 0;
+                        const summaryEl = document.getElementById('alert-summary-' + serverId);
+                        const listEl = document.getElementById('live-alert-list-' + serverId);
+                        const alerts = data.alerts || [];
+                        if (summaryEl) summaryEl.title = alerts.length ? alerts.map(alert => alert.message).join('\n') : 'No active alerts';
+                        if (listEl) {
+                            listEl.style.display = alerts.length ? 'block' : 'none';
+                            listEl.textContent = alerts.map(alert => `${(alert.severity || 'warning').toUpperCase()}: ${alert.message}`).join(' • ');
+                        }
                     }
                 } catch (err) {
                     // Silently fail
@@ -2747,15 +3059,11 @@
                     buf.baselineRam.shift();
                 }
 
-                if (charts['cpu-' + sid]) {
-                    charts['cpu-' + sid].data.labels = buf.labels;
-                    charts['cpu-' + sid].data.datasets[0].data = buf.liveCpu;
-                    charts['cpu-' + sid].update('none');
-                }
-                if (charts['ram-' + sid]) {
-                    charts['ram-' + sid].data.labels = buf.labels;
-                    charts['ram-' + sid].data.datasets[0].data = buf.liveRam;
-                    charts['ram-' + sid].update('none');
+                if (charts['combined-' + sid]) {
+                    charts['combined-' + sid].data.labels = buf.labels;
+                    charts['combined-' + sid].data.datasets[0].data = buf.liveCpu;
+                    charts['combined-' + sid].data.datasets[1].data = buf.liveRam;
+                    charts['combined-' + sid].update('none');
                 }
 
                 if (charts['disk-' + sid]) {
@@ -2856,7 +3164,51 @@
                 });
             }, { rootMargin: '400px' });
 
-            document.querySelectorAll('.server-card').forEach(card => cardObserver.observe(card));
+            document.querySelectorAll('[data-bar-width]').forEach(function (bar) {
+                const value = Math.max(0, Math.min(100, Number(bar.dataset.barWidth) || 0));
+                bar.style.width = value + '%';
+                bar.style.background = bar.classList.contains('mini-bar-ram') ? 'var(--noc-emerald)' : 'var(--noc-indigo)';
+            });
+
+            document.querySelectorAll('.server-card').forEach(card => {
+                cardObserver.observe(card);
+                const trendCanvas = card.querySelector('[data-trend-server-id]');
+                if (trendCanvas) {
+                    trendCanvas.addEventListener('click', function () {
+                        showLoadInsight(Number(this.dataset.trendServerId), 'Latest live telemetry', Number(this.dataset.trendCpu || 0), Number(this.dataset.trendRam || 0));
+                    });
+                }
+                card.addEventListener('click', function (event) {
+                    if (event.target.closest('canvas')) {
+                        const serverId = Number(this.dataset.serverId || 0);
+                        const buffer = historyBuffers[serverId];
+                        const liveServer = serverData.find(server => String(server.id) === String(serverId));
+                        if (serverId && typeof showLoadInsight === 'function') {
+                            const index = buffer && buffer.labels && buffer.labels.length ? buffer.labels.length - 1 : 0;
+                            const timestamp = buffer && buffer.labels && buffer.labels.length ? buffer.labels[index] : (liveServer && liveServer.last_seen) || new Date().toISOString();
+                            const cpu = buffer && buffer.liveCpu && buffer.liveCpu.length ? buffer.liveCpu[index] : (liveServer && (liveServer.cpu || liveServer.cpu_percent)) || 0;
+                            const ram = buffer && buffer.liveRam && buffer.liveRam.length ? buffer.liveRam[index] : (liveServer && (liveServer.ram || liveServer.memory_percent)) || 0;
+                            showLoadInsight(serverId, timestamp, Number(cpu), Number(ram));
+                        }
+                        return;
+                    }
+                    if (!event.target.closest('a') && !event.target.closest('button') && this.dataset.detailUrl) window.location.href = this.dataset.detailUrl;
+                });
+            });
+
+            document.addEventListener('click', function (event) {
+                const trendCanvas = event.target.closest && event.target.closest('canvas[id^="chart-combined-"]');
+                if (!trendCanvas) return;
+                event.stopPropagation();
+                const serverId = Number(trendCanvas.dataset.trendServerId || trendCanvas.id.replace('chart-combined-', ''));
+                const buffer = historyBuffers[serverId];
+                const liveServer = serverData.find(server => String(server.id) === String(serverId));
+                const index = buffer && buffer.labels && buffer.labels.length ? buffer.labels.length - 1 : 0;
+                const timestamp = buffer && buffer.labels && buffer.labels.length ? buffer.labels[index] : (liveServer && liveServer.last_seen) || new Date().toISOString();
+                const cpu = buffer && buffer.liveCpu && buffer.liveCpu.length ? buffer.liveCpu[index] : (liveServer && (liveServer.cpu || liveServer.cpu_percent)) || 0;
+                const ram = buffer && buffer.liveRam && buffer.liveRam.length ? buffer.liveRam[index] : (liveServer && (liveServer.ram || liveServer.memory_percent)) || 0;
+                showLoadInsight(serverId, timestamp, Number(cpu), Number(ram));
+            }, true);
         });
     </script>
 

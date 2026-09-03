@@ -18,6 +18,10 @@ storedCred.xml
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
 data/*.db
 data/*.log
 data/*.csv
@@ -50,6 +54,8 @@ APP_RUNNING.txt
 uploads/
 web/static/screenshots/
 web/static/uploads/
+data/screenshots/*
+!data/screenshots/.gitkeep
 *.png
 *.jpg
 *.jpeg

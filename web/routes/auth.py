@@ -10,6 +10,7 @@ import time
 import logging
 
 from web.models import User, Tenant, AgentKey, db
+from web.utils import validate_password
 
 logger = logging.getLogger("[AUTH]")
 
@@ -58,8 +59,9 @@ def register():
         flash('All fields are required.', 'danger')
         return render_template('register.html'), 400
 
-    if len(password) < 8:
-        flash('Password must be at least 8 characters.', 'danger')
+    password_error = validate_password(password, username)
+    if password_error:
+        flash(password_error, 'danger')
         return render_template('register.html'), 400
 
     if password != confirm_password:
@@ -144,3 +146,29 @@ def register():
     # Fallback: redirect to login if auto-login fails
     flash('Registration successful. You can now sign in.', 'success')
     return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Allow an authenticated user to securely change their own password."""
+    if request.method == 'POST':
+        current_password = request.form.get('current_password', '')
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        if not check_password_hash(current_user.password, current_password):
+            flash('Current password is incorrect.', 'danger')
+        elif new_password != confirm_password:
+            flash('New password and confirmation do not match.', 'danger')
+        elif current_password == new_password:
+            flash('New password must be different from the current password.', 'danger')
+        else:
+            password_error = validate_password(new_password, current_user.username)
+            if password_error:
+                flash(password_error, 'danger')
+            else:
+                current_user.password = generate_password_hash(new_password)
+                db.session.commit()
+                flash('Password changed successfully.', 'success')
+                return redirect(url_for('main.dashboard'))
+    return render_template('change_password.html')

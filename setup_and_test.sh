@@ -34,7 +34,7 @@ fi
 
 # Step 3: Initialize databases
 echo -e "\n${YELLOW}[3/5] Initializing databases...${NC}"
-python init_all_databases.py
+python -m scripts.database.init_all_databases
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Databases initialized${NC}"
 else

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription Suspended</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4">
+    <div class="max-w-md w-full bg-white rounded-3xl border border-slate-100 shadow-xl p-8 text-center relative overflow-hidden">
+        <!-- Accent bar -->
+        <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-rose-500 to-orange-500"></div>
+        
+        <!-- Icon -->
+        <div class="w-24 h-24 mx-auto bg-rose-50 rounded-full flex items-center justify-center mb-6 border-8 border-white shadow-sm relative z-10">
+            <i class="fa-solid fa-ban text-4xl text-rose-500"></i>
+        </div>
+        
+        <h1 class="text-3xl font-bold text-slate-900 mb-4">Access Suspended</h1>
+        
+        <p class="text-slate-500 mb-8 leading-relaxed">
+            Your organization's subscription to the platform is currently <span class="font-bold text-rose-600">inactive</span> or <span class="font-bold text-orange-500">on hold</span>. 
+            <br><br>
+            Please contact your system administrator or the service provider to restore access and resume data monitoring.
+        </p>
+        
+        <div class="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100 text-sm text-slate-600 flex items-start text-left gap-3">
+            <i class="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
+            <p>During a suspension, no new telemetry data will be accepted from your agents, and access to dashboards is restricted.</p>
+        </div>
+        
+        <a href="{{ url_for('auth.logout') }}" class="inline-flex w-full justify-center items-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-lg">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign Out
+        </a>
+    </div>
+</body>
+</html>

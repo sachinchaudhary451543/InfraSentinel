@@ -1,133 +1,222 @@
 {% extends "base.html" %}
-
 {% block title %}Admin Users - ServerMonitor{% endblock %}
-
 {% block content %}
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-    <div>
-        <h2 class="text-3xl font-bold text-slate-900 flex items-center gap-2" style="font-family:'Outfit',sans-serif">
-            <i class="fa-solid fa-users-gear text-indigo-500"></i>Manage Users
-        </h2>
-        <p class="text-slate-500 text-sm mt-1">Platform user accounts and access control</p>
-    </div>
-</div>
+<style>
+    @media (max-width:767px) {
+        .users-table thead {
+            display: none
+        }
 
-<div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] overflow-hidden mb-8">
-    <div class="p-6 border-b border-slate-100 bg-slate-50/50">
-        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-user-plus text-indigo-500"></i> Create New User
-        </h3>
+        .users-table,
+        .users-table tbody,
+        .users-table tr,
+        .users-table td {
+            display: block;
+            width: 100%
+        }
+
+        .users-table tr {
+            padding: 1rem;
+            border-bottom: 1px solid #f1f5f9
+        }
+
+        .users-table td {
+            padding: .45rem 0 !important;
+            text-align: left !important
+        }
+
+        .users-table td::before {
+            content: attr(data-label);
+            display: block;
+            margin-bottom: .25rem;
+            color: #94a3b8;
+            font-size: .62rem;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase
+        }
+
+        .users-table td:first-child::before {
+            display: none
+        }
+
+        .users-table td:last-child {
+            padding-top: .75rem !important
+        }
+    }
+</style>
+<div class="mx-auto max-w-7xl">
+    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <p class="text-xs font-bold uppercase tracking-[.18em] text-indigo-600">Administration</p>
+            <h1 class="mt-2 flex items-center gap-2 text-3xl font-black text-slate-900"
+                style="font-family:'Outfit',sans-serif"><i class="fa-solid fa-users-gear text-indigo-500"></i>Users
+                &amp; access</h1>
+            <p class="mt-1 text-sm text-slate-500">Create tenant-scoped accounts, review roles, and manage password
+                security.</p>
+        </div>
+        <a href="{{ url_for('auth.change_password') }}"
+            class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-700"><i
+                class="fa-solid fa-key"></i> Change my password</a>
     </div>
-    <div class="p-6">
-        <form method="POST" action="{{ url_for('admin.admin_create_user') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Username</label>
-                <input type="text" name="username" placeholder="johndoe" required
-                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium">
+    <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Total accounts</p>
+            <p class="mt-2 text-3xl font-black text-indigo-600">{{ total_users }}</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Admin access</p>
+            <p class="mt-2 text-3xl font-black text-violet-600">{{ admin_count }}</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Employee-linked</p>
+            <p class="mt-2 text-3xl font-black text-emerald-600">{{ mapped_count }}</p>
+        </div>
+    </div>
+    <section class="mb-8 overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <div class="border-b border-slate-100 bg-slate-50/60 p-6">
+            <h2 class="flex items-center gap-2 text-base font-bold text-slate-900"><i
+                    class="fa-solid fa-user-plus text-indigo-500"></i>Create user account</h2>
+            <p class="mt-1 text-xs text-slate-500">All fields are validated server-side. Passwords are stored as secure
+                hashes and never displayed.</p>
+        </div>
+        <form method="POST" action="{{ url_for('admin.admin_create_user') }}"
+            class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
+            <div><label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Username</label><input
+                    type="text" name="username" placeholder="johndoe" required minlength="3" maxlength="100"
+                    autocomplete="username"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
             </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Password</label>
-                <input type="password" name="password" placeholder="••••••••" required
-                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium">
+            <div><label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Password</label><input
+                    type="password" name="password" placeholder="12+ characters" required minlength="12"
+                    autocomplete="new-password"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                <p class="mt-1 text-[.65rem] text-slate-500">Upper, lower, number, special character.</p>
             </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Tenant Assignment</label>
-                <select name="tenant_id"
-                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium appearance-none">
-                    <option value="" disabled selected>Select Tenant</option>
-                    {% for t in tenants %}
-                    <option value="{{ t.id }}">{{ t.name }}</option>
-                    {% endfor %}
-                </select>
+            <div><label class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Confirm
+                    password</label><input type="password" name="confirm_password" placeholder="Repeat password"
+                    required minlength="12" autocomplete="new-password"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
             </div>
+            <div><label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Tenant</label><select
+                    name="tenant_id" required
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                    <option value="" disabled selected>Select tenant</option>{% for t in tenants %}<option
+                        value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+                </select></div>
+            <div><label class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Link
+                    employee</label><select name="employee_id"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                    <option value="">Unlinked</option>{% for emp in employees %}<option value="{{ emp.id }}">{{ emp.name
+                        }} · {{ emp.email }}</option>{% endfor %}
+                </select></div>
+            <div><label class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Role</label><select
+                    name="role" required
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                    <option value="tenant_admin">IT / Tenant Admin</option>
+                    <option value="hr_admin">HR Admin</option>
+                    <option value="screen_monitor">Employee Screens Monitor</option>
+                    <option value="manager">Manager</option>
+                    <option value="employee">Employee</option>
+                </select></div>
+            <div class="md:col-span-2 xl:col-span-2 xl:flex xl:items-end"><button
+                    class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 hover:from-indigo-700 hover:to-violet-700"><i
+                        class="fa-solid fa-plus"></i>Create user</button></div>
+        </form>
+    </section>
+    <section class="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <div
+            class="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <button type="submit"
-                    class="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.02]">
-                    <i class="fa-solid fa-plus"></i> Add User
-                </button>
+                <h2 class="text-base font-bold text-slate-900">Account directory</h2>
+                <p class="mt-1 text-xs text-slate-500">Reset passwords only through your organization’s verified
+                    process.</p>
+            </div><input id="userSearch" type="search" placeholder="Search accounts..."
+                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none sm:w-64"
+                oninput="filterUserRows()">
+        </div>{% if users %}<div class="overflow-x-auto">
+            <table class="users-table w-full text-left text-sm">
+                <thead>
+                    <tr
+                        class="border-b border-slate-100 bg-white text-[.65rem] font-bold uppercase tracking-widest text-slate-400">
+                        <th class="px-6 py-4">User identity</th>
+                        <th class="px-6 py-4">Tenant</th>
+                        <th class="px-6 py-4">Role</th>
+                        <th class="px-6 py-4">Created</th>
+                        <th class="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">{% for u in users %}<tr class="group hover:bg-slate-50/60">
+                        <td class="px-6 py-4" data-label="User identity">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 font-bold text-indigo-600">
+                                    {{ u.username[0]|upper }}</div>
+                                <div class="font-bold text-slate-900">{{ u.username }}</div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4" data-label="Tenant">{% if u.tenant %}<span
+                                class="font-semibold text-slate-700"><i
+                                    class="fa-solid fa-building mr-2 text-slate-400"></i>{{ u.tenant.name }}</span>{%
+                            else %}<span class="text-xs font-bold text-slate-400">Global / Unassigned</span>{% endif %}
+                        </td>
+                        <td class="px-6 py-4" data-label="Role">{% if u.is_superadmin %}<span
+                                class="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700"><i
+                                    class="fa-solid fa-crown mr-1"></i>Super Admin</span>{% else %}<span
+                                class="rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{
+                                u.role|replace('_',' ')|title }}</span>{% endif %}</td>
+                        <td class="px-6 py-4 text-xs font-medium text-slate-500" data-label="Created">{{
+                            u.created_at.strftime('%Y-%m-%d') if u.created_at else 'N/A' }}</td>
+                        <td class="px-6 py-4 text-right" data-label="Actions">{% if not u.is_superadmin %}<button
+                                type="button" onclick="openPasswordReset({{ u.id }}, '{{ u.username|e }}')"
+                                class="mr-1 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                                title="Reset password"><i class="fa-solid fa-key"></i></button>
+                            <form method="POST" action="{{ url_for('admin.admin_delete_user', user_id=u.id) }}"
+                                class="inline" onsubmit="return confirm('Permanently delete user {{ u.username }}?')">
+                                <button type="submit"
+                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                    title="Delete user"><i class="fa-solid fa-trash-can"></i></button></form>{% else
+                            %}<span class="text-xs text-slate-400">Protected account</span>{% endif %}
+                        </td>
+                    </tr>{% endfor %}</tbody>
+            </table>
+        </div>{% else %}<div class="p-16 text-center text-sm text-slate-500">No users found. Create the first account
+            above.</div>{% endif %}
+    </section>
+</div>
+<div id="passwordResetModal"
+    class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-indigo-600">Account security</p>
+                <h3 class="mt-1 text-xl font-black text-slate-900">Reset password</h3>
+                <p id="resetUserLabel" class="mt-1 text-sm text-slate-500"></p>
+            </div><button type="button" onclick="closePasswordReset()"
+                class="text-2xl text-slate-400 hover:text-slate-700">&times;</button>
+        </div>
+        <form id="passwordResetForm" method="POST" class="mt-5 space-y-4"><input name="new_password" type="password"
+                minlength="12" required autocomplete="new-password" placeholder="New password"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900"><input
+                name="confirm_password" type="password" minlength="12" required autocomplete="new-password"
+                placeholder="Confirm password"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+            <p class="text-xs leading-5 text-slate-500">Minimum 12 characters with uppercase, lowercase, number, and
+                special character.</p>
+            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button"
+                    onclick="closePasswordReset()"
+                    class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button
+                    class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white">Reset password</button>
             </div>
         </form>
     </div>
 </div>
-
-<div class="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.02)] overflow-hidden">
-    {% if users %}
-    <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-            <thead>
-                <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest">
-                    <th class="py-4 px-6">User Identity</th>
-                    <th class="py-4 px-6">Assigned Tenant</th>
-                    <th class="py-4 px-6">System Role</th>
-                    <th class="py-4 px-6">Created On</th>
-                    <th class="py-4 px-6 text-right">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50">
-                {% for u in users %}
-                <tr class="hover:bg-slate-50/50 transition-colors group">
-                    <td class="py-4 px-6">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm border border-indigo-100/50">
-                                {{ u.username[0]|upper }}
-                            </div>
-                            <div class="font-bold text-slate-900 text-base" style="font-family:'Outfit',sans-serif">{{ u.username }}</div>
-                        </div>
-                    </td>
-                    <td class="py-4 px-6">
-                        {% if u.tenant %}
-                        <div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <i class="fa-solid fa-building text-slate-400"></i>
-                            {{ u.tenant.name }}
-                        </div>
-                        {% else %}
-                        <span class="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">Global / Unassigned</span>
-                        {% endif %}
-                    </td>
-                    <td class="py-4 px-6">
-                        {% if u.is_superadmin %}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-violet-50 text-violet-700 border border-violet-100">
-                            <i class="fa-solid fa-crown"></i> Super Admin
-                        </span>
-                        {% else %}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            <i class="fa-solid fa-user-shield"></i> Tenant Admin
-                        </span>
-                        {% endif %}
-                    </td>
-                    <td class="py-4 px-6 text-xs font-medium text-slate-500">
-                        {% if u.created_at %}
-                        <div class="flex items-center gap-1.5">
-                            <i class="fa-regular fa-calendar text-slate-400"></i>
-                            {{ u.created_at.strftime('%Y-%m-%d') }}
-                        </div>
-                        {% else %}
-                        N/A
-                        {% endif %}
-                    </td>
-                    <td class="py-4 px-6 text-right">
-                        {% if not u.is_superadmin %}
-                        <form method="POST" action="{{ url_for('admin.admin_delete_user', user_id=u.id) }}"
-                            class="inline opacity-0 group-hover:opacity-100 transition-opacity" onsubmit="return confirm('Are you sure you want to permanently delete user {{ u.username }}?')">
-                            <button type="submit" class="w-8 h-8 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors tooltip" title="Delete User">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="text-center py-20">
-        <div class="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4 border border-slate-100">
-            <i class="fa-solid fa-users text-2xl text-slate-300"></i>
-        </div>
-        <h3 class="text-slate-900 font-bold mb-1">No Users Found</h3>
-        <p class="text-slate-500 text-sm">Create a user to grant access to the platform.</p>
-    </div>
-    {% endif %}
-</div>
+<script>
+    function filterUserRows() { const q = (document.getElementById('userSearch').value || '').toLowerCase(); document.querySelectorAll('.users-table tbody tr').forEach(row => row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none') }
+    function openPasswordReset(id, username) { document.getElementById('passwordResetForm').action = `/admin/users/${id}/password`; document.getElementById('resetUserLabel').textContent = `Set a new password for ${username}`; const modal = document.getElementById('passwordResetModal'); modal.classList.remove('hidden'); modal.classList.add('flex') }
+    function closePasswordReset() { const modal = document.getElementById('passwordResetModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); document.getElementById('passwordResetForm').reset() }
+</script>
 {% endblock %}

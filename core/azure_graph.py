@@ -115,7 +115,10 @@ def _paged_get(url: str, token: str) -> List[Dict[str, Any]]:
         try:
             resp = requests.get(next_url, headers=headers, timeout=15)
             if resp.status_code != 200:
-                logger.error(f"Graph API error {resp.status_code}: {resp.text[:200]}")
+                if resp.status_code == 403:
+                    logger.warning(f"Graph API 403: Missing permissions for endpoint {url}")
+                else:
+                    logger.error(f"Graph API error {resp.status_code}: {resp.text[:200]}")
                 break
             j = resp.json()
             value = j.get('value', [])
@@ -128,13 +131,38 @@ def _paged_get(url: str, token: str) -> List[Dict[str, Any]]:
 
 
 def get_devices(tenant_record: Optional[object] = None) -> List[Dict[str, Any]]:
-    """Fetch Azure AD devices."""
+    """Fetch Azure AD devices – filtered to active, physical endpoints only.
+
+    Applies server-side OData filters to exclude:
+      • Disabled devices (accountEnabled eq false)
+    Then client-side filters to remove non-physical/stale entries:
+      • Mobile / phone devices (Android, iOS without macOS)
+      • Devices with no OS information (ghost entries)
+    """
     token = _get_token_for_tenant(tenant_record)
     if not token:
         return []
     try:
-        url = GRAPH_BASE + "/devices?$select=id,displayName,operatingSystem,operatingSystemVersion"
-        return _paged_get(url, token)
+        # Only fetch enabled devices with relevant fields
+        url = (GRAPH_BASE +
+               "/devices"
+               "?$select=id,displayName,operatingSystem,operatingSystemVersion,accountEnabled,deviceId"
+               "&$filter=accountEnabled eq true")
+        raw_devices = _paged_get(url, token)
+
+        # Client-side post-filter: keep only physical computers (Windows, macOS, Linux)
+        PHYSICAL_OS_KEYWORDS = {'windows', 'macos', 'mac os', 'linux', 'ubuntu', 'redhat', 'centos', 'debian'}
+        filtered = []
+        for d in raw_devices:
+            os_val = (d.get('operatingSystem') or '').lower()
+            # Skip devices with no OS or mobile-only OS
+            if not os_val:
+                continue
+            if any(kw in os_val for kw in PHYSICAL_OS_KEYWORDS):
+                filtered.append(d)
+
+        logger.info(f"get_devices: {len(raw_devices)} raw → {len(filtered)} after physical-OS filter")
+        return filtered
     except Exception as e:
         logger.error(f"get_devices failed: {e}")
         return []
@@ -146,7 +174,8 @@ def get_users(tenant_record: Optional[object] = None) -> List[Dict[str, Any]]:
     if not token:
         return []
     try:
-        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,jobTitle,department,mail"
+        # Append filter for active users only
+        url = GRAPH_BASE + "/users?$select=id,userPrincipalName,displayName,jobTitle,department,mail&$filter=accountEnabled eq true"
         return _paged_get(url, token)
     except Exception as e:
         logger.error(f"get_users failed: {e}")

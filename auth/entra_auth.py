@@ -31,7 +31,7 @@ logger = logging.getLogger("[ENTRA-AUTH]")
 CLIENT_ID = os.environ.get("SERVERMONITOR_CLIENT_ID", "").strip()
 CLIENT_SECRET = os.environ.get("SERVERMONITOR_CLIENT_SECRET", "").strip()
 TENANT_ID = os.environ.get("AZURE_TENANT_ID", "common").strip()
-REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:8080/auth/callback").strip()
+REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://127.0.0.1:3000/auth/callback").strip()
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = [
@@ -96,7 +96,7 @@ def _save_cache(cache):
 # AUTHORIZATION CODE FLOW
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_authorization_url() -> Tuple[str, str]:
+def get_authorization_url() -> Tuple[str, Optional[str]]:
     """
     Generate authorization URL for user to login.
     

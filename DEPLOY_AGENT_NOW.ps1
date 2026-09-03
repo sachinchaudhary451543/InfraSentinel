@@ -23,8 +23,8 @@ Write-Host "`n📝 Setting environment variables..." -ForegroundColor Cyan
 # Get agent key from user or use default
 $agentKey = $env:AGENT_KEY
 if (-not $agentKey) {
-    Write-Host "`n⚠️  AGENT_KEY not set. Setting to 'admin-key-bafflesol'" -ForegroundColor Yellow
-    $env:AGENT_KEY = "admin-key-bafflesol"
+    Write-Host "`n⚠️  AGENT_KEY not set. Set a unique key before deploying the agent." -ForegroundColor Yellow
+    $env:AGENT_KEY = "demo_mode_key"
 }
 else {
     Write-Host "   AGENT_KEY: $agentKey" -ForegroundColor Green
@@ -33,8 +33,8 @@ else {
 # Get server URL or use localhost
 $serverUrl = $env:SERVER_URL
 if (-not $serverUrl) {
-    Write-Host "   SERVER_URL not set. Using: http://localhost:8080" -ForegroundColor Yellow
-    $env:SERVER_URL = "http://localhost:8080"
+    Write-Host "   SERVER_URL not set. Using: http://localhost:3000" -ForegroundColor Yellow
+    $env:SERVER_URL = "http://localhost:3000"
 }
 else {
     Write-Host "   SERVER_URL: $serverUrl" -ForegroundColor Green

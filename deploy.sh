@@ -124,7 +124,7 @@ done
 # Wait for Web App
 echo -n "  Waiting for Web App..."
 for i in {1..30}; do
-    if curl -sf http://localhost:8080/api/v2/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:3000/api/v2/health > /dev/null 2>&1; then
         echo " ✓"
         break
     fi
@@ -141,7 +141,7 @@ echo "▶ PHASE 7: Database Initialization"
 
 docker-compose exec -T web python << 'EOF'
 from web.app import app, db
-from db_indexes import optimize_database
+from scripts.database.db_indexes import optimize_database
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -213,7 +213,7 @@ docker-compose ps | tail -8
 
 echo
 echo "  System Health:"
-curl -s http://localhost:8080/api/v2/health | python -m json.tool 2>/dev/null || echo "  ✓ API responding"
+curl -s http://localhost:3000/api/v2/health | python -m json.tool 2>/dev/null || echo "  ✓ API responding"
 
 # ============================================================================
 # PHASE 10: FINAL SUMMARY
@@ -226,9 +226,9 @@ echo "╚═══════════════════════�
 echo
 
 echo "🌐 ACCESS POINTS:"
-echo "  • Web Dashboard:  http://localhost:8080"
+echo "  • Web Dashboard:  http://localhost:3000"
 echo "  • Admin Portal:   http://localhost:5001"
-echo "  • API:            http://localhost:8080/api/v2"
+echo "  • API:            http://localhost:3000/api/v2"
 echo "  • Nginx:          http://localhost:80"
 echo
 

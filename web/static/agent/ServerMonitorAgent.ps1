@@ -5,7 +5,7 @@
 
 param(
     [string]$ApiKey = "d5c6640cc90b120592c8469d58030fb3f13a7f2d91cc472e20098fc0ba3de17f",
-    [string]$ServerUrl = "http://localhost:8080"
+    [string]$ServerUrl = "http://localhost:3000"
 )
 
 # ── Win32 API for idle detection and foreground window ──

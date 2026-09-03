@@ -3,7 +3,7 @@
 # One-command installation of the monitoring agent with auto-start on Windows
 #
 # Usage:
-#   .\Install-Agent.ps1 -AgentKey "YOUR_KEY" -ServerUrl "https://portal:8080" -AutoStart
+#   .\Install-Agent.ps1 -AgentKey "YOUR_KEY" -ServerUrl "https://portal:3000" -AutoStart
 #
 # This script:
 #   1. Creates agent configuration

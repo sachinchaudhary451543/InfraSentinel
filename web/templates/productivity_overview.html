@@ -1,102 +1,297 @@
 {% extends "base.html" %}
-
-{% block title %}Productivity - ServerMonitor{% endblock %}
+{% block title %}Employee Productivity - InfraSentinel{% endblock %}
 
 {% block content %}
-<div class="animate-fade-up px-2 pb-8 pt-4">
-    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
-        <div>
-            <h2 class="font-display text-2xl font-bold text-slate-900" style="font-family:'Outfit',sans-serif">
-                Productivity
-            </h2>
-            <p class="text-sm text-slate-500 mt-1">Today’s activity snapshot per system (agent required).</p>
-            {% if error %}
-            <p class="text-sm text-rose-600 mt-2 font-semibold">{{ error }}</p>
-            {% endif %}
-        </div>
-        <div class="flex gap-2 flex-wrap">
-            <a href="{{ url_for('asset_mgmt.system_controls') }}"
-                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-bold hover:border-indigo-300 hover:text-indigo-700 transition-all">
-                <i class="fa-solid fa-sliders mr-1.5"></i>System Controls
-            </a>
-            <a href="{{ url_for('main.dashboard') }}"
-                class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm">
-                <i class="fa-solid fa-grid-2 mr-1.5"></i>Dashboard
-            </a>
-        </div>
+<style>
+  @media (max-width: 767px) {
+    .productivity-page {
+      padding: 1rem 0.75rem 2rem !important;
+    }
+
+    .productivity-header h1 {
+      align-items: flex-start;
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+
+    .productivity-header h1>span {
+      width: 2.5rem;
+      height: 2.5rem;
+      flex: 0 0 2.5rem;
+    }
+
+    .productivity-header>div:last-child,
+    .productivity-header form,
+    .productivity-header form input,
+    .productivity-header form button,
+    .productivity-header>div:last-child>a {
+      width: 100%;
+    }
+
+    .productivity-header>div:last-child {
+      align-items: stretch;
+    }
+
+    .productivity-table-wrap {
+      overflow: visible !important;
+    }
+
+    .productivity-table {
+      display: block;
+      width: 100%;
+      white-space: normal !important;
+    }
+
+    .productivity-table thead {
+      display: none;
+    }
+
+    .productivity-table tbody,
+    .productivity-table tr,
+    .productivity-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .productivity-table tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .productivity-table tr:last-child {
+      border-bottom: 0;
+    }
+
+    .productivity-table td {
+      min-width: 0;
+      padding: 0 !important;
+      text-align: left !important;
+      overflow-wrap: anywhere;
+    }
+
+    .productivity-table td::before {
+      display: block;
+      margin-bottom: 5px;
+      color: #94a3b8;
+      content: attr(data-label);
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .productivity-table td:first-child,
+    .productivity-table td:nth-child(2),
+    .productivity-table td:nth-child(4) {
+      grid-column: 1 / -1;
+    }
+
+    .productivity-table td:first-child::before {
+      display: none;
+    }
+
+    .productivity-table td:first-child>div {
+      min-width: 0;
+    }
+
+    .productivity-table td:first-child>div>div:last-child,
+    .productivity-table td:nth-child(2) span,
+    .productivity-table td:nth-child(4) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .productivity-table td:nth-child(5)>div {
+      justify-content: flex-start;
+      align-items: flex-start;
+    }
+
+    .productivity-table td:nth-child(5) span {
+      white-space: nowrap;
+    }
+
+    .productivity-table td:last-child {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      width: auto;
+    }
+
+    .productivity-table tr {
+      position: relative;
+      padding-right: 58px;
+    }
+  }
+</style>
+<div class="productivity-page p-6 lg:p-8 max-w-7xl mx-auto">
+
+  <!-- Header -->
+  <div class="productivity-header flex flex-col md:flex-row md:items-center md:justify-between mb-8 animate-fade-up">
+    <div>
+      <h1 class="text-3xl font-extrabold text-slate-900 flex items-center gap-3"
+        style="font-family:'Outfit',sans-serif">
+        <span
+          class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-users-viewfinder"></i>
+        </span>
+        Employee Productivity
+      </h1>
+      <p class="text-sm font-medium text-slate-500 mt-2">Monitor workforce attendance, activity, and application usage
+        by employee identity.</p>
     </div>
 
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
-        <form method="get" class="flex flex-col md:flex-row md:items-end gap-3">
-            <div>
-                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Date</label>
-                <input type="date" name="date" value="{{ selected_date }}"
-                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
-            </div>
-            <div>
-                <label class="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">Employee</label>
-                <select name="user"
-                    class="mt-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 min-w-[220px]">
-                    <option value="">All</option>
-                    {% for u in users %}
-                    <option value="{{ u }}" {% if selected_user==u %}selected{% endif %}>{{ u }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button
-                class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all w-fit">
-                <i class="fa-solid fa-filter mr-1.5"></i>Apply
-            </button>
-        </form>
+    <div class="mt-4 md:mt-0 flex flex-col sm:flex-row sm:items-center gap-2">
+      <form method="GET" class="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+        <input type="date" name="date" value="{{ selected_date }}"
+          class="px-3 py-2 text-sm font-bold text-slate-700 bg-transparent outline-none cursor-pointer">
+        <button type="submit"
+          class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">
+          Apply
+        </button>
+      </form>
+      <a href="{{ url_for('asset_mgmt.productivity_export', date=selected_date) }}"
+        class="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">
+        <i class="fa-solid fa-file-csv mr-2"></i>Download CSV
+      </a>
+    </div>
+  </div>
+
+  <!-- Employee List Table -->
+  <div
+    class="bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-slate-100 overflow-hidden animate-fade-up"
+    style="animation-delay: 100ms;">
+    <div
+      class="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+        <i class="fa-solid fa-users text-indigo-500"></i> Active Workforce
+      </h3>
+      <div class="relative w-full sm:w-72">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input type="text" id="empSearchInput" placeholder="Search employee name, email, device..."
+          class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+          oninput="filterEmployees()">
+      </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {% for s in servers %}
-        {% set st = stats.get(s.id) %}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col gap-4">
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <div class="text-sm font-black text-slate-900 truncate">{{ s.hostname or s.name }}</div>
-                    <div class="text-[0.7rem] text-slate-400 font-mono truncate">{{ s.ip or '—' }}</div>
+    {% if employees %}
+    <div class="productivity-table-wrap overflow-x-auto">
+      <table class="productivity-table w-full text-left text-sm whitespace-nowrap">
+        <thead>
+          <tr
+            class="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-[0.65rem] font-bold uppercase tracking-widest">
+            <th class="py-4 px-6">Employee Identity</th>
+            <th class="py-4 px-6">Assigned Device</th>
+            <th class="py-4 px-6">Status</th>
+            <th class="py-4 px-6">First / Last Activity</th>
+            <th class="py-4 px-6 text-right">Activity Metrics</th>
+            <th class="py-4 px-6 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-50">
+          {% for emp in employees %}
+          <tr class="hover:bg-slate-50 transition-colors group cursor-pointer"
+            onclick="window.location.href='{{ url_for('asset_mgmt.employee_productivity_detail', employee_id=emp.id) }}'">
+            <td class="py-4 px-6" data-label="Employee Identity">
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm border border-indigo-100">
+                  {{ emp.name[0]|upper if emp.name else '?' }}
                 </div>
-                <span class="text-[0.65rem] font-black px-2 py-1 rounded-full border
-                    {% if st and st.percent >= 70 %}bg-emerald-50 text-emerald-700 border-emerald-100
-                    {% elif st and st.percent >= 40 %}bg-amber-50 text-amber-700 border-amber-100
-                    {% else %}bg-slate-50 text-slate-600 border-slate-200{% endif %}">
-                    {{ (st.percent if st else 0) }}% Active
+                <div>
+                  <div class="font-bold text-slate-800">{{ emp.name }}</div>
+                  <div class="text-xs text-slate-500">{{ emp.email or emp.department or 'No Dept' }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="py-4 px-6" data-label="Assigned Device">
+              {% if emp.device %}
+              <div class="flex flex-col gap-0.5">
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  <i class="fa-solid fa-desktop"></i> {{ emp.device }}
                 </span>
-            </div>
-
-            <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-                <div class="h-full bg-gradient-to-r from-indigo-600 to-violet-600"
-                    style="width: {{ (st.percent if st else 0) }}%"></div>
-            </div>
-
-            <div class="flex items-center justify-between text-xs text-slate-600 font-semibold">
-                <div>Active: <span class="text-slate-900">{{ st.active_time_str if st else '—' }}</span></div>
-                <div>Samples: <span class="text-slate-900">{{ st.total_samples if st else 0 }}</span></div>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-                <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=s.id, date=selected_date, user=selected_user) }}"
-                    class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 transition-all">
-                    <i class="fa-solid fa-chart-simple mr-1.5"></i>Open Productivity
-                </a>
-                <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=s.id) }}"
-                    class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
-                    <i class="fa-solid fa-bolt mr-1.5"></i>Controls
-                </a>
-            </div>
-        </div>
-        {% else %}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-500 col-span-full">
-            <div class="w-14 h-14 mx-auto rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 mb-3">
-                <i class="fa-solid fa-circle-info text-slate-300 text-2xl"></i>
-            </div>
-            <div class="text-sm font-bold text-slate-800">No systems found</div>
-            <div class="text-xs text-slate-500 mt-1">Once an agent reports activity, it will show here.</div>
-        </div>
-        {% endfor %}
+                {% if emp.device_ip %}
+                <span class="text-[0.6rem] text-slate-400 font-mono pl-1">{{ emp.device_ip }}</span>
+                {% endif %}
+              </div>
+              {% else %}
+              <span class="text-xs text-slate-400">Unassigned</span>
+              {% endif %}
+            </td>
+            <td class="py-4 px-6" data-label="Status">
+              {% if emp.status == 'present' %}
+              <span
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Present
+              </span>
+              {% elif emp.status == 'leave' %}
+              <span
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 border border-amber-100">
+                <i class="fa-solid fa-umbrella-beach"></i> On Leave
+              </span>
+              {% else %}
+              <span
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 text-slate-500 border border-slate-200">
+                <i class="fa-solid fa-user-slash"></i> Absent
+              </span>
+              {% endif %}
+            </td>
+            <td class="py-4 px-6 text-slate-600 font-medium" data-label="First / Last Activity">
+              {{ emp.first_activity }} <span class="text-slate-300 mx-1">→</span> {{ emp.last_activity }}
+            </td>
+            <td class="py-4 px-6 text-right" data-label="Activity Metrics">
+              <div class="flex items-center justify-end gap-3 text-xs font-bold">
+                <div class="flex flex-col items-end" title="Active Time">
+                  <span class="text-emerald-600"><i class="fa-solid fa-keyboard mr-1 opacity-50"></i>{{ emp.active_str
+                    }}</span>
+                </div>
+                <div class="flex flex-col items-end" title="Idle Time">
+                  <span class="text-amber-500"><i class="fa-solid fa-mug-hot mr-1 opacity-50"></i>{{ emp.idle_str
+                    }}</span>
+                </div>
+              </div>
+            </td>
+            <td class="py-4 px-6 text-right" data-label="Open Profile">
+              <a href="{{ url_for('asset_mgmt.employee_productivity_detail', employee_id=emp.id) }}"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-colors">
+                <i class="fa-solid fa-chevron-right"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+    {% else %}
+    <div class="text-center py-16">
+      <div
+        class="w-16 h-16 mx-auto rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 mb-4">
+        <i class="fa-solid fa-users-slash text-slate-300 text-3xl"></i>
+      </div>
+      <div class="text-base font-bold text-slate-800 mb-1">No employees found</div>
+      <div class="text-sm text-slate-500 max-w-md mx-auto">Employees will appear here automatically when agents start
+        reporting activity and the Identity Correlation Engine links them.</div>
+    </div>
+    {% endif %}
+  </div>
+
 </div>
+
+<script>
+  function filterEmployees() {
+    const query = document.getElementById('empSearchInput').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      const match = !query || text.includes(query);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+  }
+</script>
 {% endblock %}

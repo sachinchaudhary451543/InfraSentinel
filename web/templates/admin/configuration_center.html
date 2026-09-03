@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Center - ServerMonitor{% endblock %}
+
+{% block content %}
+<style>
+    .configuration-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 52%, #4c1d95 100%);
+        color: #ffffff;
+    }
+
+    .configuration-hero h1 {
+        color: #ffffff !important;
+        font-family: 'Outfit', 'Segoe UI', sans-serif !important;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .configuration-hero p {
+        color: #e0e7ff;
+    }
+
+    .configuration-hero .organization-name {
+        color: #ffffff;
+        font-family: 'Outfit', 'Segoe UI', sans-serif;
+        font-weight: 700;
+    }
+</style>
+<div class="max-w-7xl mx-auto space-y-6 pb-10">
+    <section class="configuration-hero relative overflow-hidden rounded-3xl p-7 md:p-9 text-white shadow-xl">
+        <div class="absolute -right-12 -top-14 w-60 h-60 rounded-full bg-fuchsia-500/20 blur-3xl"></div>
+        <div class="absolute -left-16 -bottom-20 w-72 h-72 rounded-full bg-cyan-400/10 blur-3xl"></div>
+        <div class="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-indigo-200">Administration</p>
+                <h1 class="mt-2 text-3xl font-black tracking-tight md:text-4xl" style="font-family:'Outfit',sans-serif">
+                    Configuration Center</h1>
+                <p class="mt-3 max-w-2xl text-sm leading-6 text-indigo-100">One place to manage organization setup,
+                    verify Microsoft Entra access live, and configure monitoring operations.</p>
+            </div>
+            {% if tenant %}
+            <div class="rounded-2xl border border-white/15 bg-white/10 px-5 py-4 backdrop-blur">
+                <p class="text-xs font-semibold uppercase tracking-wider text-indigo-200">Selected organization</p>
+                <p class="organization-name mt-1 text-lg font-bold">{{ tenant.name }}</p>
+                <p class="mt-1 text-xs text-indigo-200">Tenant record #{{ tenant.id }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if is_platform_admin %}
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Organizations</p>
+            <p class="mt-2 text-3xl font-black text-indigo-600">{{ tenants|length }}</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Managed devices</p>
+            <p class="mt-2 text-3xl font-black text-emerald-600">{{ total_servers }}</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Portal users</p>
+            <p class="mt-2 text-3xl font-black text-violet-600">{{ total_users }}</p>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if is_platform_admin %}
+    <section class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div class="flex-1">
+                <label for="tenantPicker"
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Organization to
+                    configure</label>
+                <select id="tenantPicker"
+                    onchange="if(this.value) window.location.href='{{ url_for('admin.configuration_center') }}?tenant_id='+this.value"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                    {% for item in tenants %}<option value="{{ item.id }}" {% if tenant and item.id==tenant.id
+                        %}selected{% endif %}>{{ item.name }}{% if item.azure_registered %} · Entra verified{% endif %}
+                    </option>{% endfor %}
+                </select>
+            </div>
+            <details class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                <summary class="cursor-pointer font-bold">Create another organization</summary>
+                <form method="POST" class="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input type="hidden" name="action" value="create_tenant">
+                    <input name="tenant_name" required maxlength="100" placeholder="Organization name"
+                        class="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900">
+                    <button
+                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">Create</button>
+                </form>
+            </details>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if tenant %}
+    <section class="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        <div class="space-y-6 xl:col-span-3">
+            <div class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm md:p-7">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <div class="flex items-center gap-3"><span
+                                class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><i
+                                    class="fa-brands fa-microsoft"></i></span>
+                            <div>
+                                <h2 class="text-xl font-black text-slate-900" style="font-family:'Outfit',sans-serif">
+                                    Microsoft Entra connection</h2>
+                                <p class="text-sm text-slate-500">Credentials are saved only after a live token test
+                                    succeeds.</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% if tenant.azure_registered %}<span
+                        class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700"><i
+                            class="fa-solid fa-circle-check mr-1"></i>Fully verified</span>{% else %}<span
+                        class="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700"><i
+                            class="fa-solid fa-triangle-exclamation mr-1"></i>Needs verification</span>{% endif %}
+                </div>
+                <form method="POST" class="mt-6 space-y-4">
+                    <input type="hidden" name="action" value="verify_entra"><input type="hidden" name="tenant_id"
+                        value="{{ tenant.id }}">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div><label
+                                class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Directory
+                                (tenant) ID</label><input name="azure_tenant_id"
+                                value="{{ tenant.azure_tenant_id or '' }}" required
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                        </div>
+                        <div><label
+                                class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Application
+                                (client) ID</label><input name="azure_client_id"
+                                value="{{ tenant.azure_client_id or '' }}" required
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div><label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Client
+                            secret value</label><input type="password" name="azure_client_secret" {% if not
+                            tenant.azure_client_secret %}required{% endif %}
+                            placeholder="{% if tenant.azure_client_secret %}Leave empty to retain saved secret{% else %}Paste the secret Value, not Secret ID{% endif %}"
+                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none">
+                        <p class="mt-1.5 text-xs text-slate-500">The secret is never shown back in this page.</p>
+                    </div>
+                    <button
+                        class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:from-indigo-700 hover:to-violet-700"><i
+                            class="fa-solid fa-shield-halved"></i>Verify live and save configuration</button>
+                </form>
+            </div>
+
+            {% if verification %}
+            <div
+                class="rounded-3xl border p-6 shadow-sm {% if verification.ok %}border-emerald-200 bg-emerald-50/40{% else %}border-rose-200 bg-rose-50/40{% endif %}">
+                <div class="flex gap-3"><i
+                        class="fa-solid {% if verification.ok %}fa-circle-check text-emerald-600{% else %}fa-circle-xmark text-rose-600{% endif %} mt-0.5"></i>
+                    <div>
+                        <h3 class="font-black text-slate-900">Live verification result</h3>
+                        <p class="mt-1 text-sm text-slate-700">{{ verification.summary }}</p>{% if
+                        verification.organization_name %}<p class="mt-1 text-sm font-bold text-emerald-700">Connected
+                            organization: {{ verification.organization_name }}</p>{% endif %}
+                    </div>
+                </div>
+                {% if verification.checks %}<div class="mt-5 space-y-2">{% for check in verification.checks %}<div
+                        class="rounded-xl border border-white bg-white/80 p-3">
+                        <div class="flex items-start gap-3"><i
+                                class="fa-solid {% if check.ok %}fa-check text-emerald-600{% else %}fa-xmark text-rose-600{% endif %} mt-1"></i>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-sm font-bold text-slate-900">{{ check.label }}</p><span
+                                        class="text-xs font-bold text-slate-500">HTTP {{ check.status_code if
+                                        check.status_code else 'network error' }}</span>
+                                </div>
+                                <p class="mt-1 text-xs text-slate-600">Required application permission: <strong>{{
+                                        check.permission }}</strong></p>{% if not check.ok %}<p
+                                    class="mt-1 text-xs font-medium text-rose-700">{{ check.issue }}</p>{% endif %}
+                            </div>
+                        </div>
+                    </div>{% endfor %}</div>{% endif %}
+            </div>
+            {% endif %}
+
+            <div class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm md:p-7">
+                <h2 class="text-xl font-black text-slate-900" style="font-family:'Outfit',sans-serif">Monitoring and
+                    archive settings</h2>
+                <form method="POST" class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2"><input type="hidden"
+                        name="action" value="save_operations"><input type="hidden" name="tenant_id"
+                        value="{{ tenant.id }}">
+                    <div><label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Health
+                            polling interval (minutes)</label><input type="number" min="5"
+                            name="polling_interval_minutes" value="{{ tenant.polling_interval_minutes or 60 }}"
+                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+                    </div>
+                    <div><label
+                            class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">SharePoint
+                            site URL</label><input type="url" name="sharepoint_site_url"
+                            value="{{ tenant.sharepoint_site_url or '' }}"
+                            placeholder="https://tenant.sharepoint.com/sites/Monitoring"
+                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+                    </div>
+                    <div><label
+                            class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">SharePoint
+                            interval (minutes)</label><input type="number" min="5"
+                            name="sharepoint_sync_interval_minutes"
+                            value="{{ tenant.sharepoint_sync_interval_minutes or 60 }}"
+                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+                    </div><label
+                        class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"><input
+                            type="checkbox" name="sharepoint_auto_sync" {% if tenant.sharepoint_auto_sync %}checked{%
+                            endif %} class="h-4 w-4 rounded border-slate-300 text-indigo-600">Enable automatic
+                        SharePoint archive</label><button
+                        class="md:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-100">Save
+                        operational settings</button>
+                </form>
+            </div>
+        </div>
+
+        <aside class="space-y-6 xl:col-span-2">
+            <div class="rounded-3xl border border-indigo-100 bg-indigo-50/60 p-6 shadow-sm">
+                <p class="text-xs font-bold uppercase tracking-[0.15em] text-indigo-600">Setup guide</p>
+                <h2 class="mt-2 text-xl font-black text-slate-900" style="font-family:'Outfit',sans-serif">Create the
+                    app registration</h2>
+                <ol class="mt-5 space-y-4 text-sm leading-5 text-slate-700">
+                    <li class="flex gap-3"><span
+                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">1</span><span>Open
+                            <strong>Microsoft Entra ID → App registrations → New registration</strong>. Choose a name
+                            such as <strong>ServerMonitor Integration</strong>; single-tenant is recommended.</span>
+                    </li>
+                    <li class="flex gap-3"><span
+                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">2</span><span>Copy
+                            <strong>Directory (tenant) ID</strong> from Entra Overview and <strong>Application (client)
+                                ID</strong> from the app’s Overview tab.</span></li>
+                    <li class="flex gap-3"><span
+                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">3</span><span>Go
+                            to <strong>Certificates & secrets</strong>, create a client secret, then copy its
+                            <strong>Value</strong> immediately. The Secret ID will not work.</span></li>
+                    <li class="flex gap-3"><span
+                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">4</span><span>Open
+                            <strong>API permissions → Microsoft Graph → Application permissions</strong>. Add the
+                            required permissions below and select <strong>Grant admin consent</strong>.</span></li>
+                </ol>
+            </div>
+            <div class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+                <h2 class="text-lg font-black text-slate-900">Required Graph permissions</h2>
+                <div class="mt-4 space-y-3 text-sm">
+                    <div class="rounded-xl bg-slate-50 p-3"><strong>Directory.Read.All</strong>
+                        <p class="mt-1 text-xs text-slate-500">Organization and employee directory sync.</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3"><strong>Device.Read.All</strong>
+                        <p class="mt-1 text-xs text-slate-500">Entra registered device inventory.</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3"><strong>DeviceManagementManagedDevices.Read.All</strong>
+                        <p class="mt-1 text-xs text-slate-500">Intune managed device inventory.</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3"><strong>LicenseAssignment.Read.All</strong>
+                        <p class="mt-1 text-xs text-slate-500">Microsoft 365 license inventory.</p>
+                    </div>
+                </div>
+                <p class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800"><i
+                        class="fa-solid fa-circle-info mr-1"></i>Adding a permission is not enough. A Global
+                    Administrator or Privileged Role Administrator must grant tenant-wide admin consent.</p>
+            </div>
+            <div class="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+                <h2 class="text-lg font-black text-slate-900">Quick actions</h2>
+                <div class="mt-4 grid grid-cols-1 gap-2"><a href="{{ url_for('admin.admin_users') }}"
+                        class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700"><i
+                            class="fa-solid fa-users-gear mr-2"></i>Manage portal users</a><a
+                        href="{{ url_for('agents.list_keys') }}"
+                        class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700"><i
+                            class="fa-solid fa-key mr-2"></i>Manage agent keys</a><a
+                        href="{{ url_for('asset_mgmt.reports') }}"
+                        class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700"><i
+                            class="fa-solid fa-file-lines mr-2"></i>Open reports</a></div>
+            </div>
+        </aside>
+    </section>
+    {% else %}<section class="rounded-3xl border border-slate-100 bg-white p-12 text-center shadow-sm">
+        <h2 class="text-xl font-black text-slate-900">No organization is available</h2>
+        <p class="mt-2 text-sm text-slate-500">Create an organization to begin configuration.</p>
+    </section>{% endif %}
+</div>
+{% endblock %}

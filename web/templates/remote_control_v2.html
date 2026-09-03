@@ -37,17 +37,9 @@
             </div>
 
             <div class="flex flex-wrap gap-2">
-                <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
-                    class="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all shadow-sm">
-                    <i class="fa-solid fa-images mr-1.5"></i>Live Images
-                </a>
                 <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=server.id) }}"
                     class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
                     <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
-                </a>
-                <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=server.id) }}"
-                    class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
-                    <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
                 </a>
             </div>
         </div>
@@ -119,23 +111,42 @@
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <div class="text-sm font-black text-slate-900">Software</div>
-                                <div class="text-xs text-slate-500 mt-1">Queue install/uninstall to the agent.</div>
+                                <div class="text-xs text-slate-500 mt-1">Install from uploaded file or uninstall from
+                                    system.</div>
                             </div>
                             <i class="fa-solid fa-boxes-stacked text-slate-300"></i>
                         </div>
-                        <div class="mt-4 flex gap-2">
-                            <input id="swName" placeholder="Software name"
-                                class="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
-                            <select id="swAction"
-                                class="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
-                                <option value="install">Install</option>
-                                <option value="uninstall">Uninstall</option>
-                            </select>
+
+                        <!-- Upload & Install from File -->
+                        <div class="mt-4 space-y-3">
+                            <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-500 transition-colors"
+                                id="uploadArea">
+                                <input type="file" id="swFile" accept=".exe,.msi,.zip,.ps1" class="hidden">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 mb-2"></i>
+                                <div class="text-sm font-semibold text-slate-700">Drag files or <span
+                                        class="text-indigo-600 hover:underline">browse</span></div>
+                                <div class="text-xs text-slate-500 mt-1">Supported: .exe, .msi, .zip, .ps1</div>
+                            </div>
+                            <button onclick="uploadSoftware({{ server.id }})"
+                                class="w-full px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all">
+                                <i class="fa-solid fa-arrow-up mr-1.5"></i>Upload & Install
+                            </button>
                         </div>
-                        <button onclick="queueSoftware({{ server.id }})"
-                            class="mt-3 w-full px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700 transition-all">
-                            <i class="fa-solid fa-paper-plane mr-1.5"></i>Queue
-                        </button>
+
+                        <div class="text-xs text-slate-500 text-center py-3">OR</div>
+
+                        <!-- Uninstall from System -->
+                        <div>
+                            <label class="text-xs font-bold text-slate-600 mb-2 block">Select Installed Software</label>
+                            <select id="swSelect"
+                                class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                                <option value="">Loading installed software...</option>
+                            </select>
+                            <button onclick="uninstallSoftware({{ server.id }})"
+                                class="mt-3 w-full px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-black hover:bg-red-700 transition-all">
+                                <i class="fa-solid fa-trash mr-1.5"></i>Uninstall Selected
+                            </button>
+                        </div>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
@@ -203,22 +214,10 @@
                     </h3>
                 </div>
                 <div class="grid grid-cols-1 gap-2">
-                    <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=server.id) }}"
-                        class="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all flex items-center justify-between">
-                        <span class="text-sm font-black text-slate-800"><i
-                                class="fa-solid fa-images mr-2 text-indigo-600"></i>Live Images</span>
-                        <i class="fa-solid fa-arrow-right text-slate-300"></i>
-                    </a>
                     <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=server.id) }}"
                         class="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all flex items-center justify-between">
                         <span class="text-sm font-black text-slate-800"><i
                                 class="fa-solid fa-clipboard-list mr-2 text-indigo-600"></i>System Logs</span>
-                        <i class="fa-solid fa-arrow-right text-slate-300"></i>
-                    </a>
-                    <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=server.id) }}"
-                        class="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all flex items-center justify-between">
-                        <span class="text-sm font-black text-slate-800"><i
-                                class="fa-solid fa-chart-simple mr-2 text-indigo-600"></i>Productivity</span>
                         <i class="fa-solid fa-arrow-right text-slate-300"></i>
                     </a>
                 </div>
@@ -246,8 +245,8 @@
 
 <script>
     // Global state for command tracking
-    let window._pendingCommandId = null;
-    let window._pollInterval = null;
+    window._pendingCommandId = null;
+    window._pollInterval = null;
 
     function enableTerminalBtn() {
         const btn = document.getElementById('termRunBtn');
@@ -387,11 +386,28 @@
             const btnText = document.getElementById('termBtnText');
 
             if (outEl) outEl.textContent = data.output || '[No output]';
-            if (statusEl) statusEl.textContent = status;
+            if (statusEl) {
+                statusEl.textContent = status;
+                // Update status styling
+                statusEl.className = 'px-3 py-1 rounded-full text-sm font-bold ';
+                if (status === 'pending' || status === 'sent') {
+                    statusEl.className += 'bg-amber-100 text-amber-700';
+                } else if (status === 'running') {
+                    statusEl.className += 'bg-blue-100 text-blue-700';
+                } else if (status === 'completed') {
+                    statusEl.className += 'bg-emerald-100 text-emerald-700';
+                } else if (status === 'failed') {
+                    statusEl.className += 'bg-rose-100 text-rose-700';
+                } else {
+                    statusEl.className += 'bg-slate-100 text-slate-700';
+                }
+            }
 
             if (data.error_output) {
                 if (errEl) errEl.classList.remove('hidden');
                 if (errOutEl) errOutEl.textContent = data.error_output;
+            } else if (errEl) {
+                errEl.classList.add('hidden');
             }
 
             if (status === 'completed' || status === 'failed') {
@@ -401,7 +417,10 @@
 
                 if (exitEl && data.exit_code !== undefined && data.exit_code !== null) {
                     exitEl.classList.remove('hidden');
-                    if (exitValEl) exitValEl.textContent = data.exit_code;
+                    if (exitValEl) {
+                        exitValEl.textContent = data.exit_code;
+                        exitValEl.className = data.exit_code === 0 ? 'font-mono text-emerald-600 font-bold' : 'font-mono text-rose-600 font-bold';
+                    }
                 }
 
                 const msg = status === 'completed' ? `Command completed with exit code ${data.exit_code}` : 'Command failed';
@@ -416,9 +435,138 @@
         }
     }
 
+    // Load installed software list on page load
+    async function loadInstalledSoftware(serverId) {
+        try {
+            const res = await fetch(`/api/v2/server/${serverId}/software-list`);
+            const data = await res.json();
+
+            if (!data.success || !data.software_list) return;
+
+            const select = document.getElementById('swSelect');
+            if (!select) return;
+
+            // Clear existing options
+            select.innerHTML = '';
+
+            if (data.software_list.length === 0) {
+                select.innerHTML = '<option value="">No software detected</option>';
+                return;
+            }
+
+            // Add option for each software
+            data.software_list.forEach(sw => {
+                const option = document.createElement('option');
+                option.value = sw.name;
+                option.textContent = `${sw.name} ${sw.version ? '(v' + sw.version + ')' : ''}`;
+                select.appendChild(option);
+            });
+
+            toast(`Loaded ${data.software_list.length} installed software packages`, true);
+        } catch (e) {
+            console.error('Failed to load software list:', e);
+            const select = document.getElementById('swSelect');
+            if (select) select.innerHTML = '<option value="">Error loading software list</option>';
+        }
+    }
+
+    // Upload software file
+    async function uploadSoftware(serverId) {
+        const fileInput = document.getElementById('swFile');
+        if (!fileInput || !fileInput.files[0]) return toast('Select a file to upload', false);
+
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch(`/api/v2/server/${serverId}/software-upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || `Error: ${res.status}`);
+
+            toast(`Installation queued for ${data.filename}`, true);
+            fileInput.value = '';
+
+            // Reset upload area
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) uploadArea.textContent = 'Drag files or browse';
+        } catch (e) {
+            toast('Upload failed: ' + (e?.message || e), false);
+        }
+    }
+
+    // Uninstall selected software
+    async function uninstallSoftware(serverId) {
+        const select = document.getElementById('swSelect');
+        const software = select?.value;
+
+        if (!software) return toast('Select software to uninstall', false);
+
+        if (!confirm(`Are you sure you want to uninstall ${software}?`)) return;
+
+        try {
+            const res = await fetch(`/api/v2/server/${serverId}/remote/software`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'uninstall', software: software })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || `Error: ${res.status}`);
+
+            toast(`Uninstall queued for ${software}`, true);
+        } catch (e) {
+            toast('Uninstall failed: ' + (e?.message || e), false);
+        }
+    }
+
+    // Handle file upload drag and drop
+    function setupFileUpload() {
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('swFile');
+
+        if (!uploadArea || !fileInput) return;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#4f46e5';
+            uploadArea.style.backgroundColor = '#eef2ff';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '#cbd5e1';
+            uploadArea.style.backgroundColor = 'transparent';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#cbd5e1';
+            uploadArea.style.backgroundColor = 'transparent';
+
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                uploadArea.textContent = `📦 ${fileInput.files[0].name}`;
+            }
+        });
+    }
+
     // Enable terminal button on load
     document.addEventListener('DOMContentLoaded', () => {
         enableTerminalBtn();
+        setupFileUpload();
+        const serverId = {{ server.id }};
+        loadInstalledSoftware(serverId);
     });
 </script>
 {% endblock %}

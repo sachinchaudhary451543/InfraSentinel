@@ -5,10 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ branding.company_name }} - Enterprise Monitoring</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon_io/favicon.ico') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/portal-favicon.svg') }}?v=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -29,7 +31,8 @@
             box-sizing: border-box;
         }
 
-        body, html {
+        body,
+        html {
             width: 100%;
             height: 100%;
             overflow: hidden;
@@ -68,7 +71,7 @@
             position: relative;
             overflow: hidden;
             background: radial-gradient(circle at 20% 30%, rgba(139, 92, 246, 0.15), transparent 40%),
-                        radial-gradient(circle at 80% 70%, rgba(6, 182, 212, 0.1), transparent 40%);
+                radial-gradient(circle at 80% 70%, rgba(6, 182, 212, 0.1), transparent 40%);
         }
 
         .hero-content {
@@ -127,7 +130,7 @@
             font-size: 32px;
             font-weight: 700;
             letter-spacing: -1px;
-            background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%);
+            background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.7) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -241,7 +244,7 @@
             box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
         }
 
-        .input-field:focus + i {
+        .input-field:focus+i {
             color: var(--primary);
         }
 
@@ -294,14 +297,20 @@
             font-weight: 600;
         }
 
-        .divider::before, .divider::after {
+        .divider::before,
+        .divider::after {
             content: '';
             flex: 1;
             border-bottom: 1px solid var(--glass-border);
         }
 
-        .divider:not(:empty)::before { margin-right: 1.5em; }
-        .divider:not(:empty)::after { margin-left: 1.5em; }
+        .divider:not(:empty)::before {
+            margin-right: 1.5em;
+        }
+
+        .divider:not(:empty)::after {
+            margin-left: 1.5em;
+        }
 
         .footer-links {
             margin-top: 32px;
@@ -323,13 +332,25 @@
 
         /* Animations */
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
 
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(40px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* Flash Messages */
@@ -357,9 +378,21 @@
 
         /* Responsive */
         @media (max-width: 1024px) {
-            .hero-section { display: none; }
-            .auth-section { flex: 1; background: var(--bg-dark); }
-            .auth-card { background: transparent; border: none; box-shadow: none; padding: 24px; }
+            .hero-section {
+                display: none;
+            }
+
+            .auth-section {
+                flex: 1;
+                background: var(--bg-dark);
+            }
+
+            .auth-card {
+                background: transparent;
+                border: none;
+                box-shadow: none;
+                padding: 24px;
+            }
         }
 
         /* Loading Animation */
@@ -374,14 +407,16 @@
             position: absolute;
             width: 20px;
             height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             border-top-color: #fff;
             animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -395,7 +430,7 @@
             <div class="hero-image-container">
                 <img src="{{ url_for('static', filename='images/login_hero.png') }}" alt="Background Hero">
             </div>
-            
+
             <div class="hero-content">
                 <div class="logo-group">
                     <div class="logo-badge">
@@ -409,22 +444,29 @@
                 </div>
 
                 <h1 class="hero-title">Intelligent Infrastructure <br>Monitoring.</h1>
-                <p class="hero-subtitle">Unified visibility across your entire server fleet. Real-time analytics, automated recovery, and military-grade security in one sleek dashboard.</p>
+                <p class="hero-subtitle">Unified visibility across your entire server fleet. Real-time analytics,
+                    automated recovery, and military-grade security in one sleek dashboard.</p>
 
                 <div style="display: flex; gap: 24px; opacity: 0.7;">
                     <div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">99.9%</div>
-                        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">Uptime</div>
+                        <div
+                            style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">
+                            Uptime</div>
                     </div>
                     <div style="width: 1px; height: 40px; background: var(--glass-border);"></div>
                     <div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">10ms</div>
-                        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">Latency</div>
+                        <div
+                            style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">
+                            Latency</div>
                     </div>
                     <div style="width: 1px; height: 40px; background: var(--glass-border);"></div>
                     <div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">AES-256</div>
-                        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">Encryption</div>
+                        <div
+                            style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);">
+                            Encryption</div>
                     </div>
                 </div>
             </div>
@@ -441,8 +483,10 @@
                 {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                 {% for category, message in messages %}
-                <div class="alert alert-{% if category == 'error' or category == 'danger' %}error{% else %}success{% endif %}">
-                    <i class="fas {% if category == 'error' or category == 'danger' %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}"></i>
+                <div
+                    class="alert alert-{% if category == 'error' or category == 'danger' %}error{% else %}success{% endif %}">
+                    <i
+                        class="fas {% if category == 'error' or category == 'danger' %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}"></i>
                     <span>{{ message }}</span>
                 </div>
                 {% endfor %}
@@ -461,7 +505,8 @@
                     <div class="form-group">
                         <label class="form-label" for="username">Username</label>
                         <div class="input-control">
-                            <input type="text" id="username" name="username" class="input-field" placeholder="your.username" required>
+                            <input type="text" id="username" name="username" class="input-field"
+                                placeholder="your.username" required>
                             <i class="fas fa-user-circle"></i>
                         </div>
                     </div>
@@ -469,7 +514,8 @@
                     <div class="form-group">
                         <label class="form-label" for="password">Password</label>
                         <div class="input-control">
-                            <input type="password" id="password" name="password" class="input-field" placeholder="••••••••" required>
+                            <input type="password" id="password" name="password" class="input-field"
+                                placeholder="••••••••" required>
                             <i class="fas fa-shield-halved"></i>
                         </div>
                     </div>
@@ -576,5 +622,6 @@
         window.onload = init;
     </script>
 </body>
+
 </html>
 >

@@ -23,7 +23,7 @@ class SharePointSyncConfig:
     """Configuration for SharePoint secondary database"""
     
     # SharePoint Site
-    SITE_URL = "https://bafflesol.sharepoint.com/sites/BFS_OnPrem_Server_Report"
+    SITE_URL = os.environ.get("SHAREPOINT_SITE_URL", "")
     
     # List names (will be created if they don't exist)
     LISTS = {

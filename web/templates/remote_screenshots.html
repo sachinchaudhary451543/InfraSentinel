@@ -3,18 +3,55 @@
 {% block title %}Live Images - {{ server.hostname }}{% endblock %}
 
 {% block content %}
+<style>
+    .remote-page-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: flex-start;
+        align-self: flex-start;
+    }
+
+    .remote-page-action {
+        min-height: 44px;
+        height: 44px;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 640px) {
+        .remote-page-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+        }
+
+        .remote-page-action {
+            width: 100%;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+            font-size: 0.8rem;
+        }
+    }
+</style>
 <div class="animate-fade-up px-2 pb-8 pt-4">
-    <div class="mb-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+    <div class="mb-5 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div>
-            <a href="{{ url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
+            <a href="{{ url_for('asset_mgmt.productivity_screenshots') if screen_monitor_mode else url_for('asset_mgmt.remote_control_server', server_id=server.id) }}"
                 class="text-slate-400 hover:text-indigo-600 transition-colors text-sm font-medium inline-flex items-center gap-2">
-                <i class="fa-solid fa-arrow-left"></i><span>Back to Controls</span>
+                <i class="fa-solid fa-arrow-left"></i><span>{{ 'Back to Employee Screens' if screen_monitor_mode else
+                    'Back to Controls' }}</span>
             </a>
             <h2 class="font-display text-2xl font-bold text-slate-900 tracking-tight mt-2"
                 style="font-family:'Outfit',sans-serif">
-                Live Images — {{ server.hostname }}
+                {{ screen_employee.name ~ ' — Screen Monitor' if screen_monitor_mode else 'Live Images — ' ~
+                server.hostname }}
             </h2>
-            <p class="text-sm text-slate-500 mt-1">Shows latest screenshots and refreshes automatically (optional).</p>
+            <p class="text-sm text-slate-500 mt-1">{{ (server.hostname ~ ' · ' ~ (server.ip or 'IP unavailable')) if
+                screen_monitor_mode else 'Shows latest screenshots and refreshes automatically (optional).' }}</p>
             {% if not sharepoint_configured %}
             <div class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 w-fit">
                 <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>SharePoint not configured. Previews use local
@@ -23,16 +60,16 @@
             {% endif %}
         </div>
 
-        <div class="flex flex-wrap gap-2">
+        {% if not screen_monitor_mode %}<div class="remote-page-actions">
             <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=server.id) }}"
-                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                class="remote-page-action px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
                 <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
             </a>
             <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=server.id) }}"
-                class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
+                class="remote-page-action px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:border-indigo-300 hover:text-indigo-700 transition-all">
                 <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
             </a>
-        </div>
+        </div>{% endif %}
     </div>
 
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6">
@@ -160,6 +197,7 @@
 
 <script>
     const SERVER_ID = Number("{{ server.id }}");
+    const SCREEN_USER = {{ ((screen_employee.local_username or screen_employee.email.split('@', 1)[0]) if screen_monitor_mode else '')| tojson }};
     let refreshTimer = null;
     let allShots = [];  // Store all screenshots for filtering
 
@@ -180,7 +218,7 @@
             const d = getDateFromISO(iso);
             if (!d || Number.isNaN(d.getTime())) return '—';
             return d.toLocaleString(undefined, {
-                year: 'numeric', month: 'short', day: '2-digit', 
+                year: 'numeric', month: 'short', day: '2-digit',
                 hour: '2-digit', minute: '2-digit'
             });
         } catch { return '—'; }
@@ -293,7 +331,7 @@
                         <div style="position: relative; width: 100%; padding-bottom: 62.5%; background: #0f172a; overflow: hidden; flex-grow: 0; flex-shrink: 0;">
                             <img src="${url}" alt="${title}" loading="lazy" decoding="async" fetchpriority="low"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0f172a;"
-                                onerror="this.parentElement.style.background='#0f172a'; this.style.display='none'; this.parentElement.innerHTML='<div style=\\\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#64748b;font-size:0.75rem;\\\">⚠ Failed</div>'">
+                                onerror="handleThumbnailError(this)">
                         </div>
                         <div style="padding: 0.5rem; background: white; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
                             <div style="font-size: 0.65rem; font-weight: 900; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; line-height: 1;">${title}</div>
@@ -332,11 +370,24 @@
         if (lb) lb.style.display = 'none';
     }
 
+    function handleThumbnailError(image) {
+        image.style.display = 'none';
+        const holder = image.parentElement;
+        if (holder && !holder.querySelector('.thumbnail-error')) {
+            const message = document.createElement('div');
+            message.className = 'thumbnail-error';
+            message.textContent = 'Preview unavailable';
+            message.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#94a3b8;font-size:0.75rem;';
+            holder.appendChild(message);
+        }
+    }
+
     async function loadShots(force = false) {
         const grid = document.getElementById('grid');
         if (!grid) return;
         try {
-            const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots?page=1&per_page=100`);
+            const userQuery = SCREEN_USER ? `&active_user=${encodeURIComponent(SCREEN_USER)}` : '';
+            const res = await fetch(`/api/v2/server/${SERVER_ID}/screenshots?page=1&per_page=100${userQuery}`);
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'failed');
 

@@ -13,7 +13,7 @@ Design rules (enforced, not just documented):
     - NEVER modifies an existing column's type or settings
     - NEVER touches schema at runtime during normal upload cycles
     - Only adds what is missing; skips what already exists
-    - Schema source of truth: setup_sharepoint_schema.REQUIRED_LISTS
+    - Schema source of truth: scripts.database.setup_sharepoint_schema.REQUIRED_LISTS
 
 run_provisioning() is called once at agent startup (before the scheduler).
 It provisions everything that is missing and returns a result object that
@@ -36,7 +36,7 @@ log = logging.getLogger("Provisioning")
 # Schema source of truth — imported, never redefined here
 # ---------------------------------------------------------------------------
 
-from setup_sharepoint_schema import (
+from scripts.database.setup_sharepoint_schema import (
     REQUIRED_LISTS,
     COLUMN_TYPES,
     FIELD_TYPE_TEXT,

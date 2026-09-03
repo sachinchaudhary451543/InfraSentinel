@@ -11,13 +11,13 @@ def main():
     # Execute the unified startup sequence
     run_platform_startup()
     
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 3000))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
     
     log(f"Starting server on port {port} (debug={debug})")
     
+    from web.jobs import shutdown_scheduler
     try:
-        from web.jobs import shutdown_scheduler
         socketio.run(
             app,
             host="0.0.0.0",

@@ -242,9 +242,9 @@ if ($AllSuccess) {
     
     Write-Host "`nNext Steps:" -ForegroundColor Cyan
     Write-Host "  1. Set environment variable:"
-    Write-Host "     `$env:AZURE_TENANT_ID = '74358f51-5b45-4dfb-a23c-75e4fe05ef78'"
+    Write-Host "     `$env:AZURE_TENANT_ID = '<your-tenant-id>'"
     Write-Host "  2. Run diagnostics:"
-    Write-Host "     .\.venv\Scripts\python.exe startup_diagnostics.py"
+    Write-Host "     .\.venv\Scripts\python.exe -m scripts.diagnostics.startup_diagnostics"
     Write-Host "  3. Start the system:"
     Write-Host "     .\.venv\Scripts\python.exe main.py"
     Write-Host "  4. Access dashboard:"

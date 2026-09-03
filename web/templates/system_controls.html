@@ -81,17 +81,9 @@
                             class="flex-1 px-3 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-bolt mr-1.5"></i>Controls
                         </a>
-                        <a href="{{ url_for('asset_mgmt.remote_control_screenshots', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
-                            <i class="fa-solid fa-images mr-1.5"></i>Images
-                        </a>
                         <a href="{{ url_for('asset_mgmt.remote_control_logs', server_id=s.id) }}"
                             class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
                             <i class="fa-solid fa-clipboard-list mr-1.5"></i>Logs
-                        </a>
-                        <a href="{{ url_for('asset_mgmt.remote_control_productivity', server_id=s.id) }}"
-                            class="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-black hover:border-indigo-300 hover:text-indigo-700 transition-all text-center">
-                            <i class="fa-solid fa-chart-simple mr-1.5"></i>Prod
                         </a>
                     </div>
                 </div>
@@ -118,14 +110,10 @@
         currentServerId = serverId;
         const panel = document.getElementById('controlsPanel');
         const title = document.getElementById('controlsPanelTitle');
-        const screensLink = document.getElementById('controlsScreensLink');
-        const productivityLink = document.getElementById('controlsProductivityLink');
         const logsLink = document.getElementById('controlsLogsLink');
         const hostname = btn.parentElement.parentElement.querySelector('.text-sm.font-black').textContent;
 
         title.textContent = 'System Controls - ' + hostname;
-        screensLink.href = '{{ url_for("asset_mgmt.remote_control_screenshots", server_id=0) }}'.replace('/0', '/' + serverId);
-        productivityLink.href = '{{ url_for("asset_mgmt.remote_control_productivity", server_id=0) }}'.replace('/0', '/' + serverId);
         logsLink.href = '{{ url_for("asset_mgmt.remote_control_logs", server_id=0) }}'.replace('/0', '/' + serverId);
 
         // Enable run button
@@ -234,87 +222,92 @@
 
 <script>
     (function () {
+        // Debounced search for system controls to avoid UI jank when many rows exist
         const input = document.getElementById('sysSearch');
         const rows = Array.from(document.querySelectorAll('.sys-row'));
         if (!input) return;
-        input.addEventListener('input', () => {
+
+        let searchTimeout = null;
+        function applySysFilter() {
             const q = (input.value || '').trim().toLowerCase();
-            rows.forEach(r => {
-                const h = r.dataset.h || '';
-                const ip = r.dataset.ip || '';
-                const show = !q || h.includes(q) || ip.includes(q);
-                r.style.display = show ? '' : 'none';
+            // Batch DOM updates with requestAnimationFrame
+            requestAnimationFrame(() => {
+                rows.forEach(r => {
+                    const h = r.dataset.h || '';
+                    const ip = r.dataset.ip || '';
+                    const show = !q || h.includes(q) || ip.includes(q);
+                    r.style.display = show ? '' : 'none';
+                });
             });
+        }
+
+        input.addEventListener('input', () => {
+            if (searchTimeout) clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                applySysFilter();
+            }, 250);
         });
     })();
 </script>
 
-    <!-- Inline Controls Panel -->
-    <div id="controlsPanel" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
-        onclick="closeControlsPanel()">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-            onclick="event.stopPropagation()">
-            <!-- Header -->
-            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-                <h3 class="text-lg font-black text-slate-900" id="controlsPanelTitle">System Controls</h3>
-                <button onclick="closeControlsPanel()" class="text-slate-400 hover:text-slate-600 text-2xl">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
+<!-- Inline Controls Panel -->
+<div id="controlsPanel" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
+    onclick="closeControlsPanel()">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <h3 class="text-lg font-black text-slate-900" id="controlsPanelTitle">System Controls</h3>
+            <button onclick="closeControlsPanel()" class="text-slate-400 hover:text-slate-600 text-2xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Content -->
+        <div class="p-6 space-y-6">
+            <!-- Terminal Section -->
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                <h4 class="text-sm font-black text-slate-900 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-indigo-600"></i>Execute Command
+                </h4>
+                <div class="flex flex-col gap-3">
+                    <input id="termCmd" type="text" placeholder="Example: whoami, Get-ComputerInfo, systeminfo"
+                        class="px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                    <button id="termRunBtn" onclick="runTerminal()" disabled type="button"
+                        class="px-4 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-play mr-1.5"></i>Run
+                    </button>
+                </div>
+
+                <!-- Terminal Output -->
+                <div id="termContainer" class="hidden mt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-slate-600 uppercase">Output</span>
+                        <span id="termStatus"
+                            class="text-xs font-black px-2 py-1 rounded-full bg-slate-200 text-slate-700">pending</span>
+                    </div>
+                    <pre id="termOut"
+                        class="max-h-48 overflow-auto bg-slate-900 text-emerald-400 p-3 rounded-lg text-xs font-mono border border-slate-700 whitespace-pre-wrap break-words"></pre>
+                    <div id="termErrors" class="hidden mt-3 bg-rose-50 border border-rose-200 rounded-lg p-3">
+                        <p class="text-xs font-bold text-rose-700 mb-1">Error Output:</p>
+                        <pre id="termErrText"
+                            class="text-xs font-mono text-rose-600 max-h-32 overflow-auto whitespace-pre-wrap break-words"></pre>
+                    </div>
+                    <div id="termExitCode" class="hidden mt-2 text-xs text-slate-600">
+                        <span class="font-bold">Exit Code:</span> <span id="termExitCodeVal" class="font-mono"></span>
+                    </div>
+                </div>
             </div>
 
-            <!-- Content -->
-            <div class="p-6 space-y-6">
-                <!-- Terminal Section -->
-                <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
-                    <h4 class="text-sm font-black text-slate-900 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-terminal text-indigo-600"></i>Execute Command
-                    </h4>
-                    <div class="flex flex-col gap-3">
-                        <input id="termCmd" type="text" placeholder="Example: whoami, Get-ComputerInfo, systeminfo"
-                            class="px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
-                            <button id="termRunBtn" onclick="runTerminal()" disabled type="button"
-                                class="px-4 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i class="fa-solid fa-play mr-1.5"></i>Run
-                            </button>
-                    </div>
-
-                    <!-- Terminal Output -->
-                    <div id="termContainer" class="hidden mt-3">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-bold text-slate-600 uppercase">Output</span>
-                            <span id="termStatus"
-                                class="text-xs font-black px-2 py-1 rounded-full bg-slate-200 text-slate-700">pending</span>
-                        </div>
-                        <pre id="termOut"
-                            class="max-h-48 overflow-auto bg-slate-900 text-emerald-400 p-3 rounded-lg text-xs font-mono border border-slate-700 whitespace-pre-wrap break-words"></pre>
-                        <div id="termErrors" class="hidden mt-3 bg-rose-50 border border-rose-200 rounded-lg p-3">
-                            <p class="text-xs font-bold text-rose-700 mb-1">Error Output:</p>
-                            <pre id="termErrText"
-                                class="text-xs font-mono text-rose-600 max-h-32 overflow-auto whitespace-pre-wrap break-words"></pre>
-                        </div>
-                        <div id="termExitCode" class="hidden mt-2 text-xs text-slate-600">
-                            <span class="font-bold">Exit Code:</span> <span id="termExitCodeVal" class="font-mono"></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Quick Links -->
-                <div class="flex flex-wrap gap-2 justify-center">
-                    <a href="#" id="controlsScreensLink"
-                        class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                        <i class="fa-solid fa-images mr-1.5"></i>Live Screenshots
-                    </a>
-                    <a href="#" id="controlsProductivityLink"
-                        class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                        <i class="fa-solid fa-chart-simple mr-1.5"></i>Productivity
-                    </a>
-                    <a href="#" id="controlsLogsLink"
-                        class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
-                        <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
-                    </a>
-                </div>
+            <!-- Quick Links -->
+            <div class="flex flex-wrap gap-2 justify-center">
+                <a href="#" id="controlsLogsLink"
+                    class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all">
+                    <i class="fa-solid fa-clipboard-list mr-1.5"></i>System Logs
+                </a>
             </div>
         </div>
     </div>
+</div>
 
 {% endblock %}
