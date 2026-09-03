@@ -1,11 +1,11 @@
-# ServerMonitor Platform - DNS Configuration Request
+# InfraMonitor Platform - DNS Configuration Request
 
 **To:** IT Administration / Infrastructure Team
-**Subject:** Request for Internal DNS "A Record" for ServerMonitor Dashboard
+**Subject:** Request for Internal DNS "A Record" for InfraMonitor Dashboard
 
 Hello Team,
 
-We are deploying a new internal ServerMonitor platform and need a friendly internal domain name routed to the dashboard server so that our endpoint VMs can securely communicate with it without hardcoding IP addresses. 
+We are deploying a new internal InfraMonitor platform and need a friendly internal domain name routed to the dashboard server so that our endpoint VMs can securely communicate with it without hardcoding IP addresses. 
 
 Could you please create a new DNS "A Record" in the Windows DNS Manager? 
 

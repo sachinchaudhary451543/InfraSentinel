@@ -1,4 +1,4 @@
-# ServerMonitor - Remote Actions Fix - COMPLETE GUIDE
+# InfraMonitor - Remote Actions Fix - Complete Guide
 
 ## 📌 Quick Links
 
@@ -69,7 +69,7 @@ python -m scripts.tests.e2e_remote_commands # Full E2E test
 ### Option 2: Manual Testing
 
 1. Open Portal: http://localhost:8080
-2. Login: admin/admin
+2. Log in with your configured administrator account.
 3. Go to: System Details → Remote Terminal
 4. Type: `hostname`
 5. Click: "Run"

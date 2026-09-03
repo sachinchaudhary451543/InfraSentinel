@@ -108,7 +108,7 @@ class AzureDeviceOwner(db.Model):
 
 ```powershell
 # First ensure you're in the correct directory
-cd "<path-to>\ServerMonitor"
+cd "<path-to>\InfraMonitor"
 
 # Run the license migration
 python -m scripts.database.migrate_add_licenses

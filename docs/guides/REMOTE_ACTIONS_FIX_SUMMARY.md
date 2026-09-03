@@ -196,7 +196,7 @@ python agent.py
 **Watch for log messages:**
 
 ```
-Starting ServerMonitor Enterprise Agent
+Starting InfraMonitor Enterprise Agent
 ✓ Metrics sent. CPU: 45% | RAM: 62%
 Executing command: hostname
 Command result posted successfully. Command ID: 26

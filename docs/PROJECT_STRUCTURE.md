@@ -1,10 +1,10 @@
-# ServerMonitor Project Structure
+# InfraMonitor Project Structure
 
 This repository separates production code from operational utilities, tests, documentation, and historical artifacts.
 
 ## Production code
 
-- `main.py` — primary ServerMonitor web application entry point.
+- `main.py` — primary InfraMonitor web application entry point.
 - `agent.py` — endpoint telemetry agent entry point.
 - `run_portal.py` — standalone admin portal entry point.
 - `web/` — Flask application, routes, templates, static assets, and services.

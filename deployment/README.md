@@ -1,6 +1,6 @@
-# ServerMonitor Deployment Steps
+# InfraMonitor Deployment Steps
 
-This folder contains the files needed to deploy the ServerMonitor platform into your production organization. 
+This folder contains the files needed to deploy the InfraMonitor platform into your production organization. 
 These steps are designed to be secure and scalable.
 
 ## 1. Setting up the Production Web Server (`run_waitress.py`)

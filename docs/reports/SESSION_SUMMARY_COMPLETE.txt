@@ -383,7 +383,7 @@ This session delivered:
   🎯 IST timezone support
   🎯 Screenshot capture system
 
-The ServerMonitor system is now fully ready for deployment to production!
+The InfraMonitor system is now fully ready for deployment to production!
 
 ═══════════════════════════════════════════════════════════════════════════════
   SESSION SUMMARY

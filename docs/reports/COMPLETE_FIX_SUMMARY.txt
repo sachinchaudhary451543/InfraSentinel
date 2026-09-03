@@ -1,6 +1,6 @@
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                                                                                    ║
-║                  ✅ SERVERMONITOR - REMOTE ACTIONS FIXED                          ║
+║                  ✅ InfraMonitor - REMOTE ACTIONS FIXED                          ║
 ║                           All Systems Operational                                 ║
 ║                                                                                    ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
@@ -121,7 +121,7 @@ Step 3: Verify Fixes Applied (new terminal)
 
 Step 4: Test in Portal
   - Open: http://localhost:8080
-  - Login: admin / admin
+   - Log in with your configured administrator account
   - Go to: Server Details → Remote Terminal
   - Test: Type "hostname" → Click "Run"
   - Result: ✅ Output appears within 5 seconds

@@ -1,6 +1,6 @@
 # ============================================================================
 
-# ServerMonitor - Complete Deployment & Testing Guide
+# InfraMonitor - Complete Deployment & Testing Guide
 
 # ============================================================================
 
@@ -36,13 +36,13 @@ Database initialization complete!
 ### Step 2: Terminal 1 - Start Flask Web Server
 
 ```powershell
-.\START_SERVERMONITOR.ps1
+.\START_InfraMonitor.ps1
 ```
 
 Expected output:
 
 ```
-ServerMonitor v3.0 - Web Server Starting...
+InfraMonitor v3.0 - Web Server Starting...
 OK - Already in virtual environment
 Configuration Summary:
   - Flask Web Server: http://127.0.0.1:5000
@@ -68,7 +68,7 @@ Open a **NEW terminal**, then run:
 Expected output:
 
 ```
-ServerMonitor Agent v3.0 - Starting...
+InfraMonitor Agent v3.0 - Starting...
 OK - Already in virtual environment
 
 Configuration Summary:
@@ -92,10 +92,9 @@ Open browser:
 http://localhost:5000
 ```
 
-Login with:
+Log in with an administrator account created during your local setup.
 
-- Username: `admin`
-- Password: `admin`
+Do not document or commit real credentials. If any sample/default password was ever shared publicly, rotate it immediately.
 
 ---
 
@@ -180,7 +179,7 @@ Run this in PowerShell to verify everything is working:
 Write-Host "Checking PostgreSQL..."
 try {
     $conn = [Psycopg2.OperationalError]::new()
-    python -c "import psycopg2; conn=psycopg2.connect('postgresql://postgres:Airport%402026@127.0.0.1:3000/servermonitor'); print('✓ PostgreSQL OK'); conn.close()"
+    python -c "import psycopg2; conn=psycopg2.connect('postgresql://postgres:Airport%402026@127.0.0.1:3000/InfraMonitor'); print('✓ PostgreSQL OK'); conn.close()"
 } catch {
     Write-Host "✗ PostgreSQL failed"
 }
@@ -213,7 +212,7 @@ When deploying to production:
 1. **Change admin password**: Login → Settings → Change Password
 2. **Update Azure credentials**:
    - Get new client secret from Azure Portal
-   - Update `.env` file: `SERVERMONITOR_CLIENT_SECRET=<new_secret>`
+   - Update `.env` file: `InfraMonitor_CLIENT_SECRET=<new_secret>`
 3. **Use real PostgreSQL**: Update `DATABASE_URL` in `.env`
 4. **Set Flask to production**: `FLASK_ENV=production`, `FLASK_DEBUG=False`
 5. **Generate strong agent keys**: Distribute unique keys to each agent

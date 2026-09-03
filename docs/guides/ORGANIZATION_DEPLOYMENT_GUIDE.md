@@ -1,8 +1,8 @@
-# 🏢 ServerMonitor - Organization-Wide Deployment Guide
+# 🏢 InfraMonitor - Organization-Wide Deployment Guide
 
 ## Overview
 
-Deploy ServerMonitor across your organization domain to monitor all servers, execute remote commands, manage software, and track employee productivity.
+Deploy InfraMonitor across your organization domain to monitor all servers, execute remote commands, manage software, and track employee productivity.
 
 ---
 
@@ -19,10 +19,10 @@ Deploy ServerMonitor across your organization domain to monitor all servers, exe
   - [ ] Port 5000 (HTTPS/HTTP) accessible from domain systems
   - [ ] Port 5001 (admin portal) - optional, internal only
   - [ ] Firewall rules configured
-  - [ ] DNS record created (e.g., `servermonitor.yourdomain.com`)
+  - [ ] DNS record created (e.g., `InfraMonitor.yourdomain.com`)
 
 - [ ] **Active Directory Setup**
-  - [ ] Service account created (e.g., `svc_servermonitor@domain.com`)
+  - [ ] Service account created (e.g., `svc_InfraMonitor@domain.com`)
   - [ ] OUs identified for agent deployment
   - [ ] Group Policy configured (optional, for auto-deployment)
 
@@ -36,8 +36,8 @@ Deploy ServerMonitor across your organization domain to monitor all servers, exe
 
 ```powershell
 # On central server - Clone repository
-git clone <your-repo-url> C:\ServerMonitor
-cd C:\ServerMonitor
+git clone <your-repo-url> C:\InfraMonitor
+cd C:\InfraMonitor
 
 # Create virtual environment
 python -m venv .venv
@@ -55,22 +55,22 @@ pip install psycopg2-binary  # For PostgreSQL
 # Create database and user
 
 psql -U postgres
-CREATE DATABASE servermonitor_org;
-CREATE USER servermonitor_user WITH PASSWORD 'SecurePassword123!';
-ALTER ROLE servermonitor_user SET client_encoding TO 'utf8';
-ALTER ROLE servermonitor_user SET default_transaction_isolation TO 'read committed';
-ALTER ROLE servermonitor_user SET default_transaction_deferrable TO on;
-ALTER ROLE servermonitor_user SET default_transaction_level TO 'read committed';
-GRANT ALL PRIVILEGES ON DATABASE servermonitor_org TO servermonitor_user;
+CREATE DATABASE InfraMonitor_org;
+CREATE USER InfraMonitor_user WITH PASSWORD 'SecurePassword123!';
+ALTER ROLE InfraMonitor_user SET client_encoding TO 'utf8';
+ALTER ROLE InfraMonitor_user SET default_transaction_isolation TO 'read committed';
+ALTER ROLE InfraMonitor_user SET default_transaction_deferrable TO on;
+ALTER ROLE InfraMonitor_user SET default_transaction_level TO 'read committed';
+GRANT ALL PRIVILEGES ON DATABASE InfraMonitor_org TO InfraMonitor_user;
 ```
 
 ### Step 3: Configure Environment Variables
 
-Create `.env` file in `C:\ServerMonitor`:
+Create `.env` file in `C:\InfraMonitor`:
 
 ```ini
 # Database
-DATABASE_URL=postgresql://servermonitor_user:SecurePassword123!@db-server.yourdomain.com:5432/servermonitor_org
+DATABASE_URL=postgresql://InfraMonitor_user:SecurePassword123!@db-server.yourdomain.com:5432/InfraMonitor_org
 
 # Flask
 FLASK_ENV=production
@@ -91,9 +91,9 @@ DEFAULT_ADMIN_PASSWORD=GeneratedSecurePassword123!
 # Email Notifications (Optional)
 SMTP_SERVER=mail.yourdomain.com
 SMTP_PORT=587
-SMTP_USERNAME=servermonitor@yourdomain.com
+SMTP_USERNAME=InfraMonitor@yourdomain.com
 SMTP_PASSWORD=email-password
-SMTP_FROM=ServerMonitor <servermonitor@yourdomain.com>
+SMTP_FROM=InfraMonitor <InfraMonitor@yourdomain.com>
 
 # Agent Configuration
 AGENT_API_TOKEN_TTL=86400  # 24 hours
@@ -103,7 +103,7 @@ MAX_AGENTS_PER_TENANT=unlimited
 ### Step 4: Initialize Database Schema
 
 ```powershell
-cd C:\ServerMonitor
+cd C:\InfraMonitor
 .\.venv\Scripts\Activate.ps1
 python -m scripts.database.init_db_from_models
 ```
@@ -143,15 +143,15 @@ with app.app_context():
 choco install nssm -y
 
 # Register Flask app as service
-nssm install ServerMonitor "python" "C:\ServerMonitor\web\app.py"
-nssm set ServerMonitor AppDirectory "C:\ServerMonitor"
-nssm set ServerMonitor AppEnvironmentExtra DATABASE_URL=postgresql://...
-nssm set ServerMonitor Start SERVICE_AUTO_START
-nssm set ServerMonitor AppRotateFiles 1
-nssm set ServerMonitor AppRotateOnline 1
+nssm install InfraMonitor "python" "C:\InfraMonitor\web\app.py"
+nssm set InfraMonitor AppDirectory "C:\InfraMonitor"
+nssm set InfraMonitor AppEnvironmentExtra DATABASE_URL=postgresql://...
+nssm set InfraMonitor Start SERVICE_AUTO_START
+nssm set InfraMonitor AppRotateFiles 1
+nssm set InfraMonitor AppRotateOnline 1
 
 # Start service
-Start-Service ServerMonitor
+Start-Service InfraMonitor
 ```
 
 ### Step 7: Configure HTTPS (Production)
@@ -160,21 +160,21 @@ Start-Service ServerMonitor
 # Using Let's Encrypt (recommended for public servers)
 # Install Certbot: https://certbot.eff.org
 
-certbot certonly --standalone -d servermonitor.yourdomain.com
+certbot certonly --standalone -d InfraMonitor.yourdomain.com
 
 # Update .env:
-# SSL_CERT=C:\Certbot\live\servermonitor.yourdomain.com\fullchain.pem
-# SSL_KEY=C:\Certbot\live\servermonitor.yourdomain.com\privkey.pem
+# SSL_CERT=C:\Certbot\live\InfraMonitor.yourdomain.com\fullchain.pem
+# SSL_KEY=C:\Certbot\live\InfraMonitor.yourdomain.com\privkey.pem
 ```
 
 ### Step 8: Test Central Server
 
 ```powershell
 # Restart service
-Restart-Service ServerMonitor
+Restart-Service InfraMonitor
 
 # Test connectivity
-curl -k https://servermonitor.yourdomain.com:5000/
+curl -k https://InfraMonitor.yourdomain.com:5000/
 # Should return login page
 ```
 
@@ -184,7 +184,7 @@ curl -k https://servermonitor.yourdomain.com:5000/
 
 ### For Each Tenant/Department
 
-1. **Login to AdminPortal:** `https://servermonitor.yourdomain.com:5001`
+1. **Login to AdminPortal:** `https://InfraMonitor.yourdomain.com:5001`
 2. **Navigate:** Settings → API Keys
 3. **Generate Key:**
    - Name: "Department-A-Production"
@@ -210,37 +210,37 @@ curl -k https://servermonitor.yourdomain.com:5000/
 1. **Create GPO:**
 
    ```powershell
-   New-GPO -Name "ServerMonitor-Agent-Deployment" | Edit-GPO
+   New-GPO -Name "InfraMonitor-Agent-Deployment" | Edit-GPO
    ```
 
 2. **Configure Startup Script:**
    - Navigate: Computer Configuration → Windows Settings → Scripts → Startup
    - Add script: `Deploy-Agent.ps1` (see below)
 
-3. **Create Deployment Script** (`C:\ServerMonitor\Deploy-Agent.ps1`):
+3. **Create Deployment Script** (`C:\InfraMonitor\Deploy-Agent.ps1`):
 
 ```powershell
 param(
-    [string]$ServerUrl = "https://servermonitor.yourdomain.com",
+    [string]$ServerUrl = "https://InfraMonitor.yourdomain.com",
     [string]$AgentKey = $env:SERVER_MONITOR_KEY,
     [string]$TenantId = "prod-tenant-1"
 )
 
-Write-Host "🤖 ServerMonitor Agent Deployment Starting..."
+Write-Host "🤖 InfraMonitor Agent Deployment Starting..."
 
 # Check if agent already installed
-if (Test-Path "C:\Program Files\ServerMonitor\Agent\agent.py") {
+if (Test-Path "C:\Program Files\InfraMonitor\Agent\agent.py") {
     Write-Host "✅ Agent already installed"
     exit 0
 }
 
 # Create directory
-$AgentDir = "C:\Program Files\ServerMonitor\Agent"
+$AgentDir = "C:\Program Files\InfraMonitor\Agent"
 New-Item -ItemType Directory -Path $AgentDir -Force | Out-Null
 
 # Download agent package
 $DownloadUrl = "$ServerUrl/api/v2/agent/download"
-$DownloadPath = "$env:TEMP\servermonitor-agent.zip"
+$DownloadPath = "$env:TEMP\InfraMonitor-agent.zip"
 Invoke-WebRequest -Uri $DownloadUrl -OutFile $DownloadPath -UseBasicParsing
 
 # Extract
@@ -260,20 +260,20 @@ Set-Content -Path $ConfigFile -Value $Config
 # Install as Windows Service using NSSM
 choco install nssm -y --force
 
-nssm install ServerMonitorAgent "python" "$AgentDir\agent.py"
-nssm set ServerMonitorAgent AppDirectory $AgentDir
-nssm set ServerMonitorAgent Start SERVICE_AUTO_START
+nssm install InfraMonitorAgent "python" "$AgentDir\agent.py"
+nssm set InfraMonitorAgent AppDirectory $AgentDir
+nssm set InfraMonitorAgent Start SERVICE_AUTO_START
 
 # Start service
-Start-Service ServerMonitorAgent
+Start-Service InfraMonitorAgent
 
-Write-Host "✅ ServerMonitor Agent installed and started"
+Write-Host "✅ InfraMonitor Agent installed and started"
 Write-Host "📊 Check portal at: $ServerUrl"
 ```
 
 4. **Link GPO to OU:**
    ```powershell
-   New-GPLink -Name "ServerMonitor-Agent-Deployment" -Target "OU=Servers,DC=yourdomain,DC=com" -Enforced Yes
+   New-GPLink -Name "InfraMonitor-Agent-Deployment" -Target "OU=Servers,DC=yourdomain,DC=com" -Enforced Yes
    ```
 
 ---
@@ -282,7 +282,7 @@ Write-Host "📊 Check portal at: $ServerUrl"
 
 ```powershell
 # On each target server:
-$ServerUrl = "https://servermonitor.yourdomain.com"
+$ServerUrl = "https://InfraMonitor.yourdomain.com"
 $AgentKey = "sk_prod_1a2b3c4d5e6f7g8h9i0j..."
 
 Invoke-Expression (Invoke-WebRequest -Uri "$ServerUrl/api/v2/agent/install-script" -UseBasicParsing).Content |
@@ -295,37 +295,37 @@ Invoke-Expression (Invoke-WebRequest -Uri "$ServerUrl/api/v2/agent/install-scrip
 
 ```yaml
 ---
-- name: Deploy ServerMonitor Agent
+- name: Deploy InfraMonitor Agent
   hosts: all
   vars:
-    server_url: "https://servermonitor.yourdomain.com"
+    server_url: "https://InfraMonitor.yourdomain.com"
     agent_key: "{{ vault_agent_key }}"
 
   tasks:
     - name: Create agent directory
       win_file:
-        path: 'C:\Program Files\ServerMonitor\Agent'
+        path: 'C:\Program Files\InfraMonitor\Agent'
         state: directory
 
     - name: Download agent package
       win_get_url:
         url: "{{ server_url }}/api/v2/agent/download"
-        dest: '%TEMP%\servermonitor-agent.zip'
+        dest: '%TEMP%\InfraMonitor-agent.zip'
 
     - name: Extract agent
       win_unzip:
-        src: '%TEMP%\servermonitor-agent.zip'
-        dest: 'C:\Program Files\ServerMonitor\Agent'
+        src: '%TEMP%\InfraMonitor-agent.zip'
+        dest: 'C:\Program Files\InfraMonitor\Agent'
 
     - name: Configure agent
       win_template:
         src: agent_config.json.j2
-        dest: 'C:\Program Files\ServerMonitor\Agent\agent_config.json'
+        dest: 'C:\Program Files\InfraMonitor\Agent\agent_config.json'
 
     - name: Install Windows Service
       win_shell: |
-        nssm install ServerMonitorAgent python C:\Program Files\ServerMonitor\Agent\agent.py
-        nssm start ServerMonitorAgent
+        nssm install InfraMonitorAgent python C:\Program Files\InfraMonitor\Agent\agent.py
+        nssm start InfraMonitorAgent
 ```
 
 ---
@@ -335,7 +335,7 @@ Invoke-Expression (Invoke-WebRequest -Uri "$ServerUrl/api/v2/agent/install-scrip
 ### Check Agent Connectivity
 
 ```powershell
-# On ServerMonitor Portal
+# On InfraMonitor Portal
 # Navigate: Dashboard → Servers
 # Filter by Status = "Agent Installed"
 
@@ -369,12 +369,12 @@ Invoke-Expression (Invoke-WebRequest -Uri "$ServerUrl/api/v2/agent/install-scrip
 
 ```powershell
 # Firewall Rules (on monitoring server)
-New-NetFirewallRule -DisplayName "ServerMonitor Inbound" `
+New-NetFirewallRule -DisplayName "InfraMonitor Inbound" `
     -Direction Inbound -LocalPort 5000 -Protocol TCP `
     -Action Allow -RemoteAddress 10.0.0.0/8
 
 # Restrict to internal network only
-New-NetFirewallRule -DisplayName "ServerMonitor Admin" `
+New-NetFirewallRule -DisplayName "InfraMonitor Admin" `
     -Direction Inbound -LocalPort 5001 -Protocol TCP `
     -Action Allow -RemoteAddress 192.168.1.0/24
 ```
@@ -384,7 +384,7 @@ New-NetFirewallRule -DisplayName "ServerMonitor Admin" `
 ```sql
 -- PostgreSQL: Create minimal privilege user for agent
 CREATE USER agent_readonly WITH PASSWORD 'ReadOnlyPassword123!';
-GRANT CONNECT ON DATABASE servermonitor_org TO agent_readonly;
+GRANT CONNECT ON DATABASE InfraMonitor_org TO agent_readonly;
 GRANT USAGE ON SCHEMA public TO agent_readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO agent_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO agent_readonly;
@@ -395,11 +395,11 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO agent_readon
 ```powershell
 # Schedule monthly rotation
 $TaskAction = New-ScheduledTaskAction -Execute "python" `
-    -Argument "C:\ServerMonitor\rotate_api_tokens.py"
+    -Argument "C:\InfraMonitor\rotate_api_tokens.py"
 $TaskTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday `
     -At 02:00AM
 Register-ScheduledTask -Action $TaskAction -Trigger $TaskTrigger `
-    -TaskName "ServerMonitor-Token-Rotation" -RunLevel Highest
+    -TaskName "InfraMonitor-Token-Rotation" -RunLevel Highest
 ```
 
 ---
@@ -436,14 +436,14 @@ New-Alert -Name "Suspicious Command" -Condition "command_type == 'delete_system'
 
 ```powershell
 # Daily database backups
-$BackupPath = "\\backup-server\servermonitor-backups"
-$BackupFile = "$BackupPath\servermonitor_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql"
+$BackupPath = "\\backup-server\InfraMonitor-backups"
+$BackupFile = "$BackupPath\InfraMonitor_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql"
 
-pg_dump -U servermonitor_user servermonitor_org |
+pg_dump -U InfraMonitor_user InfraMonitor_org |
     gzip > $BackupFile
 
 # Retain 30 days
-Get-ChildItem $BackupPath -Filter "servermonitor_*.sql.gz" |
+Get-ChildItem $BackupPath -Filter "InfraMonitor_*.sql.gz" |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
     Remove-Item
 ```
@@ -456,16 +456,16 @@ Get-ChildItem $BackupPath -Filter "servermonitor_*.sql.gz" |
 
 ```powershell
 # Check configuration
-Get-Content "C:\Program Files\ServerMonitor\Agent\agent_config.json"
+Get-Content "C:\Program Files\InfraMonitor\Agent\agent_config.json"
 
 # Verify network connectivity
-Test-NetConnection -ComputerName servermonitor.yourdomain.com -Port 5000
+Test-NetConnection -ComputerName InfraMonitor.yourdomain.com -Port 5000
 
 # Check service status
-Get-Service ServerMonitorAgent | Select-Object Name, Status, StartType
+Get-Service InfraMonitorAgent | Select-Object Name, Status, StartType
 
 # View logs
-Get-Content "C:\Program Files\ServerMonitor\Agent\agent.log" -Tail 50
+Get-Content "C:\Program Files\InfraMonitor\Agent\agent.log" -Tail 50
 ```
 
 ### High Memory Usage

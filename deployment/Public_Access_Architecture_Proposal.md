@@ -1,8 +1,8 @@
-# ServerMonitor Platform: External Access Architecture Proposal
+# InfraMonitor Platform: External Access Architecture Proposal
 
 ## Executive Summary
 
-As part of the deployment of the ServerMonitor platform on our internal Hyper-V infrastructure, we require a strategy to make the central dashboard securely accessible from outside the corporate network. This will allow remote administrators to monitor infrastructure, and allow roaming endpoint agents (e.g., laptops operating outside the corporate Wi-Fi) to report their telemetry back to the central server.
+As part of the deployment of the InfraMonitor platform on our internal Hyper-V infrastructure, we require a strategy to make the central dashboard securely accessible from outside the corporate network. This will allow remote administrators to monitor infrastructure, and allow roaming endpoint agents (e.g., laptops operating outside the corporate Wi-Fi) to report their telemetry back to the central server.
 
 Below are the two proposed architectural models for management review and approval, including the exact implementation steps required by the IT team for each.
 
@@ -14,7 +14,7 @@ This is the legacy enterprise approach. It involves exposing our internal Hyper-
 
 ### Architecture Flow:
 
-`Remote Agent -> Public Static IP -> Hardware Firewall (NAT) -> Internal Hyper-V VM (IIS Reverse Proxy) -> ServerMonitor App`
+`Remote Agent -> Public Static IP -> Hardware Firewall (NAT) -> Internal Hyper-V VM (IIS Reverse Proxy) -> InfraMonitor App`
 
 ### Implementation Steps:
 
@@ -24,7 +24,7 @@ This is the legacy enterprise approach. It involves exposing our internal Hyper-
    - Create a NAT (Network Address Translation) rule forwarding inbound traffic on Ports `80` (HTTP) and `443` (HTTPS) to the internal IP address of the Hyper-V VM.
    - Create an inbound security policy (ACL) explicitly allowing this traffic from the open internet.
 4. **Install IIS Reverse Proxy:** On the Hyper-V VM, install the **IIS Web Server** role, along with the **Application Request Routing (ARR)** and **URL Rewrite** modules.
-5. **Configure IIS Routing:** Set up an IIS Reverse Proxy rule to capture inbound Port 443 traffic and route it internally to `127.0.0.1:8080` (where the ServerMonitor Waitress app is running).
+5. **Configure IIS Routing:** Set up an IIS Reverse Proxy rule to capture inbound Port 443 traffic and route it internally to `127.0.0.1:8080` (where the InfraMonitor Waitress app is running).
 6. **Provision SSL Certificates:** Download and run a tool like Win-ACME (Let's Encrypt) on the Hyper-V VM to generate a free SSL certificate, and manually bind it to the IIS site. _Note: IT will be responsible for ensuring this certificate renews successfully every 90 days._
 
 ### Pros & Cons
@@ -40,12 +40,12 @@ This is the modern, cloud-native approach used by modern enterprises. It utilize
 
 ### Architecture Flow:
 
-`Remote Agent -> Cloudflare Edge Network -> Secure Encrypted Tunnel -> Internal Hyper-V VM -> ServerMonitor App`
+`Remote Agent -> Cloudflare Edge Network -> Secure Encrypted Tunnel -> Internal Hyper-V VM -> InfraMonitor App`
 
 ### Implementation Steps:
 
 1. **Cloudflare Setup:** Add your organization domain to a Cloudflare account (if not already present).
-2. **Create the Tunnel:** Log into the Cloudflare Zero Trust dashboard, navigate to Networks -> Tunnels, and create a new tunnel named `ServerMonitor`.
+2. **Create the Tunnel:** Log into the Cloudflare Zero Trust dashboard, navigate to Networks -> Tunnels, and create a new tunnel named `InfraMonitor`.
 3. **Install the Daemon (No Firewall Changes):** Cloudflare will provide a single installation command. Run this command on the internal Hyper-V VM:
    ```cmd
    cloudflared.exe service install [UNIQUE_TOKEN]

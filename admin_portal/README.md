@@ -1,4 +1,4 @@
-# Multi-Tenant Admin Portal for ServerMonitor
+# Multi-Tenant Admin Portal for InfraMonitor
 
 This is a Flask-based admin portal for managing multiple clients (tenants), their servers, VMs, and metrics. Each client has their own secure admin login and dashboard. Super-admins can manage all clients.
 

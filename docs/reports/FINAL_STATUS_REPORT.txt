@@ -1,5 +1,5 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    SERVERMONITOR - COMPLETE FIX SUMMARY                       ║
+║                    InfraMonitor - COMPLETE FIX SUMMARY                       ║
 ║               Remote Actions & Terminal Commands - NOW FULLY WORKING            ║
 ║                              May 8, 2026                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -180,7 +180,7 @@ STEP 4: Run E2E Tests (new terminal)
 
 STEP 5: Manual Test via Portal
   - Open: http://localhost:8080
-  - Login: admin / admin
+   - Log in with your configured administrator account
   - Navigate: Server Details → Remote Terminal
   - Test: Type "hostname" → Click "Run"
   - Verify: Output appears within 5 seconds ✓

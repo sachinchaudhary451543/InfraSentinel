@@ -229,7 +229,7 @@ Browser Dashboard:
 ═══════════════════════════════════════════════════════════════════════════════
 
                     ┌─────────────────────────────────────────┐
-                    │      ServerMonitor Dashboard            │
+                    │      InfraMonitor Dashboard            │
                     │    http://your-server:8080              │
                     │                                         │
                     │  [Agent Portal] [Systems] [Analytics]   │

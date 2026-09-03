@@ -46,20 +46,20 @@ $sock.Close()
 mstsc /v:$serverName
 
 # On server, check agent service
-Get-Service *ServerMonitor* -ErrorAction SilentlyContinue |
+Get-Service *InfraMonitor* -ErrorAction SilentlyContinue |
   Select Name, Status, StartType
 
 # Expected output:
 # Name                      Status StartType
 # ----                      ------ ---------
-# ServerMonitorAgent         Running Automatic
+# InfraMonitorAgent         Running Automatic
 ```
 
 **Step 3: Review Recent Logs (2 minutes)**
 
 ```powershell
 # Check Event Viewer
-Get-EventLog Application -Source ServerMonitorAgent -Newest 5 |
+Get-EventLog Application -Source InfraMonitorAgent -Newest 5 |
   Format-List TimeGenerated, eventid, Message
 ```
 
@@ -81,11 +81,11 @@ Get-EventLog Application -Source ServerMonitorAgent -Newest 5 |
 **Diagnosis:**
 
 ```powershell
-Get-Service ServerMonitorAgent | Select Status
+Get-Service InfraMonitorAgent | Select Status
 # Returns: "Stopped" instead of "Running"
 
 # Check startup type
-Get-Service ServerMonitorAgent | Select StartType
+Get-Service InfraMonitorAgent | Select StartType
 # Should be: "Automatic"
 ```
 
@@ -93,14 +93,14 @@ Get-Service ServerMonitorAgent | Select StartType
 
 ```powershell
 # Start the service
-Start-Service ServerMonitorAgent
+Start-Service InfraMonitorAgent
 
 # Verify
-Get-Service ServerMonitorAgent | Select Status
+Get-Service InfraMonitorAgent | Select Status
 # Should show: Running
 
 # Check Event Viewer for startup errors
-Get-EventLog Application -Source ServerMonitorAgent -Newest 1 |
+Get-EventLog Application -Source InfraMonitorAgent -Newest 1 |
   Select TimeGenerated, Message
 ```
 
@@ -115,7 +115,7 @@ Get-NetAdapter | Select Status
 
 # If DNS/network unhealthy, fix those first
 # Then restart agent
-Start-Service ServerMonitorAgent
+Start-Service InfraMonitorAgent
 ```
 
 **Solution C: Reinstall Agent**
@@ -124,10 +124,10 @@ Start-Service ServerMonitorAgent
 # If start fails repeatedly:
 
 # 1. Stop service
-Stop-Service ServerMonitorAgent -Force
+Stop-Service InfraMonitorAgent -Force
 
 # 2. Uninstall
-$agentPath = "C:\Program Files\ServerMonitorAgent"
+$agentPath = "C:\Program Files\InfraMonitorAgent"
 if (Test-Path $agentPath) {
     Remove-Item $agentPath -Recurse -Force
 }
@@ -135,7 +135,7 @@ if (Test-Path $agentPath) {
 # 3. Request IT to reinstall via MDM/SCCM
 
 # 4. Verify installation
-Get-Service ServerMonitorAgent -ErrorAction SilentlyContinue
+Get-Service InfraMonitorAgent -ErrorAction SilentlyContinue
 ```
 
 **Expected Outcome:** Service shows "Running", agent goes online within 60 sec
@@ -148,7 +148,7 @@ Get-Service ServerMonitorAgent -ErrorAction SilentlyContinue
 
 ```powershell
 # Service is running...
-Get-Service ServerMonitorAgent | Select Status
+Get-Service InfraMonitorAgent | Select Status
 # Returns: Running
 
 # But agent still offline in dashboard after 3+ minutes
@@ -175,11 +175,11 @@ if ($result.StatusCode -eq 200) {
 
    ```powershell
    # Check firewall rules
-   Get-NetFirewallRule -DisplayName "*ServerMonitor*" |
+   Get-NetFirewallRule -DisplayName "*InfraMonitor*" |
      Select DisplayName, Enabled, Direction
 
    # If not enabled, enable them:
-   Enable-NetFirewallRule -DisplayName "ServerMonitorAgent-Outbound"
+   Enable-NetFirewallRule -DisplayName "InfraMonitorAgent-Outbound"
    ```
 
 2. **Proxy authentication required**
@@ -189,7 +189,7 @@ if ($result.StatusCode -eq 200) {
    netsh winhttp show proxy
 
    # If proxy shown, verify agent has credentials:
-   reg query "HKLM\Software\ServerMonitor" /v ProxyUsername
+   reg query "HKLM\Software\InfraMonitor" /v ProxyUsername
    ```
 
 3. **DNS resolution failure**
@@ -200,7 +200,7 @@ if ($result.StatusCode -eq 200) {
    # Should return IP address
 
    # Check agent DNS config
-   Get-Content "C:\Program Files\ServerMonitorAgent\config.json" |
+   Get-Content "C:\Program Files\InfraMonitorAgent\config.json" |
      findstr /i "dns"
    ```
 
@@ -282,12 +282,12 @@ ORDER BY pending_count DESC;
 
    ```powershell
    # RDP to server
-   Get-Process -Name ServerMonitorAgent | Select Handles, WorkingSet
+   Get-Process -Name InfraMonitorAgent | Select Handles, WorkingSet
    # If memory > 500 MB: Process may be hung
 
    # Force restart
-   Stop-Process -Name ServerMonitorAgent -Force
-   Start-Service ServerMonitorAgent
+   Stop-Process -Name InfraMonitorAgent -Force
+   Start-Service InfraMonitorAgent
    ```
 
 2. **Clear stuck commands:**
@@ -328,18 +328,18 @@ $serverName = "PROBLEMATIC-SERVER"
 # Run comprehensive checks
 Write-Host "=== AGENT HEALTH CHECK ===" -ForegroundColor Green
 Write-Host "1. Service Status:"
-Get-Service ServerMonitorAgent | Select Name, Status, StartType
+Get-Service InfraMonitorAgent | Select Name, Status, StartType
 
 Write-Host "`n2. Process Memory:"
-Get-Process ServerMonitorAgent -ErrorAction SilentlyContinue |
+Get-Process InfraMonitorAgent -ErrorAction SilentlyContinue |
   Select Name, Handles, WorkingSet, @{n='Memory_MB';e={$_.WorkingSet/1MB}}
 
 Write-Host "`n3. Recent Errors:"
-Get-EventLog Application -Source ServerMonitorAgent -Newest 3 |
+Get-EventLog Application -Source InfraMonitorAgent -Newest 3 |
   Select TimeGenerated, EventID, Message
 
 Write-Host "`n4. Agent Config:"
-Get-Content "C:\Program Files\ServerMonitorAgent\config.json"
+Get-Content "C:\Program Files\InfraMonitorAgent\config.json"
 
 Write-Host "`n5. Network Connectivity:"
 Test-Connection -ComputerName "monitoring.company.com" -Count 1
@@ -354,18 +354,18 @@ $api.StatusCode
 
 ```powershell
 # Enable verbose logging
-reg add "HKLM\Software\ServerMonitor" /v LogLevel /d "DEBUG" /f
+reg add "HKLM\Software\InfraMonitor" /v LogLevel /d "DEBUG" /f
 
 # Restart service and collect logs immediately
-Stop-Service ServerMonitorAgent
+Stop-Service InfraMonitorAgent
 [System.Threading.Thread]::Sleep(2000)
-Start-Service ServerMonitorAgent
+Start-Service InfraMonitorAgent
 
 # Wait 30 seconds
 [System.Threading.Thread]::Sleep(30000)
 
 # Get recent logs
-Get-ChildItem "C:\ProgramData\ServerMonitor\logs" -Filter "*.log" |
+Get-ChildItem "C:\ProgramData\InfraMonitor\logs" -Filter "*.log" |
   Get-Content -Tail 50
 ```
 
@@ -379,7 +379,7 @@ Get-ChildItem "C:\ProgramData\ServerMonitor\logs" -Filter "*.log" |
 
 ```powershell
 # Local agent logs (on each server)
-$agentLogPath = "C:\ProgramData\ServerMonitor\logs"
+$agentLogPath = "C:\ProgramData\InfraMonitor\logs"
 Get-ChildItem $agentLogPath
 
 # Central monitoring logs (on central service)
@@ -391,11 +391,11 @@ Get-ChildItem $centralLogPath | Where Name -like "*.log"
 
 ```powershell
 # Follow live logs
-Get-Content "C:\ProgramData\ServerMonitor\logs\agent-latest.log" -Wait
+Get-Content "C:\ProgramData\InfraMonitor\logs\agent-latest.log" -Wait
 
 # Search for specific errors
 Select-String "ERROR|WARN" `
-  "C:\ProgramData\ServerMonitor\logs\agent-latest.log" |
+  "C:\ProgramData\InfraMonitor\logs\agent-latest.log" |
   Format-List LineNumber, Line
 ```
 
@@ -427,19 +427,19 @@ Select-String "ERROR|WARN" `
 
 ```powershell
 # Service Management
-Get-Service ServerMonitorAgent | Select Status, StartType
-Start-Service ServerMonitorAgent
-Stop-Service ServerMonitorAgent -Force
-Restart-Service ServerMonitorAgent
+Get-Service InfraMonitorAgent | Select Status, StartType
+Start-Service InfraMonitorAgent
+Stop-Service InfraMonitorAgent -Force
+Restart-Service InfraMonitorAgent
 
 # Event Log Analysis
-Get-EventLog Application -Source ServerMonitorAgent -Newest 10
-Get-EventLog Application -Source ServerMonitorAgent |
+Get-EventLog Application -Source InfraMonitorAgent -Newest 10
+Get-EventLog Application -Source InfraMonitorAgent |
   Where EventID -eq 1000  # Error events
 
 # Registry Check
-reg query "HKLM\Software\ServerMonitor"
-reg add "HKLM\Software\ServerMonitor" /v LogLevel /d "DEBUG" /f
+reg query "HKLM\Software\InfraMonitor"
+reg add "HKLM\Software\InfraMonitor" /v LogLevel /d "DEBUG" /f
 
 # Network Diagnostics
 Test-Connection -ComputerName "monitoring.company.com"
